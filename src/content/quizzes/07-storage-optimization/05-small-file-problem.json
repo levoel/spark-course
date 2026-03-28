@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "07-storage-optimization/05-small-file-problem",
+  "moduleId": "07-storage-optimization",
+  "_meta": {
+    "idPrefix": "spark-m07-05",
+    "description": "Use IDs: m07-05-q1, m07-05-q2, ... for MC/TF; m07-05-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m07-05-q1",
+      "type": "multiple-choice",
+      "question": "Почему маленькие файлы (< 1 МБ) убивают производительность Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Три уровня overhead: (1) NameNode memory для метаданных; (2) один task на файл -- overhead планирования >> полезная работа; (3) min/max statistics неточные в маленьких файлах"
+        },
+        {
+          "id": "b",
+          "text": "Маленькие файлы не поддерживают predicate pushdown"
+        },
+        {
+          "id": "c",
+          "text": "Маленькие файлы не совместимы с Parquet"
+        },
+        {
+          "id": "d",
+          "text": "Spark не может читать файлы меньше 1 МБ"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Три уровня overhead: (1) NameNode: каждый файл ~150 байт метаданных в RAM; 10M файлов = 1.5 ГБ. (2) Task planning: Spark создаёт один task на файл; для 100K файлов по 100 КБ -- 100K tasks, overhead планирования секунды, полезная работа миллисекунды. (3) Data skipping: в маленьких файлах мало строк, min/max statistics неинформативны.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-05-q2",
+      "type": "multiple-choice",
+      "question": "Как появляются маленькие файлы в production?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Ошибка в конфигурации Spark"
+        },
+        {
+          "id": "b",
+          "text": "Три источника: (1) streaming micro-batches создают файл каждые 5-30 секунд; (2) инкрементальный ETL (append) добавляет маленькие файлы; (3) high-cardinality partitionBy создаёт директорию/файл для каждого ключа"
+        },
+        {
+          "id": "c",
+          "text": "HDFS автоматически разбивает большие файлы"
+        },
+        {
+          "id": "d",
+          "text": "Только при использовании CSV формата"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Три источника маленьких файлов: (1) Structured Streaming: micro-batch каждые 5-30 сек создаёт файл на каждую output partition. За день: 2880-8640 файлов. (2) Инкрементальный ETL: каждый append создаёт новые файлы. (3) partitionBy('user_id') для 10M пользователей = 10M директорий с крошечными файлами.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m07-05-q3",
+      "type": "multiple-choice",
+      "question": "Какие три подхода решают проблему маленьких файлов?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить executor memory, добавить executors, увеличить диски"
+        },
+        {
+          "id": "b",
+          "text": "Удалить маленькие файлы вручную"
+        },
+        {
+          "id": "c",
+          "text": "(1) coalesce/repartition перед записью; (2) maxRecordsPerFile для ограничения размера файлов; (3) compaction (OPTIMIZE) для объединения существующих маленьких файлов"
+        },
+        {
+          "id": "d",
+          "text": "Перейти с Parquet на CSV"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Три подхода: (1) coalesce(N) перед write -- объединяет партиции без shuffle, контролируя число выходных файлов. (2) maxRecordsPerFile -- ограничивает число строк в файле, предотвращая слишком большие файлы. (3) OPTIMIZE (compaction) в Delta Lake/Iceberg -- объединяет существующие маленькие файлы post-factum. Для streaming: triggerOnce + compaction schedule.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m07-05-q4",
+      "type": "true-false",
+      "question": "AQE может автоматически решить проблему маленьких файлов при записи, объединяя мелкие output партиции.",
+      "correctAnswer": false,
+      "explanation": "AQE coalesce работает для shuffle-партиций (in-memory, между stages), но НЕ для выходных файлов при записи. AQE объединяет мелкие партиции перед join/groupBy, но write.parquet() создаёт файл для каждой output partition. Для контроля файлов при записи используйте coalesce(N) или repartition(N) перед write.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-05-q5",
+      "type": "multiple-choice",
+      "question": "Streaming pipeline: micro-batch каждые 10 секунд, 10 output партиций. За день: 86400 файлов. Как уменьшить число файлов?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить интервал micro-batch до 1 часа"
+        },
+        {
+          "id": "b",
+          "text": "Уменьшить число output партиций до 1"
+        },
+        {
+          "id": "c",
+          "text": "Отключить streaming и использовать batch ETL"
+        },
+        {
+          "id": "d",
+          "text": "Комбинация: (1) увеличить trigger interval; (2) coalesce(1-2) перед sink; (3) ежедневная compaction (OPTIMIZE) для объединения файлов"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Комплексное решение: (1) увеличить trigger interval (30 сек -> 5 мин): 6x меньше батчей; (2) coalesce(1-2) перед записью: уменьшает файлы на батч; (3) ежедневная compaction объединяет накопленные файлы. Trigger interval и coalesce -- баланс между латентностью и числом файлов. Compaction -- post-factum cleaning.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-05-code-1",
+      "type": "code-challenge",
+      "question": "Таблица orders содержит маленькие файлы. Напишите SQL-запрос, который посчитает количество записей и покажет группировку по city для диагностики -- большие группы указывают на потенциально хороший partition key.",
+      "language": "sql",
+      "setupSQL": "CREATE TABLE orders (id INTEGER, city TEXT, amount INTEGER, date TEXT);\nINSERT INTO orders VALUES (1, 'Moscow', 500, '2024-01-15');\nINSERT INTO orders VALUES (2, 'Moscow', 300, '2024-01-15');\nINSERT INTO orders VALUES (3, 'SPb', 400, '2024-01-15');\nINSERT INTO orders VALUES (4, 'Moscow', 600, '2024-01-16');\nINSERT INTO orders VALUES (5, 'Kazan', 200, '2024-01-16');\nINSERT INTO orders VALUES (6, 'Moscow', 350, '2024-01-16');",
+      "starterCode": "-- Посчитайте количество заказов (COUNT) и суммарный amount по каждому city\n-- Отсортируйте по количеству заказов в убывающем порядке (DESC)\n-- Это поможет определить, подходит ли city как partition key\n\nSELECT -- TODO\n",
+      "solutionCode": "SELECT city, COUNT(*) AS order_count, SUM(amount) AS total_amount\nFROM orders\nGROUP BY city\nORDER BY order_count DESC;",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Moscow has most orders",
+          "input": "",
+          "expectedOutput": "Moscow",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Shows order_count column",
+          "input": "",
+          "expectedOutput": "order_count",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Moscow count is 4",
+          "input": "",
+          "expectedOutput": "4",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Анализ распределения данных по city помогает выбрать partition key. Moscow (4 записи) доминирует -- потенциальный data skew при partitionBy('city'). Для production: если top city имеет > 10x записей vs median, partition pruning полезен, но нужно учитывать skew. Альтернатива: partitionBy('date') для ETL с ежедневной загрузкой.",
+      "bloomLevel": "applied"
+    }
+  ]
+}

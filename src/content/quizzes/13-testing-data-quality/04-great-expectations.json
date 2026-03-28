@@ -1,0 +1,183 @@
+{
+  "lessonSlug": "13-testing-data-quality/04-great-expectations",
+  "moduleId": "13-testing-data-quality",
+  "_meta": {
+    "idPrefix": "spark-m13-04",
+    "description": "Use IDs: m13-04-q1, m13-04-q2, ... (5 questions on GE architecture, expectations, checkpoints)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-04-q1",
+      "type": "multiple-choice",
+      "question": "Какие четыре основных компонента составляют архитектуру Great Expectations?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Data Context (конфигурация), Expectation Suite (правила), Checkpoint (запуск валидации), Data Docs (HTML-отчёт)"
+        },
+        {
+          "id": "b",
+          "text": "Parser, Executor, Writer, Reporter"
+        },
+        {
+          "id": "c",
+          "text": "Source, Transformer, Validator, Sink"
+        },
+        {
+          "id": "d",
+          "text": "Schema, Rules, Engine, Dashboard"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Четыре компонента GE: (1) Data Context -- центральная конфигурация проекта; (2) Expectation Suite -- набор декларативных правил валидации; (3) Checkpoint -- связывает данные с suite и запускает валидацию; (4) Data Docs -- HTML-отчёт с результатами (pass/fail для каждого expectation, примеры failing rows).",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 4: Great Expectations -- архитектура и четыре основных компонента"
+    },
+    {
+      "id": "spark-m13-04-q2",
+      "type": "multiple-choice",
+      "question": "Как GE интегрируется с PySpark? Через какой движок выполняются expectations?",
+      "options": [
+        {
+          "id": "a",
+          "text": "GE конвертирует DataFrame в pandas для проверок"
+        },
+        {
+          "id": "b",
+          "text": "SparkDFExecutionEngine -- expectations транслируются в Spark SQL операции, сохраняя все оптимизации Catalyst. Работает напрямую с Spark DataFrame"
+        },
+        {
+          "id": "c",
+          "text": "GE использует собственный движок, не зависящий от Spark"
+        },
+        {
+          "id": "d",
+          "text": "GE работает только через JDBC-подключение к Spark Thrift Server"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "GE использует SparkDFExecutionEngine для выполнения expectations. Движок транслирует expectations (expect_column_values_to_not_be_null и др.) в Spark SQL операции, которые выполняются распределённо с оптимизациями Catalyst. Данные не копируются в pandas -- всё происходит на уровне Spark DataFrame.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 4: Great Expectations -- SparkDFExecutionEngine и PySpark интеграция"
+    },
+    {
+      "id": "spark-m13-04-q3",
+      "type": "multiple-choice",
+      "question": "Что такое паттерн 'validate before write' и почему он критичен?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Проверка схемы при чтении данных"
+        },
+        {
+          "id": "b",
+          "text": "Валидация после записи для отката при ошибке"
+        },
+        {
+          "id": "c",
+          "text": "GE Checkpoint запускается между transform и write. Данные записываются ТОЛЬКО при pass. При fail -- pipeline останавливается, плохие данные не попадают в downstream таблицы"
+        },
+        {
+          "id": "d",
+          "text": "Проверка disk space перед записью"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Validate before write: READ -> TRANSFORM -> VALIDATE (GE) -> WRITE. Checkpoint запускается после трансформации, но ДО записи. Если валидация падает -- pipeline останавливается, отправляется alert, плохие данные не портят downstream таблицы. Без этого ошибка (NULL в ключевом поле, выход за диапазон) незаметно портит аналитику.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Great Expectations -- паттерн validate before write"
+    },
+    {
+      "id": "spark-m13-04-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет проверить, что колонка salary содержит значения от 0 до 999999.99. Какой GE expectation использовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "expect_column_values_to_not_be_null"
+        },
+        {
+          "id": "b",
+          "text": "expect_column_values_to_be_unique"
+        },
+        {
+          "id": "c",
+          "text": "expect_column_mean_to_be_between"
+        },
+        {
+          "id": "d",
+          "text": "expect_column_values_to_be_between(column='salary', min_value=0, max_value=999999.99)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "expect_column_values_to_be_between проверяет, что КАЖДОЕ значение в колонке находится в указанном диапазоне [min_value, max_value]. expect_column_mean_to_be_between проверяет только среднее. GE имеет 200+ встроенных expectations для разных типов проверок: полнота, диапазоны, уникальность, regex, статистика.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Great Expectations -- основные expectations: between, not_null, in_set, regex"
+    },
+    {
+      "id": "spark-m13-04-q5",
+      "type": "multiple-choice",
+      "question": "Где можно разместить Data Docs для командного доступа?",
+      "options": [
+        {
+          "id": "a",
+          "text": "На S3/GCS через TupleS3StoreBackend -- HTML-отчёты доступны по URL для всей команды"
+        },
+        {
+          "id": "b",
+          "text": "Только локально -- Data Docs не поддерживают удалённое размещение"
+        },
+        {
+          "id": "c",
+          "text": "Только через Databricks workspace"
+        },
+        {
+          "id": "d",
+          "text": "Через email -- GE отправляет отчёт каждому члену команды"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Data Docs -- HTML-отчёт. По умолчанию генерируется локально. Для командного доступа можно настроить TupleS3StoreBackend (AWS S3) или TupleGCSStoreBackend (GCP GCS) в great_expectations.yml. HTML-файлы размещаются в bucket и доступны по URL. Это обеспечивает командную видимость результатов валидации.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Great Expectations -- Data Docs на S3/GCS для командного доступа"
+    },
+    {
+      "id": "spark-m13-04-code-1",
+      "type": "code-challenge",
+      "question": "Реализуйте expectation-подобные проверки качества данных. Проверьте: уникальность order_id, значения status из допустимого набора, процент non-null email ≥ 80%, формат phone содержит дефис. Выведите результат каждого expectation.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, when, lit, round as spark_round\n\nspark = SparkSession.builder.appName(\"ge_expectations\").getOrCreate()\n\norders = spark.createDataFrame([\n    (1, \"completed\", \"anna@mail.com\", \"123-456\"),\n    (2, \"pending\", None, \"789-012\"),\n    (3, \"completed\", \"clara@mail.com\", \"345-678\"),\n    (4, \"cancelled\", \"denis@mail.com\", \"901234\"),\n    (5, \"shipped\", \"elena@mail.com\", \"567-890\"),\n    (6, \"completed\", None, \"111-222\"),\n    (7, \"pending\", \"gena@mail.com\", \"333-444\"),\n    (8, \"refunded\", \"hana@mail.com\", \"555-666\"),\n    (9, \"completed\", \"ivan@mail.com\", \"777-888\"),\n    (10, \"pending\", \"julia@mail.com\", \"999-000\"),\n], [\"order_id\", \"status\", \"email\", \"phone\"])\n\nvalid_statuses = [\"completed\", \"pending\", \"cancelled\", \"shipped\"]\n\n# TODO: Exp 1 — expect_unique(order_id)\n\n# TODO: Exp 2 — expect_in_set(status, valid_statuses)\n\n# TODO: Exp 3 — expect_not_null(email, mostly=0.8)\n\n# TODO: Exp 4 — expect_pattern(phone, contains '-')\n\n# TODO: print(f\"Expectations: {passed} passed, {failed} failed\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, when, lit, round as spark_round\n\nspark = SparkSession.builder.appName(\"ge_expectations\").getOrCreate()\n\norders = spark.createDataFrame([\n    (1, \"completed\", \"anna@mail.com\", \"123-456\"),\n    (2, \"pending\", None, \"789-012\"),\n    (3, \"completed\", \"clara@mail.com\", \"345-678\"),\n    (4, \"cancelled\", \"denis@mail.com\", \"901234\"),\n    (5, \"shipped\", \"elena@mail.com\", \"567-890\"),\n    (6, \"completed\", None, \"111-222\"),\n    (7, \"pending\", \"gena@mail.com\", \"333-444\"),\n    (8, \"refunded\", \"hana@mail.com\", \"555-666\"),\n    (9, \"completed\", \"ivan@mail.com\", \"777-888\"),\n    (10, \"pending\", \"julia@mail.com\", \"999-000\"),\n], [\"order_id\", \"status\", \"email\", \"phone\"])\n\nvalid_statuses = [\"completed\", \"pending\", \"cancelled\", \"shipped\"]\nresults = []\ntotal = orders.count()\n\ndistinct_count = orders.select(\"order_id\").distinct().count()\nexp1 = total == distinct_count\nresults.append(exp1)\nprint(f\"expect_unique(order_id): {'PASS' if exp1 else 'FAIL'} ({distinct_count}/{total} distinct)\")\n\nvalid_count = orders.filter(col(\"status\").isin(valid_statuses)).count()\nexp2 = valid_count == total\nresults.append(exp2)\nprint(f\"expect_in_set(status): {'PASS' if exp2 else 'FAIL'} ({round(valid_count/total*100,1)}% valid)\")\n\nnon_null = orders.filter(col(\"email\").isNotNull()).count()\npct_nn = round(non_null / total * 100, 1)\nexp3 = pct_nn >= 80.0\nresults.append(exp3)\nprint(f\"expect_not_null(email, mostly=0.8): {'PASS' if exp3 else 'FAIL'} ({pct_nn}% non-null)\")\n\nwith_dash = orders.filter(col(\"phone\").contains(\"-\")).count()\nexp4 = with_dash == total\nresults.append(exp4)\nprint(f\"expect_pattern(phone, '-'): {'PASS' if exp4 else 'FAIL'} ({round(with_dash/total*100,1)}% match)\")\n\npassed = sum(results)\nfailed = len(results) - passed\nprint(f\"Expectations: {passed} passed, {failed} failed\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Итог expectations",
+          "input": "",
+          "expectedOutput": "Expectations:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Обнаружены failed expectations",
+          "input": "",
+          "expectedOutput": "FAIL",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Проверка email non-null",
+          "input": "",
+          "expectedOutput": "expect_not_null",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Great Expectations реализует декларативные проверки для данных. Мы эмулируем 4 типа: uniqueness, set membership, null rate (с порогом mostly), pattern matching. В данных заложены проблемы: 'refunded' не входит в valid_statuses, один телефон без дефиса — expectations должны это обнаружить.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

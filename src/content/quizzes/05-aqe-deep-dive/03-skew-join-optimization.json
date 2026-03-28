@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "05-aqe-deep-dive/03-skew-join-optimization",
+  "moduleId": "05-aqe-deep-dive",
+  "_meta": {
+    "idPrefix": "spark-m05-03",
+    "description": "Use IDs: m05-03-q1, m05-03-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m05-03-q1",
+      "type": "multiple-choice",
+      "question": "Какую стратегию AQE применяет для skewed-партиции при join?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Split-and-Replicate: skewed-партиция разбивается на под-партиции, соответствующая партиция другой стороны реплицируется для каждой"
+        },
+        {
+          "id": "b",
+          "text": "Удаление skewed-партиции из результата"
+        },
+        {
+          "id": "c",
+          "text": "Переключение на broadcast join для skewed-ключа"
+        },
+        {
+          "id": "d",
+          "text": "Добавление salt к skewed-ключу автоматически"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "AQE применяет стратегию Split-and-Replicate: (1) skewed-партиция разбивается на под-партиции по advisoryPartitionSizeInBytes (64 МБ); (2) соответствующая партиция другой стороны дублируется для каждой под-партиции; (3) join выполняется параллельно. Это автоматический аналог ручного salting.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m05-03-q2",
+      "type": "multiple-choice",
+      "question": "AQE skew join: Москва-партиция = 32 ГБ, advisoryPartitionSizeInBytes = 64 МБ. Сколько под-партиций создаст AQE?",
+      "options": [
+        {
+          "id": "a",
+          "text": "2 под-партиции"
+        },
+        {
+          "id": "b",
+          "text": "~500 под-партиций (32 ГБ / 64 МБ)"
+        },
+        {
+          "id": "c",
+          "text": "32 под-партиции (по 1 ГБ)"
+        },
+        {
+          "id": "d",
+          "text": "AQE не разбивает партиции больше 1 ГБ"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "AQE разбивает skewed-партицию на под-партиции размером ~advisoryPartitionSizeInBytes. 32 ГБ / 64 МБ = ~500 под-партиций. Каждая обрабатывается отдельным task (~5 сек вместо ~40 мин для одного task). Стоимость репликации минимальна: маленькая сторона join дублируется 500 раз, но если это dimension-таблица в 200 строк -- ничтожный объём.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m05-03-q3",
+      "type": "multiple-choice",
+      "question": "В explain() вы видите маркер SortMergeJoin с SkewJoin. Что это означает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark использовал специальный алгоритм join, отличный от SortMerge"
+        },
+        {
+          "id": "b",
+          "text": "Join не выполнился из-за skew"
+        },
+        {
+          "id": "c",
+          "text": "AQE обнаружил skew и применил split-and-replicate для skewed-партиций, остальные партиции обработаны стандартным SortMergeJoin"
+        },
+        {
+          "id": "d",
+          "text": "Spark предупреждает о потенциальном data skew, но не оптимизирует"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "SkewJoin маркер в SortMergeJoin означает, что AQE обнаружил и обработал skew. Skewed-партиции были разбиты на под-партиции с репликацией другой стороны. Обычные (не-skewed) партиции обрабатываются стандартным SortMergeJoin без модификации.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m05-03-q4",
+      "type": "true-false",
+      "question": "AQE skew join работает с любым типом join: SortMergeJoin, BroadcastHashJoin и ShuffleHashJoin.",
+      "correctAnswer": false,
+      "explanation": "AQE skew join работает только с SortMergeJoin. Для BroadcastHashJoin skew не проблема -- маленькая таблица уже целиком на каждом executor. ShuffleHashJoin также не поддерживает skew-оптимизацию через AQE. Если данные содержат skew и используется BroadcastHashJoin, стратегия join выбрана правильно.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-03-q5",
+      "type": "multiple-choice",
+      "question": "skewedPartitionFactor установлен в 1.5 вместо 5.0. Какие проблемы это вызовет?",
+      "options": [
+        {
+          "id": "a",
+          "text": "AQE пропустит настоящие skewed-партиции"
+        },
+        {
+          "id": "b",
+          "text": "Spark перестанет использовать SortMergeJoin"
+        },
+        {
+          "id": "c",
+          "text": "Никаких проблем -- меньший factor лучше обнаруживает skew"
+        },
+        {
+          "id": "d",
+          "text": "AQE будет слишком агрессивно разбивать партиции: партиции, лишь немного больше медианы, будут считаться skewed; overhead репликации превысит выигрыш"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "С factor=1.5 любая партиция в 1.5x больше медианы считается skewed. Для нормально распределённых данных это затронет многие партиции. Каждое разбиение вызывает репликацию другой стороны join -- overhead репликации превысит выигрыш от параллелизма. Factor=5.0 -- хороший баланс; уменьшайте только если точно знаете о skew.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-03-code-1",
+      "type": "code-challenge",
+      "question": "Создайте два DataFrame: transactions (скошенный — 80% строк с seller_id='hot_seller') и sellers. Реализуйте 'salting' для равномерного распределения: добавьте случайный суффикс к ключу hot_seller в transactions и реплицируйте строку hot_seller в sellers для каждого суффикса. Выполните join по salted-ключу и покажите количество строк результата.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, lit, concat, when, count\n\nspark = SparkSession.builder.appName(\"skew_join\").getOrCreate()\n\n# Скошенные данные: 80 из 100 строк — hot_seller\ntxn_rows = [(i, \"hot_seller\", i * 10) for i in range(80)] + \\\n           [(80 + i, f\"seller_{i}\", (80 + i) * 10) for i in range(20)]\ntransactions = spark.createDataFrame(txn_rows, [\"txn_id\", \"seller_id\", \"amount\"])\n\nsellers = spark.createDataFrame([\n    (\"hot_seller\", \"Hot Shop\"),\n    (\"seller_0\", \"Shop A\"), (\"seller_1\", \"Shop B\"),\n    (\"seller_2\", \"Shop C\"), (\"seller_3\", \"Shop D\"),\n], [\"seller_id\", \"name\"])\n\nSALT_BUCKETS = 4\n\n# TODO: Добавьте salt к transactions: для hot_seller -> concat(seller_id, \"_\", salt)\n# где salt = txn_id % SALT_BUCKETS, для остальных оставьте seller_id как есть\n# salted_txn = transactions.withColumn(\"salted_key\", ...)\n\n# TODO: Реплицируйте hot_seller в sellers для каждого salt bucket\n# Создайте DataFrame с 4 строками hot_seller_0..hot_seller_3 + остальные seller без изменений\n# salted_sellers = ...\n\n# TODO: Выполните join по salted_key и покажите результат\n# result = salted_txn.join(salted_sellers, \"salted_key\")\n# print(f\"Result count: {result.count()}\")\n# result.show(5)\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, lit, concat, when, count\n\nspark = SparkSession.builder.appName(\"skew_join\").getOrCreate()\n\ntxn_rows = [(i, \"hot_seller\", i * 10) for i in range(80)] + \\\n           [(80 + i, f\"seller_{i}\", (80 + i) * 10) for i in range(20)]\ntransactions = spark.createDataFrame(txn_rows, [\"txn_id\", \"seller_id\", \"amount\"])\n\nsellers = spark.createDataFrame([\n    (\"hot_seller\", \"Hot Shop\"),\n    (\"seller_0\", \"Shop A\"), (\"seller_1\", \"Shop B\"),\n    (\"seller_2\", \"Shop C\"), (\"seller_3\", \"Shop D\"),\n], [\"seller_id\", \"name\"])\n\nSALT_BUCKETS = 4\n\nsalted_txn = transactions.withColumn(\n    \"salted_key\",\n    when(col(\"seller_id\") == \"hot_seller\",\n         concat(col(\"seller_id\"), lit(\"_\"), (col(\"txn_id\") % SALT_BUCKETS))\n    ).otherwise(col(\"seller_id\"))\n)\n\nhot_replicated = spark.createDataFrame(\n    [(f\"hot_seller_{i}\", \"Hot Shop\") for i in range(SALT_BUCKETS)],\n    [\"salted_key\", \"name\"]\n)\nother_sellers = sellers.filter(col(\"seller_id\") != \"hot_seller\") \\\n    .withColumn(\"salted_key\", col(\"seller_id\")).select(\"salted_key\", \"name\")\nsalted_sellers = hot_replicated.union(other_sellers)\n\nresult = salted_txn.join(salted_sellers, \"salted_key\")\nprint(f\"Result count: {result.count()}\")\nresult.show(5)\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит 100 строк (все транзакции нашли пару)",
+          "input": "",
+          "expectedOutput": "Result count: 100",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Результат содержит Hot Shop",
+          "input": "",
+          "expectedOutput": "Hot Shop",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Результат содержит Shop A",
+          "input": "",
+          "expectedOutput": "Shop A",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Salting — ручная техника борьбы со skew, которую AQE Skew Join автоматизирует. Идея: разбить горячий ключ на N подключей (hot_seller_0..hot_seller_3), добавив случайный суффикс, и реплицировать соответствующую строку справочника N раз. Это распределяет 80 строк hot_seller по 4 задачам (~20 каждая) вместо одной перегруженной. AQE делает это автоматически в runtime, когда обнаруживает партицию больше skewedJoinThreshold.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

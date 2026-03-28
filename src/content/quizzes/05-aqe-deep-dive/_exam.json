@@ -1,0 +1,336 @@
+{
+  "lessonSlug": "05-aqe-deep-dive/_exam",
+  "moduleId": "05-aqe-deep-dive",
+  "examTitle": "Экзамен: Adaptive Query Execution",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m05-exam",
+    "description": "Use IDs: m05-exam-q1, m05-exam-q2, ... (12-15 analytical questions)"
+  },
+  "questions": [
+    {
+      "id": "spark-m05-exam-q1",
+      "type": "multiple-choice",
+      "question": "Pipeline: таблица orders (метаданные: 50 ГБ) join с returns (2 ГБ). Фильтр WHERE date='2024-01-15' оставляет 50 МБ orders. Catalyst выбрал SortMergeJoin. Опишите, что произойдёт с AQE.",
+      "options": [
+        {
+          "id": "a",
+          "text": "AQE выполнит stage с фильтром, увидит 50 МБ (< broadcast threshold), переключит на BroadcastHashJoin, устранив shuffle для обеих таблиц"
+        },
+        {
+          "id": "b",
+          "text": "SortMergeJoin выполнится как запланировано -- AQE не меняет стратегию для маленьких данных"
+        },
+        {
+          "id": "c",
+          "text": "AQE увеличит broadcast threshold до 50 ГБ"
+        },
+        {
+          "id": "d",
+          "text": "Catalyst автоматически предскажет результат фильтра и выберет broadcast"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "AQE цикл: (1) Stage 1 выполняет scan+filter orders; (2) AQE собирает реальные статистики: 50 МБ; (3) 50 МБ < autoBroadcastJoinThreshold (10 МБ default, но для AQE threshold может быть адаптирован); (4) AQE переключает SortMergeJoin -> BroadcastHashJoin; (5) Stage 2 выполняет broadcast join без shuffle. При увеличенном threshold это работает автоматически.",
+      "studyHint": "Повторите урок 5: Динамическая смена стратегии join -- compile-time vs runtime решения",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q2",
+      "type": "multiple-choice",
+      "question": "Медиана partition size = 100 МБ, skewedPartitionFactor=5, skewedPartitionThresholdInBytes=256MB. Партиция A = 400 МБ, партиция B = 600 МБ. Какие будут разбиты?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Обе -- A и B больше 256 МБ"
+        },
+        {
+          "id": "b",
+          "text": "Только B: A (400 МБ) < 5 * 100 МБ = 500 МБ (не skewed); B (600 МБ) > 500 МБ И > 256 МБ (skewed)"
+        },
+        {
+          "id": "c",
+          "text": "Ни одна -- обе меньше 1 ГБ"
+        },
+        {
+          "id": "d",
+          "text": "Только A -- она ближе к медиане"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Два условия проверяются: (1) size > factor * median = 5 * 100 = 500 МБ; (2) size > threshold = 256 МБ. Партиция A: 400 < 500 -- условие 1 НЕ выполняется, не skewed. Партиция B: 600 > 500 И 600 > 256 -- оба условия выполнены, skewed. Оба условия должны выполняться одновременно.",
+      "studyHint": "Повторите урок 3: Два условия обнаружения skew -- skewedPartitionFactor и skewedPartitionThresholdInBytes",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q3",
+      "type": "multiple-choice",
+      "question": "spark.sql.shuffle.partitions=200, AQE coalesce включён, advisoryPartitionSizeInBytes=64MB. Запрос обрабатывает 10 ГБ данных после shuffle. Сколько финальных партиций создаст AQE?",
+      "options": [
+        {
+          "id": "a",
+          "text": "200 -- AQE не уменьшает ниже shuffle.partitions"
+        },
+        {
+          "id": "b",
+          "text": "10 -- по 1 ГБ на партицию"
+        },
+        {
+          "id": "c",
+          "text": "~156 (10 ГБ / 64 МБ) -- AQE объединит мелкие партиции до ~64 МБ каждая"
+        },
+        {
+          "id": "d",
+          "text": "1 -- AQE всегда минимизирует число партиций"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "AQE coalesce: 200 начальных партиций, каждая ~50 МБ (10 ГБ / 200). advisoryPartitionSizeInBytes=64 МБ -- целевой размер. AQE объединит соседние мелкие партиции: ~50 МБ < 64 МБ, поэтому две соседние (100 МБ) > 64 МБ, но одна (50 МБ) < 64 МБ. Результат: около 156 партиций (10240 / 64 ≈ 160), но точное число зависит от распределения.",
+      "studyHint": "Повторите урок 2: advisoryPartitionSizeInBytes и алгоритм coalesce",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q4",
+      "type": "multiple-choice",
+      "question": "Star schema: fact_sales (1 ТБ, partitioned by region_id) JOIN dim_regions (50 строк) WHERE country='Russia' (8 из 50 регионов). Какие оптимизации применит Spark с AQE?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только broadcast join для dim_regions"
+        },
+        {
+          "id": "b",
+          "text": "Spark прочитает все 1 ТБ и отфильтрует результат"
+        },
+        {
+          "id": "c",
+          "text": "AQE разобьёт fact_sales на 50 под-партиций"
+        },
+        {
+          "id": "d",
+          "text": "DPP: фильтр country='Russia' на dim_regions дает 8 region_id -> partition pruning на fact_sales (читает 8 из 50 партиций) + broadcast dim_regions (50 строк)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Комбинация двух оптимизаций: (1) DPP фильтрует dim_regions (8 region_id для Russia), внедряет эти ключи как фильтр в scan fact_sales -- partition pruning пропускает 42 из 50 партиций (~84% экономия). (2) dim_regions (50 строк) broadcast на все executors. Результат: чтение ~160 ГБ вместо 1 ТБ, без shuffle.",
+      "studyHint": "Повторите урок 4: DPP + broadcast -- star schema optimization",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer жалуется: 'AQE включён, но skew join optimization не работает для моего groupBy'. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "AQE skew join работает только для SortMergeJoin, не для groupBy. Для skewed groupBy нужен ручной salting"
+        },
+        {
+          "id": "b",
+          "text": "AQE skew join отключён по умолчанию"
+        },
+        {
+          "id": "c",
+          "text": "groupBy не создаёт shuffle, поэтому AQE не активируется"
+        },
+        {
+          "id": "d",
+          "text": "Нужно увеличить skewedPartitionThresholdInBytes"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "AQE Skew Join Optimization применяет split-and-replicate только для SortMergeJoin -- разбивает skewed-партицию и реплицирует другую сторону. При groupBy нет 'другой стороны' для репликации, поэтому AQE не может применить эту оптимизацию. Для skewed groupBy используйте ручной salting с двухпроходной агрегацией.",
+      "studyHint": "Повторите урок 3: Ограничения AQE skew join -- только SortMergeJoin",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q6",
+      "type": "multiple-choice",
+      "question": "Запрос: scan -> filter -> groupBy -> sort. Сколько точек re-optimization имеет AQE?",
+      "options": [
+        {
+          "id": "a",
+          "text": "4 -- после каждого оператора"
+        },
+        {
+          "id": "b",
+          "text": "2 -- после groupBy (shuffle) и после sort (shuffle); scan->filter -- narrow, без shuffle-границы"
+        },
+        {
+          "id": "c",
+          "text": "1 -- только после groupBy"
+        },
+        {
+          "id": "d",
+          "text": "0 -- этот запрос слишком простой для AQE"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "AQE оптимизирует между query stages (shuffle-границами). scan->filter -- narrow operations (pipeline), нет материализации. groupBy создаёт shuffle (Exchange) -- первая точка re-optimization. sort создаёт второй shuffle -- вторая точка. Итого 2 shuffle-границы = 2 возможности для AQE оптимизации.",
+      "studyHint": "Повторите урок 1: Query stages и shuffle-границы как точки re-optimization",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q7",
+      "type": "multiple-choice",
+      "question": "forceOptimizeSkewedJoin=true. Что это делает и когда используется?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Заставляет все join использовать skew optimization"
+        },
+        {
+          "id": "b",
+          "text": "Устанавливает skewedPartitionFactor в 1.0"
+        },
+        {
+          "id": "c",
+          "text": "Игнорирует skewedPartitionThresholdInBytes -- разбивает партиции, даже если они меньше 256 МБ, при условии что factor > skewedPartitionFactor. Для отладки и маленьких данных"
+        },
+        {
+          "id": "d",
+          "text": "Включает skew optimization для groupBy (в дополнение к join)"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "forceOptimizeSkewedJoin=true игнорирует absolute threshold (256 МБ), оставляя только relative factor (5x median). Полезно для маленьких данных с skew: partition 50 МБ при median 5 МБ не будет разбита с threshold=256 МБ (50 < 256), но с forceOptimize -- будет (50 > 5*5=25). Используйте для отладки, не для production.",
+      "studyHint": "Повторите урок 3: forceOptimizeSkewedJoin -- обход absolute threshold",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q8",
+      "type": "multiple-choice",
+      "question": "Catalyst CBO решает использовать SortMergeJoin (метаданные: обе таблицы > 10 МБ). ANALYZE TABLE не выполнялся 3 месяца. За это время одна таблица уменьшилась с 5 ГБ до 3 МБ. Как AQE исправит эту ситуацию?",
+      "options": [
+        {
+          "id": "a",
+          "text": "AQE не поможет -- нужно запустить ANALYZE TABLE"
+        },
+        {
+          "id": "b",
+          "text": "AQE потребует ручного broadcast hint"
+        },
+        {
+          "id": "c",
+          "text": "AQE удалит маленькую таблицу из join"
+        },
+        {
+          "id": "d",
+          "text": "AQE после первого stage увидит реальный размер 3 МБ и переключит на BroadcastHashJoin"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Это именно тот сценарий, для которого создан AQE. CBO использует устаревшие статистики (5 ГБ), AQE измеряет реальный размер (3 МБ) после выполнения stage. 3 МБ < 10 МБ (broadcast threshold) -- AQE переключает SortMergeJoin -> BroadcastHashJoin. Без AQE пришлось бы вручную запускать ANALYZE TABLE или добавлять broadcast hint.",
+      "studyHint": "Повторите урок 1: AQE vs Catalyst CBO -- устаревшие статистики",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q9",
+      "type": "multiple-choice",
+      "question": "Pipeline с тремя join: A join B join C join D. A = 100 ГБ, B = 5 ГБ, C = 200 МБ, D = 50 МБ. AQE включён. Какая оптимальная стратегия join для каждой пары?",
+      "options": [
+        {
+          "id": "a",
+          "text": "AQE выберет broadcast для C и D автоматически; A join B -- SortMerge; но результат A join B может быть маленьким после фильтрации, тогда AQE адаптирует"
+        },
+        {
+          "id": "b",
+          "text": "A join B: SortMerge (обе большие); result join C: SortMerge (result > threshold); result join D: Broadcast D (50 МБ < threshold при увеличении)"
+        },
+        {
+          "id": "c",
+          "text": "Broadcast все маленькие таблицы: B, C, D"
+        },
+        {
+          "id": "d",
+          "text": "SortMergeJoin для всех трёх"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "AQE последовательно оптимизирует каждый join: (1) A join B: SortMerge (обе большие). (2) AQE после stage A join B знает реальный размер результата. Если он маленький -- следующий join может быть broadcast. (3) C (200 МБ) и D (50 МБ): AQE может broadcast обе. Ключевое: AQE адаптируется на каждом stage, используя реальные данные.",
+      "studyHint": "Повторите урок 5: AQE цикл re-optimization -- stage-by-stage адаптация",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q10",
+      "type": "multiple-choice",
+      "question": "AQE coalesce уменьшил 200 партиций до 15. Но 3 из 15 партиций содержат 80% данных (data skew). AQE coalesce ухудшил ситуацию?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет -- AQE coalesce учитывает skew и не объединяет skewed-партиции"
+        },
+        {
+          "id": "b",
+          "text": "Возможно: AQE coalesce объединяет смежные партиции по позиции, не по размеру; если skewed-партиции смежны, они могут быть объединены, усугубляя skew"
+        },
+        {
+          "id": "c",
+          "text": "Невозможно -- AQE coalesce и skew join optimization работают вместе"
+        },
+        {
+          "id": "d",
+          "text": "AQE coalesce отменяется при обнаружении skew"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "AQE coalesce объединяет смежные мелкие партиции до advisoryPartitionSize. Если несколько маленьких партиций расположены между двумя большими, coalesce может объединить маленькие с большими. AQE skew join и coalesce -- разные оптимизации для разных этапов. Skew join разбивает при join; coalesce объединяет после shuffle.",
+      "studyHint": "Повторите урок 2: Алгоритм coalesce -- объединение смежных партиций",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q11",
+      "type": "multiple-choice",
+      "question": "Production DPP scenario: fact_events (10 ТБ, NOT partitioned) JOIN dim_dates WHERE year=2024. Будет ли DPP работать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- DPP работает с любыми таблицами"
+        },
+        {
+          "id": "b",
+          "text": "Частично -- DPP фильтрует 50% данных"
+        },
+        {
+          "id": "c",
+          "text": "Нет -- DPP требует, чтобы fact-таблица была партиционирована по join key; без partition pruning DPP не может пропустить данные"
+        },
+        {
+          "id": "d",
+          "text": "DPP заменится broadcast join"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "DPP (Dynamic Partition Pruning) внедряет runtime-фильтр на уровне partition pruning -- пропускает целые директории/файлы. Если fact_events не партиционирована, нет директорий для pruning. Spark прочитает все 10 ТБ и отфильтрует в памяти. Рекомендация: партиционировать fact-таблицы по ключу, используемому в join с dimension.",
+      "studyHint": "Повторите урок 4: DPP работает только с партиционированными fact-таблицами",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-exam-q12",
+      "type": "multiple-choice",
+      "question": "Обе стороны join имеют data skew по одному ключу ('Москва'). orders: 80M строк с Москвой, city_orders: 500K строк с Москвой. Как AQE skew join обработает эту ситуацию?",
+      "options": [
+        {
+          "id": "a",
+          "text": "AQE не может обработать skew с обеих сторон"
+        },
+        {
+          "id": "b",
+          "text": "AQE переключает на broadcast join для обеих таблиц"
+        },
+        {
+          "id": "c",
+          "text": "AQE разбивает обе стороны и выполняет cartesian product"
+        },
+        {
+          "id": "d",
+          "text": "AQE разбивает большую сторону (orders, 80M) на под-партиции и реплицирует меньшую сторону (city_orders, 500K). Overhead репликации минимален"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "AQE Split-and-Replicate: разбивает skewed-партицию на бОльшей стороне (orders: 80M строк) на под-партиции по ~64 МБ. Меньшая сторона (city_orders: 500K строк) реплицируется для каждой под-партиции. Overhead: 500K строк * N копий -- ничтожно по сравнению с выигрышем. В худшем случае (обе стороны одинаково большие) AQE создаёт cartesian product между под-партициями.",
+      "studyHint": "Повторите урок 3: Split-and-Replicate -- разбиение большей стороны, репликация меньшей",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

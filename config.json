@@ -1,0 +1,32 @@
+{
+  "id": "spark-course",
+  "title": "Apache Spark Deep-Dive",
+  "description": "Полный курс по Apache Spark — от внутренней архитектуры и Catalyst до lakehouse-форматов, Structured Streaming и production-операций для data-инженеров",
+  "author": "Lev Neganov",
+  "difficulty": "advanced",
+  "language": "ru",
+  "version": "1.0.0",
+  "modules": [
+    { "id": "00-course-intro", "title": "Введение в курс" },
+    { "id": "01-architecture-internals", "title": "Архитектура и внутреннее устройство" },
+    { "id": "02-catalyst-tungsten", "title": "Catalyst и Tungsten" },
+    { "id": "03-dataframes-spark-sql", "title": "DataFrames и Spark SQL" },
+    { "id": "04-performance-tuning", "title": "Оптимизация производительности" },
+    { "id": "05-aqe-deep-dive", "title": "Adaptive Query Execution" },
+    { "id": "06-udf-performance", "title": "UDF и производительность" },
+    { "id": "07-storage-optimization", "title": "Оптимизация хранения" },
+    { "id": "08-monitoring-observability", "title": "Мониторинг и наблюдаемость" },
+    { "id": "09-structured-streaming", "title": "Structured Streaming" },
+    { "id": "10-lakehouse-formats", "title": "Lakehouse-форматы" },
+    { "id": "11-arrow-module", "title": "Apache Arrow" },
+    { "id": "12-production-operations", "title": "Production-операции" },
+    { "id": "13-testing-data-quality", "title": "Тестирование и качество данных" },
+    { "id": "14-advanced-topics", "title": "Продвинутые темы" },
+    { "id": "15-alternative-execution-engines", "title": "Alternative Execution Engines" },
+    { "id": "16-external-shuffle-service", "title": "External Shuffle Service" },
+    { "id": "17-capstone-project", "title": "Capstone-проект" },
+    { "id": "18-appendix", "title": "Приложение" }
+  ],
+  "tags": ["spark", "pyspark", "data-engineering", "lakehouse", "delta-lake", "iceberg", "streaming", "performance"],
+  "estimatedHours": 80
+}

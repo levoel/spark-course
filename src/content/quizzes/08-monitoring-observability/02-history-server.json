@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "08-monitoring-observability/02-history-server",
+  "moduleId": "08-monitoring-observability",
+  "_meta": {
+    "idPrefix": "spark-m08-02",
+    "description": "Use IDs: m08-02-q1, m08-02-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m08-02-q1",
+      "type": "multiple-choice",
+      "question": "Зачем нужен Spark History Server?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Для ускорения Spark-приложений"
+        },
+        {
+          "id": "b",
+          "text": "Для post-mortem анализа завершённых приложений: Spark UI доступен только во время работы приложения, History Server воссоздаёт UI из event logs"
+        },
+        {
+          "id": "c",
+          "text": "Для мониторинга кластера в реальном времени"
+        },
+        {
+          "id": "d",
+          "text": "Для автоматической оптимизации запросов"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Spark UI исчезает при завершении приложения. History Server читает event logs (spark.eventLog.dir) и воссоздаёт полный UI: Jobs, Stages, SQL, Environment. Критично для production: когда ночной ETL упал в 3 часа ночи, утром можно анализировать через History Server без необходимости воспроизводить проблему.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-02-q2",
+      "type": "multiple-choice",
+      "question": "Какой параметр нужно включить для записи event logs?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.history.enabled = true"
+        },
+        {
+          "id": "b",
+          "text": "spark.ui.historyServer = true"
+        },
+        {
+          "id": "c",
+          "text": "spark.eventLog.enabled = true и spark.eventLog.dir = path (HDFS/S3)"
+        },
+        {
+          "id": "d",
+          "text": "Event logs записываются автоматически"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Два обязательных параметра: (1) spark.eventLog.enabled=true -- включает запись event logs; (2) spark.eventLog.dir -- путь для хранения logs (HDFS, S3, GCS). Без eventLog.enabled History Server не получит данных. По умолчанию event logging выключен.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-02-q3",
+      "type": "true-false",
+      "question": "History Server показывает все те же вкладки, что и live Spark UI (Jobs, Stages, SQL, Storage, Environment).",
+      "correctAnswer": true,
+      "explanation": "Верно. History Server воссоздаёт полный Spark UI из event logs: Jobs, Stages, SQL, Storage, Environment. Вы можете анализировать планы выполнения (SQL Tab), распределение task durations (Stages Tab) и конфигурацию (Environment Tab) для завершённых приложений.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-02-q4",
+      "type": "multiple-choice",
+      "question": "Event logs для 100 Spark-приложений в день занимают 50 ГБ/день. Как управлять хранилищем?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить хранилище до 1 ПБ"
+        },
+        {
+          "id": "b",
+          "text": "Хранить logs только для failed jobs"
+        },
+        {
+          "id": "c",
+          "text": "Отключить event logging"
+        },
+        {
+          "id": "d",
+          "text": "spark.history.fs.cleaner.enabled=true с maxAge (30 дней) для автоматического удаления старых logs + spark.eventLog.compress=true для сжатия"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Два механизма: (1) spark.history.fs.cleaner.enabled=true + spark.history.fs.cleaner.maxAge=30d -- автоматическое удаление logs старше 30 дней; (2) spark.eventLog.compress=true -- сжатие logs (zstd/lz4) уменьшает размер в 3-5x. 50 ГБ/день * 30 дней = 1.5 ТБ без сжатия, ~300-500 ГБ с сжатием.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m08-02-q5",
+      "type": "multiple-choice",
+      "question": "Ночной ETL упал с OutOfMemoryError в 3 AM. Как провести post-mortem анализ?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Открыть History Server: найти приложение, проверить Stages (GC Time, Shuffle Read), SQL Tab (план выполнения), Environment (memory settings). Определить stage с OOM и причину (skew, cache overflow, collect)"
+        },
+        {
+          "id": "b",
+          "text": "Перезапустить ETL и наблюдать за Spark UI"
+        },
+        {
+          "id": "c",
+          "text": "Проверить логи YARN/Kubernetes"
+        },
+        {
+          "id": "d",
+          "text": "Увеличить memory и перезапустить без анализа"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "History Server -- основной инструмент post-mortem. Шаги: (1) найти failed job; (2) Stages Tab: какой stage упал, GC Time и task distribution; (3) SQL Tab: план -- есть ли data skew, ненужные shuffle; (4) Environment: spark.executor.memory, spark.memory.fraction. Диагноз определяет решение: увеличить memory, добавить salting, убрать collect().",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

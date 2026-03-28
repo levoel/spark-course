@@ -1,0 +1,130 @@
+{
+  "lessonSlug": "11-arrow-module/05-pyarrow-spark",
+  "moduleId": "11-arrow-module",
+  "_meta": {
+    "idPrefix": "spark-m11-05",
+    "description": "Use IDs: m11-05-q1, m11-05-q2, ... (4 questions on PyArrow and Spark)"
+  },
+  "questions": [
+    {
+      "id": "spark-m11-05-q1",
+      "type": "multiple-choice",
+      "question": "Какой один параметр конфигурации ускоряет toPandas() и createDataFrame() в 10-100x?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.sql.shuffle.partitions"
+        },
+        {
+          "id": "b",
+          "text": "spark.executor.memory"
+        },
+        {
+          "id": "c",
+          "text": "spark.sql.execution.arrow.pyspark.enabled = true -- включает Arrow-based передачу данных между JVM и Python вместо pickle-based row-by-row сериализации"
+        },
+        {
+          "id": "d",
+          "text": "spark.sql.adaptive.enabled"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "spark.sql.execution.arrow.pyspark.enabled = true -- самая важная конфигурация для Python-разработчиков. Без Arrow: toPandas() использует pickle row-by-row через Py4J socket. С Arrow: данные передаются как Arrow RecordBatch (columnar batch) -- 10-100x ускорение. В Spark 4.0 включён по умолчанию.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 5: PyArrow и Spark -- конфигурация arrow.pyspark.enabled"
+    },
+    {
+      "id": "spark-m11-05-q2",
+      "type": "multiple-choice",
+      "question": "Pandas UDF (vectorized UDF) использует Arrow под капотом. Почему vectorized UDF быстрее обычного Python UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Vectorized UDF выполняется на JVM, а не на Python"
+        },
+        {
+          "id": "b",
+          "text": "Vectorized UDF кэширует результаты"
+        },
+        {
+          "id": "c",
+          "text": "Vectorized UDF использует GPU"
+        },
+        {
+          "id": "d",
+          "text": "Обычный UDF: row-by-row pickle serialize -> Python -> pickle deserialize -> process 1 row -> serialize back. Vectorized UDF: Arrow batch serialize -> Python -> pandas Series (batch) -> process entire column -> Arrow serialize back. Батчевая обработка + Arrow = 3-100x быстрее"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Обычный Python UDF: для каждой строки отдельная pickle serialize/deserialize + Python function call. Overhead на строку огромный. Pandas UDF: передаёт batch строк через Arrow RecordBatch, Python получает pandas Series и обрабатывает целиком (numpy vectorized ops). Overhead на batch, не на строку. + pandas/numpy используют C-extensions.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: PyArrow и Spark -- Pandas UDF vs обычный Python UDF"
+    },
+    {
+      "id": "spark-m11-05-q3",
+      "type": "multiple-choice",
+      "question": "toPandas() без Arrow для DataFrame с 10 млн строк работает 45 секунд. После включения arrow.pyspark.enabled -- 0.8 секунд. Откуда берётся ускорение в ~55x?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Без Arrow: pickle serialize каждую строку на JVM, передать через Py4J socket, pickle deserialize в Python, собрать pandas DataFrame row-by-row. С Arrow: JVM -> Arrow RecordBatch (columnar) -> socket -> PyArrow Table -> pandas (zero-copy или один memcpy). Устранение per-row overhead = 55x"
+        },
+        {
+          "id": "b",
+          "text": "Arrow сжимает данные в 55 раз"
+        },
+        {
+          "id": "c",
+          "text": "Arrow использует параллельную обработку на нескольких ядрах"
+        },
+        {
+          "id": "d",
+          "text": "Arrow обрабатывает данные на executors, а не на driver"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Ускорение 55x объясняется устранением per-row overhead: без Arrow каждая из 10 млн строк проходит отдельный цикл serialize/transfer/deserialize. С Arrow: данные передаются batch'ами (тысячи строк за раз) в columnar format. PyArrow Table конвертируется в pandas без десериализации (zero-copy для числовых колонок).",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: PyArrow и Spark -- устранение per-row overhead в toPandas()"
+    },
+    {
+      "id": "spark-m11-05-q4",
+      "type": "true-false",
+      "question": "В Spark 4.0 параметр spark.sql.execution.arrow.pyspark.enabled включён по умолчанию, и Arrow-based toPandas() используется без дополнительной конфигурации.",
+      "correctAnswer": true,
+      "explanation": "В Spark < 4.0 arrow.pyspark.enabled = false по умолчанию -- нужно включать вручную. В Spark 4.0 Arrow-оптимизация включена по умолчанию. Это значит, что toPandas(), createDataFrame() и Pandas UDF автоматически используют Arrow без дополнительной конфигурации.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: PyArrow и Spark -- Arrow по умолчанию в Spark 4.0"
+    },
+    {
+      "id": "spark-m11-05-code-1",
+      "type": "code-challenge",
+      "question": "Оптимизация toPandas(): покажите паттерн 'select before collect' — вместо конвертации всего DataFrame выберите только нужные колонки перед вызовом show(). Сравните количество колонок и данных в обоих подходах. Это ключевая оптимизация при работе с PyArrow: передавать только необходимые данные.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, avg, round as spark_round\n\nspark = SparkSession.builder.appName(\"selective-convert\").getOrCreate()\n\nmetrics = spark.createDataFrame([\n    (\"2024-01-01\", \"web\",    1000, 50, 5.2, 120, 30),\n    (\"2024-01-01\", \"mobile\",  800, 40, 4.8, 100, 25),\n    (\"2024-01-02\", \"web\",    1200, 60, 5.5, 140, 35),\n    (\"2024-01-02\", \"mobile\",  900, 45, 4.9, 110, 28),\n    (\"2024-01-03\", \"web\",    1100, 55, 5.3, 130, 32),\n    (\"2024-01-03\", \"mobile\",  850, 42, 4.7, 105, 26),\n], [\"date\", \"channel\", \"visits\", \"conversions\", \"avg_time\", \"page_views\", \"bounces\"])\n\n# Задача: нужна средняя конверсия по каналу\n# Нужны ТОЛЬКО: channel и conversions\n\n# TODO: Подход 1 (неэффективный) — агрегация всего DataFrame\nfull_cols = len(metrics.columns)\n\n# TODO: Подход 2 (эффективный) — select нужных колонок, затем агрегация\n# optimized = metrics.select(\"channel\", \"conversions\")\n# opt_cols = len(optimized.columns)\n\n# TODO: Вычислите avg(conversions) по channel из optimized\n# result = optimized.groupBy(...).agg(...)\n\nprint(f\"Full DataFrame: {full_cols} columns\")\n# print(f\"Optimized: {opt_cols} columns\")\n# print(f\"Savings: {full_cols - opt_cols} unnecessary columns eliminated\")\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, avg, round as spark_round\n\nspark = SparkSession.builder.appName(\"selective-convert\").getOrCreate()\n\nmetrics = spark.createDataFrame([\n    (\"2024-01-01\", \"web\",    1000, 50, 5.2, 120, 30),\n    (\"2024-01-01\", \"mobile\",  800, 40, 4.8, 100, 25),\n    (\"2024-01-02\", \"web\",    1200, 60, 5.5, 140, 35),\n    (\"2024-01-02\", \"mobile\",  900, 45, 4.9, 110, 28),\n    (\"2024-01-03\", \"web\",    1100, 55, 5.3, 130, 32),\n    (\"2024-01-03\", \"mobile\",  850, 42, 4.7, 105, 26),\n], [\"date\", \"channel\", \"visits\", \"conversions\", \"avg_time\", \"page_views\", \"bounces\"])\n\nfull_cols = len(metrics.columns)\n\noptimized = metrics.select(\"channel\", \"conversions\")\nopt_cols = len(optimized.columns)\n\nresult = optimized.groupBy(\"channel\").agg(spark_round(avg(\"conversions\"), 1).alias(\"avg_conversions\"))\n\nprint(f\"Full DataFrame: {full_cols} columns\")\nprint(f\"Optimized: {opt_cols} columns\")\nprint(f\"Savings: {full_cols - opt_cols} unnecessary columns eliminated\")\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "web channel средние конверсии рассчитаны",
+          "input": "",
+          "expectedOutput": "web",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "5 колонок сэкономлено",
+          "input": "",
+          "expectedOutput": "5 unnecessary columns eliminated",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "При вызове toPandas() Spark сериализует данные через Arrow и передаёт в Python. Если передать весь DataFrame (7 колонок), Arrow сериализует все данные. Паттерн 'select before collect' выбирает только 2 нужные колонки перед передачей — экономия 71% данных. С PyArrow включённым (spark.sql.execution.arrow.pyspark.enabled=true) эта передача происходит через zero-copy Arrow buffers, что делает выбор колонок ещё более критичным для производительности.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

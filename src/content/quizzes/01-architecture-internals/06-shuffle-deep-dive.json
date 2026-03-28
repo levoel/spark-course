@@ -1,0 +1,152 @@
+{
+  "lessonSlug": "01-architecture-internals/06-shuffle-deep-dive",
+  "moduleId": "01-architecture-internals",
+  "_meta": {
+    "idPrefix": "spark-m01-06",
+    "description": "Use IDs: m01-06-q1, m01-06-q2, ... for MC/TF; m01-06-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m01-06-q1",
+      "type": "multiple-choice",
+      "question": "Какие из следующих операций НЕ вызывают shuffle?",
+      "options": [
+        {
+          "id": "a",
+          "text": "repartition(), sort(), reduceByKey()"
+        },
+        {
+          "id": "b",
+          "text": "groupBy(), join(), distinct()"
+        },
+        {
+          "id": "c",
+          "text": "filter(), select(), map()"
+        },
+        {
+          "id": "d",
+          "text": "coalesce(numPartitions), union()"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "filter(), select() и map() -- narrow transformations, которые обрабатывают каждую партицию независимо без перемещения данных. groupBy, join, distinct, repartition, sort и reduceByKey -- wide transformations, требующие shuffle. coalesce() обычно не вызывает shuffle (при уменьшении числа партиций), но union() тоже не вызывает shuffle -- он просто объединяет партиции двух RDD/DataFrame.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m01-06-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет уменьшить число партиций с 200 до 10 перед записью результата. Какой метод предпочтительнее: coalesce(10) или repartition(10)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "repartition(10) -- он гарантирует равномерное распределение данных"
+        },
+        {
+          "id": "b",
+          "text": "Нельзя уменьшить число партиций -- только увеличить"
+        },
+        {
+          "id": "c",
+          "text": "Они идентичны -- оба вызывают shuffle"
+        },
+        {
+          "id": "d",
+          "text": "coalesce(10) -- он объединяет партиции без shuffle, что значительно быстрее при уменьшении числа партиций"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "coalesce(N) при уменьшении числа партиций объединяет соседние партиции без shuffle (narrow dependency). repartition(N) всегда вызывает full shuffle для равномерного перераспределения данных. Для уменьшения числа партиций coalesce быстрее. Однако coalesce может создать неравномерные партиции, если исходные партиции сильно различаются по размеру. repartition предпочтительнее, когда важна равномерность.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-06-q3",
+      "type": "multiple-choice",
+      "question": "Production-задание с groupBy-агрегацией выполняется медленно. В Spark UI вы видите, что shuffle write = 50 ГБ, а spark.sql.shuffle.partitions = 200 (по умолчанию). Какая оптимизация наиболее вероятно поможет?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить spark.sql.shuffle.partitions до 2000-5000, чтобы каждая shuffle-партиция обрабатывала ~10-25 МБ данных вместо ~250 МБ"
+        },
+        {
+          "id": "b",
+          "text": "Уменьшить spark.sql.shuffle.partitions до 50 для снижения overhead"
+        },
+        {
+          "id": "c",
+          "text": "Заменить groupBy на collect() + локальную агрегацию"
+        },
+        {
+          "id": "d",
+          "text": "Отключить shuffle через spark.shuffle.enabled=false"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "При 200 shuffle-партициях и 50 ГБ данных каждая партиция обрабатывает ~250 МБ. Это может вызвать spill-to-disk и GC-паузы. Рекомендуемый размер shuffle-партиции -- 100-200 МБ. Для 50 ГБ это 250-500 партиций, но на практике 2000-5000 партиций (10-25 МБ каждая) часто работают лучше благодаря параллелизму и меньшей нагрузке на память каждого task.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-06-q4",
+      "type": "multiple-choice",
+      "question": "Почему shuffle является самой дорогой операцией в Spark с точки зрения производительности?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Shuffle использует нешифрованные сетевые протоколы, которые медленнее зашифрованных"
+        },
+        {
+          "id": "b",
+          "text": "Shuffle требует сериализации данных, записи на диск, передачи по сети между executors и десериализации -- все эти этапы создают значительные I/O и CPU overhead"
+        },
+        {
+          "id": "c",
+          "text": "Shuffle блокирует все executors, пока данные не будут перемещены"
+        },
+        {
+          "id": "d",
+          "text": "Shuffle увеличивает объём данных в 10 раз из-за дублирования"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Shuffle -- это полный pipeline обмена данными: (1) map-side: данные сериализуются, сортируются по ключам и записываются на локальный диск; (2) сеть: данные передаются от map-executors к reduce-executors по сети; (3) reduce-side: данные десериализуются и объединяются. Каждый этап добавляет latency. Кроме того, shuffle создаёт disk I/O (временные файлы) и memory pressure (буферы сортировки).",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-06-code-1",
+      "type": "code-challenge",
+      "question": "Продемонстрируйте разницу между repartition и coalesce. Создайте DataFrame с данными о продажах, примените repartition(4) для увеличения партиций (full shuffle), затем coalesce(2) для уменьшения (без shuffle). Вызовите show() на финальном результате, чтобы убедиться, что данные сохранились после обеих операций.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"shuffle-demo\").getOrCreate()\n\nsales = spark.createDataFrame(\n    [(\"Moscow\", \"Laptop\", 1500), (\"SPb\", \"Mouse\", 300), (\"Moscow\", \"Monitor\", 800), (\"Kazan\", \"Laptop\", 1400)],\n    [\"city\", \"product\", \"price\"]\n)\n\n# TODO: Увеличьте число партиций до 4 через repartition (full shuffle)\n# repartitioned = sales.repartition(...)\n\n# TODO: Уменьшите число партиций до 2 через coalesce (без full shuffle)\n# coalesced = repartitioned.coalesce(...)\n\n# TODO: Вызовите show() чтобы убедиться, что данные не потеряны\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"shuffle-demo\").getOrCreate()\n\nsales = spark.createDataFrame(\n    [(\"Moscow\", \"Laptop\", 1500), (\"SPb\", \"Mouse\", 300), (\"Moscow\", \"Monitor\", 800), (\"Kazan\", \"Laptop\", 1400)],\n    [\"city\", \"product\", \"price\"]\n)\n\nrepartitioned = sales.repartition(4)\n\ncoalesced = repartitioned.coalesce(2)\n\ncoalesced.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Данные сохранены -- Moscow присутствует",
+          "input": "",
+          "expectedOutput": "Moscow",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Данные сохранены -- все 4 города",
+          "input": "",
+          "expectedOutput": "Kazan",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Код содержит coalesce",
+          "input": "",
+          "expectedOutput": "coalesce",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "repartition(N) всегда выполняет full shuffle -- данные перераспределяются равномерно по N новым партициям. Это wide dependency, создающая новую stage в DAG. coalesce(N) при уменьшении числа партиций объединяет соседние партиции без full shuffle -- это narrow dependency. В обоих случаях данные не теряются, меняется только их распределение по партициям. В production используйте coalesce перед записью, чтобы уменьшить число output-файлов без лишнего shuffle.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/03-joins-deep-dive",
+  "moduleId": "03-dataframes-spark-sql",
+  "_meta": {
+    "idPrefix": "spark-m03-03",
+    "description": "Use IDs: m03-03-q1, m03-03-q2, ... for MC/TF; m03-03-code-1, m03-03-code-2 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-03-q1",
+      "type": "multiple-choice",
+      "question": "Чем left semi join отличается от inner join?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Semi join возвращает строки из обеих таблиц, inner join -- только из левой"
+        },
+        {
+          "id": "b",
+          "text": "Semi join -- это то же самое, что inner join, только быстрее"
+        },
+        {
+          "id": "c",
+          "text": "Semi join возвращает строки из левой таблицы, для которых есть совпадение в правой, без колонок правой таблицы и без дублирования при множественных совпадениях"
+        },
+        {
+          "id": "d",
+          "text": "Semi join возвращает только строки, которых НЕТ в правой таблице"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Left semi join (аналог WHERE EXISTS в SQL) возвращает строки из левой таблицы, для которых существует хотя бы одно совпадение в правой. В отличие от inner join: (1) колонки правой таблицы не включаются в результат, (2) строки не дублируются при множественных совпадениях в правой таблице. Left anti join -- противоположность: возвращает строки без совпадения (аналог WHERE NOT EXISTS).",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-03-q2",
+      "type": "multiple-choice",
+      "question": "У вас fact-таблица 500 ГБ и dimension-таблица 50 МБ. spark.sql.autoBroadcastJoinThreshold = 10MB (по умолчанию). Какую стратегию join выберет Spark и как это исправить?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Broadcast Hash Join -- 50 МБ достаточно мала для broadcast"
+        },
+        {
+          "id": "b",
+          "text": "Cross Join -- Spark не может определить стратегию без явного указания"
+        },
+        {
+          "id": "c",
+          "text": "Shuffle Hash Join -- Spark автоматически выберет лучшую стратегию"
+        },
+        {
+          "id": "d",
+          "text": "Sort-Merge Join, потому что 50 МБ > 10 МБ порога; исправление: broadcast(dim_table) hint или увеличить autoBroadcastJoinThreshold"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "При autoBroadcastJoinThreshold = 10 МБ Spark считает 50 МБ таблицу слишком большой для broadcast и выберет Sort-Merge Join. Обе таблицы будут перераспределены через shuffle. Решения: (1) явный hint broadcast(dim_table), который не зависит от порога; (2) увеличить порог: spark.conf.set('spark.sql.autoBroadcastJoinThreshold', '100m'). Первый вариант предпочтительнее -- он явный и не влияет на другие join.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-03-q3",
+      "type": "multiple-choice",
+      "question": "Почему cross join (декартово произведение) считается опасной операцией в Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Cross join создаёт N * M строк: таблица с 1 миллионом строк crossJoin с таблицей в 1 миллион строк создаст 1 триллион строк, что гарантированно вызовет OOM или займёт часы"
+        },
+        {
+          "id": "b",
+          "text": "Cross join работает только в Spark SQL, но не в DataFrame API"
+        },
+        {
+          "id": "c",
+          "text": "Cross join не поддерживается в Spark 4.0"
+        },
+        {
+          "id": "d",
+          "text": "Cross join удаляет дубликаты, что приводит к потере данных"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Cross join (декартово произведение) создаёт все возможные комбинации строк из двух таблиц. Для таблиц с N и M строками результат содержит N * M строк. Даже для относительно небольших таблиц (1M * 1M = 1 триллион строк) это катастрофа. Частая ошибка: забытый join condition (table_a.join(table_b) без ключа) неявно создаёт cross join.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-03-q4",
+      "type": "multiple-choice",
+      "question": "Sort-Merge Join требует shuffle обеих таблиц. Broadcast Hash Join не требует shuffle. Почему Spark не всегда использует Broadcast Hash Join?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Broadcast Hash Join медленнее Sort-Merge Join для любых размеров данных"
+        },
+        {
+          "id": "b",
+          "text": "Broadcast отправляет маленькую таблицу целиком на каждый executor; если таблица большая (> 10 МБ по умолчанию), broadcast вызовет OOM на executors и driver, поэтому Spark переключается на Sort-Merge Join"
+        },
+        {
+          "id": "c",
+          "text": "Broadcast Hash Join не поддерживает equi-join условия"
+        },
+        {
+          "id": "d",
+          "text": "Sort-Merge Join не требует shuffle в новых версиях Spark"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Broadcast Hash Join отправляет копию маленькой таблицы на каждый executor. Если таблица 5 ГБ и 100 executors, driver должен собрать 5 ГБ в память, а каждый executor хранить 5 ГБ копию -- суммарно 500+ ГБ. Это вызовет OOM. Поэтому Spark использует broadcast только для таблиц меньше autoBroadcastJoinThreshold (10 МБ по умолчанию), а для больших таблиц выбирает Sort-Merge Join, который распределяет нагрузку через shuffle.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-03-code-1",
+      "type": "code-challenge",
+      "question": "Выполните inner join между таблицами employees и departments по колонке dept_id. Выведите результат через show().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"join-demo\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Alice\", 10),\n    (2, \"Bob\", 20),\n    (3, \"Carol\", 10),\n    (4, \"Dave\", 30),\n], [\"emp_id\", \"name\", \"dept_id\"])\n\ndepartments = spark.createDataFrame([\n    (10, \"Engineering\"),\n    (20, \"Marketing\"),\n    (40, \"HR\"),\n], [\"dept_id\", \"dept_name\"])\n\n# TODO: Выполните inner join по dept_id\n# result = employees.join(...)\n\n# TODO: Вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"join-demo\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Alice\", 10),\n    (2, \"Bob\", 20),\n    (3, \"Carol\", 10),\n    (4, \"Dave\", 30),\n], [\"emp_id\", \"name\", \"dept_id\"])\n\ndepartments = spark.createDataFrame([\n    (10, \"Engineering\"),\n    (20, \"Marketing\"),\n    (40, \"HR\"),\n], [\"dept_id\", \"dept_name\"])\n\nresult = employees.join(departments, \"dept_id\", \"inner\")\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Alice присутствует (dept_id=10 совпадает)",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Engineering присутствует",
+          "input": "",
+          "expectedOutput": "Engineering",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Dave отсутствует (dept_id=30 нет в departments)",
+          "input": "",
+          "expectedOutput": "Dave",
+          "matchMode": "not_contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Inner join возвращает только строки, для которых есть совпадение в обеих таблицах по join key (dept_id). Alice (dept_id=10), Bob (dept_id=20), Carol (dept_id=10) имеют соответствующие записи в departments. Dave (dept_id=30) и HR (dept_id=40) отсутствуют в результате, потому что для них нет совпадения в противоположной таблице.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    },
+    {
+      "id": "spark-m03-03-code-2",
+      "type": "code-challenge",
+      "question": "Исправьте анти-паттерн: замените crossJoin на equi-join с условием. Текущий код создаёт декартово произведение вместо осмысленного join по dept_id.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"fix-cross-join\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Alice\", 10),\n    (2, \"Bob\", 20),\n    (3, \"Carol\", 10),\n], [\"emp_id\", \"name\", \"dept_id\"])\n\ndepartments = spark.createDataFrame([\n    (10, \"Engineering\"),\n    (20, \"Marketing\"),\n], [\"dept_id\", \"dept_name\"])\n\n# АНТИ-ПАТТЕРН: crossJoin создаёт 3 * 2 = 6 строк!\n# Исправьте: замените на equi-join по dept_id\nresult = employees.crossJoin(departments)\n\nresult.show()",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"fix-cross-join\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Alice\", 10),\n    (2, \"Bob\", 20),\n    (3, \"Carol\", 10),\n], [\"emp_id\", \"name\", \"dept_id\"])\n\ndepartments = spark.createDataFrame([\n    (10, \"Engineering\"),\n    (20, \"Marketing\"),\n], [\"dept_id\", \"dept_name\"])\n\nresult = employees.join(departments, \"dept_id\")\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Alice присутствует",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Результат содержит 3 строки (не 6)",
+          "input": "",
+          "expectedOutput": "Engineering",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Нет crossJoin в коде",
+          "input": "",
+          "expectedOutput": "crossJoin",
+          "matchMode": "not_contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "crossJoin() создаёт декартово произведение: каждая строка левой таблицы комбинируется с каждой строкой правой. Для 3 * 2 это 6 строк, но для 1M * 1M = 1 триллион строк. Замена на equi-join с условием (employees.join(departments, 'dept_id')) создаёт осмысленные пары: каждый сотрудник соединяется только со своим отделом. Результат: 3 строки вместо 6.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

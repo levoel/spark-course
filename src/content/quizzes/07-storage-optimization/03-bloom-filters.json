@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "07-storage-optimization/03-bloom-filters",
+  "moduleId": "07-storage-optimization",
+  "_meta": {
+    "idPrefix": "spark-m07-03",
+    "description": "Use IDs: m07-03-q1, m07-03-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m07-03-q1",
+      "type": "multiple-choice",
+      "question": "Почему min/max statistics неэффективны для высококардинальных столбцов (user_id)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "При высокой кардинальности min/max диапазоны каждого row group перекрываются (min=1, max=999999 в каждом); фильтр WHERE user_id=12345 попадает в каждый диапазон, data skipping = 0%"
+        },
+        {
+          "id": "b",
+          "text": "Min/max statistics не хранятся для числовых столбцов"
+        },
+        {
+          "id": "c",
+          "text": "Числовые столбцы не поддерживают predicate pushdown"
+        },
+        {
+          "id": "d",
+          "text": "Min/max корректно работают для любой кардинальности"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Для user_id (10M уникальных) каждый row group содержит случайный набор ID: min=1, max=999999 практически в каждом row group. Фильтр WHERE user_id=12345 попадает в диапазон каждого row group -- ни один не пропускается. Bloom-фильтры решают эту проблему: вероятностная структура определяет, содержит ли row group конкретное значение.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-03-q2",
+      "type": "multiple-choice",
+      "question": "Что такое Bloom-фильтр?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Точный индекс для быстрого поиска значений"
+        },
+        {
+          "id": "b",
+          "text": "Вероятностная структура данных: может дать false positive ('возможно содержит'), но НИКОГДА false negative ('точно не содержит')"
+        },
+        {
+          "id": "c",
+          "text": "Алгоритм сжатия для уменьшения размера файлов"
+        },
+        {
+          "id": "d",
+          "text": "Фильтр для удаления дубликатов"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Bloom-фильтр -- компактный bit array с несколькими hash-функциями. При проверке 'содержит ли row group user_id=12345': ответ 'точно нет' (пропускаем row group) или 'возможно да' (читаем row group). False positive rate обычно 1-5%. Компромисс: ~10 бит на элемент (1.25 байт) для FPR ~1%. Для row group с 1M строк: ~1.25 МБ bloom filter.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-03-q3",
+      "type": "true-false",
+      "question": "Bloom-фильтр может дать ложноположительный результат (false positive), но никогда -- ложноотрицательный (false negative).",
+      "correctAnswer": true,
+      "explanation": "Верно. Bloom-фильтр может ответить 'возможно содержит' для значения, которого на самом деле нет (false positive -- hash-коллизия). Но если bloom-фильтр отвечает 'точно не содержит', значение гарантированно отсутствует. Поэтому bloom-фильтр безопасен для data skipping: пропускаются только row groups, где значения ТОЧНО нет.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-03-q4",
+      "type": "multiple-choice",
+      "question": "Parquet Bloom Filter для user_id. False positive rate = 1%. Row group содержит 1M строк. Запрос WHERE user_id = 12345. Что происходит?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark всегда пропускает row groups без нужного user_id"
+        },
+        {
+          "id": "b",
+          "text": "Bloom filter проверяет только первые 100 строк"
+        },
+        {
+          "id": "c",
+          "text": "Для row groups БЕЗ user_id=12345: 99% корректно пропускаются (true negative), 1% прочитаются напрасно (false positive). Для row group С user_id=12345: всегда прочитается (no false negative)"
+        },
+        {
+          "id": "d",
+          "text": "False positive rate 1% означает 1% данных будет потеряно"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Bloom filter per row group: если user_id=12345 отсутствует -- 99% шанс корректного пропуска, 1% ложного чтения. Если user_id=12345 присутствует -- 100% шанс чтения (no false negative). Для 1000 row groups, из которых 1 содержит нужный ID: ~10 будут прочитаны (1 с данными + ~10 false positives). Без bloom filter: все 1000 прочитаны.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m07-03-q5",
+      "type": "multiple-choice",
+      "question": "Когда Bloom-фильтр НЕ стоит использовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Для столбцов с высокой кардинальностью"
+        },
+        {
+          "id": "b",
+          "text": "Bloom-фильтр полезен всегда"
+        },
+        {
+          "id": "c",
+          "text": "Для числовых столбцов"
+        },
+        {
+          "id": "d",
+          "text": "Для столбцов с низкой кардинальностью (status: active/inactive) -- min/max statistics уже эффективны; bloom filter добавляет overhead без пользы"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Bloom-фильтры оптимальны для высококардинальных столбцов (user_id, session_id), где min/max неэффективны. Для низкокардинальных (status: 2-10 значений) min/max достаточны: row groups с отсортированными данными имеют узкие диапазоны. Bloom filter добавляет storage overhead (~1.25 байт * N элементов) и CPU для hash-вычислений.",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

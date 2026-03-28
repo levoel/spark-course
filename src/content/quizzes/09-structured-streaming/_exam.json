@@ -1,0 +1,390 @@
+{
+  "lessonSlug": "09-structured-streaming/_exam",
+  "moduleId": "09-structured-streaming",
+  "examTitle": "Экзамен: Structured Streaming",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m09-exam",
+    "description": "Use IDs: m09-exam-q1, m09-exam-q2, ... (14 questions covering all M09 lessons)"
+  },
+  "questions": [
+    {
+      "id": "spark-m09-exam-q1",
+      "type": "multiple-choice",
+      "question": "Streaming pipeline с агрегацией groupBy(\"city\").count() настроен с outputMode(\"append\") без watermark. Data engineer запускает pipeline и видит AnalysisException. Затем он меняет на outputMode(\"update\"). Pipeline запускается, но через 12 часов работы executor падает с OOM. Какова последовательность ошибок и их причин?",
+      "options": [
+        {
+          "id": "a",
+          "text": "AnalysisException из-за неправильного формата данных; OOM из-за слишком частых micro-batch"
+        },
+        {
+          "id": "b",
+          "text": "Обе ошибки вызваны нехваткой executor memory -- нужно увеличить spark.executor.memory"
+        },
+        {
+          "id": "c",
+          "text": "Append mode без watermark невозможен для агрегаций (AnalysisException). Update mode работает без watermark, но state store растёт неограниченно -- за 12 часов state для всех городов переполняет JVM heap"
+        },
+        {
+          "id": "d",
+          "text": "Append mode не поддерживает groupBy; update mode не поддерживает count"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Две отдельные проблемы: (1) Append mode + aggregation без watermark = AnalysisException: Spark не может гарантировать, что агрегат финализирован (урок 3). (2) Update mode работает без watermark, но без watermark Spark не может очищать state -- данные для каждого ключа (city) накапливаются бесконечно в state store, приводя к OOM (урок 4). Решение: добавить withWatermark() для обеих проблем.",
+      "studyHint": "Повторите урок 3: Output Modes (AnalysisException) и урок 4: Watermarks (state growth без watermark)",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m09-exam-q2",
+      "type": "multiple-choice",
+      "question": "Pipeline настроен с withWatermark(\"event_time\", \"30 minutes\") и window(\"event_time\", \"10 minutes\") в append mode. max(event_time) = 15:45. Событие с event_time = 15:14 приходит в следующем batch. Будет ли оно обработано?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- 15:14 находится в пределах 30-минутного threshold"
+        },
+        {
+          "id": "b",
+          "text": "Да -- watermark проверяется только для окон, а не для отдельных событий"
+        },
+        {
+          "id": "c",
+          "text": "Зависит от output mode -- в append да, в update нет"
+        },
+        {
+          "id": "d",
+          "text": "Нет -- watermark = 15:45 - 30 мин = 15:15; событие с event_time 15:14 < 15:15, поэтому отбрасывается как опоздавшее"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Watermark = max(event_time) - threshold = 15:45 - 30 мин = 15:15. Событие с event_time 15:14 < watermark 15:15, поэтому оно считается опоздавшим и отбрасывается. Даже один минута разницы (15:14 vs 15:15) приводит к отбрасыванию. Это демонстрирует строгость watermark boundary.",
+      "studyHint": "Повторите урок 4: Watermarks -- формула watermark = max(event_time) - threshold и поведение с опоздавшими данными",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m09-exam-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer строит CDC pipeline: Debezium -> Kafka -> Spark -> Delta Lake. Он использует writeStream.format(\"delta\").outputMode(\"append\"). В source DB выполнены INSERT, UPDATE и DELETE. Что произойдёт в Delta-таблице?",
+      "options": [
+        {
+          "id": "a",
+          "text": "INSERT-события добавятся как новые строки, но UPDATE и DELETE не применятся -- append mode только добавляет строки. Все CDC-события (включая op:\"u\" и op:\"d\") запишутся как новые строки без merge-логики"
+        },
+        {
+          "id": "b",
+          "text": "Все три типа операций будут корректно применены к Delta-таблице"
+        },
+        {
+          "id": "c",
+          "text": "Pipeline упадёт с ошибкой при получении DELETE-события"
+        },
+        {
+          "id": "d",
+          "text": "Delta Lake автоматически распознает Debezium-формат и применит UPDATE/DELETE"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Append mode просто добавляет новые строки. CDC-события с op=\"u\" и op=\"d\" запишутся как обычные строки без merge-логики. Для корректного применения UPDATE и DELETE нужно использовать foreachBatch с MERGE INTO: WHEN MATCHED AND op='d' THEN DELETE, WHEN MATCHED AND op='u' THEN UPDATE, WHEN NOT MATCHED AND op='c' THEN INSERT.",
+      "studyHint": "Повторите урок 7: CDC pipeline -- паттерн foreachBatch + MERGE INTO для Debezium-событий",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m09-exam-q4",
+      "type": "multiple-choice",
+      "question": "В чём фундаментальное архитектурное отличие DStream от Structured Streaming?",
+      "options": [
+        {
+          "id": "a",
+          "text": "DStream быстрее для high-throughput scenarios"
+        },
+        {
+          "id": "b",
+          "text": "DStream работает на уровне RDD с отдельным API; Structured Streaming использует DataFrame API с оптимизацией Catalyst, единый API для batch и streaming, и встроенную поддержку event-time"
+        },
+        {
+          "id": "c",
+          "text": "DStream поддерживает больше source-форматов"
+        },
+        {
+          "id": "d",
+          "text": "DStream -- это Structured Streaming с более простым конфигурированием"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Три ключевых отличия: (1) DStream = RDD API, Structured Streaming = DataFrame API с Catalyst; (2) DStream имеет отдельный API, несовместимый с batch -- Structured Streaming использует тот же DataFrame API; (3) DStream поддерживает только processing time, Structured Streaming -- event time через watermarks. DStream считается legacy с Spark 2.0.",
+      "studyHint": "Повторите урок 1: Streaming Fundamentals -- эволюция от DStream к Structured Streaming",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m09-exam-q5",
+      "type": "multiple-choice",
+      "question": "Streaming pipeline использует sliding window: window(\"event_time\", \"1 hour\", \"10 minutes\"). Сколько окон порождает одно событие и как это влияет на потребление памяти state store?",
+      "options": [
+        {
+          "id": "a",
+          "text": "1 окно; потребление не зависит от типа окна"
+        },
+        {
+          "id": "b",
+          "text": "2 окна; потребление удваивается"
+        },
+        {
+          "id": "c",
+          "text": "6 окон (60 мин / 10 мин); state store хранит данные для каждого окна -- sliding window с малым slide потребляет в 6 раз больше state, чем tumbling window того же размера"
+        },
+        {
+          "id": "d",
+          "text": "60 окон; каждая минута создаёт новое окно"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Sliding window (1 час, slide 10 мин) создаёт новое окно каждые 10 минут. Одно событие попадает в window_size / slide_interval = 60/10 = 6 окон одновременно. State store хранит промежуточные результаты для каждого окна, поэтому потребление памяти кратно увеличивается. Это важно учитывать при выборе slide interval.",
+      "studyHint": "Повторите урок 5: Windowing -- sliding window formula и impact на state store",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m09-exam-q6",
+      "type": "multiple-choice",
+      "question": "foreachBatch позволяет записывать streaming данные в несколько sinks одновременно. Какая особенность foreachBatch обеспечивает exactly-once семантику при записи в несколько таблиц?",
+      "options": [
+        {
+          "id": "a",
+          "text": "foreachBatch автоматически оборачивает все записи в транзакцию"
+        },
+        {
+          "id": "b",
+          "text": "foreachBatch не поддерживает запись в несколько sinks"
+        },
+        {
+          "id": "c",
+          "text": "Checkpoint directory автоматически обеспечивает exactly-once для всех sinks в foreachBatch"
+        },
+        {
+          "id": "d",
+          "text": "foreachBatch сам не гарантирует exactly-once для multi-sink -- разработчик должен использовать batchId для idempotent writes: проверять, был ли этот batchId уже обработан"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "foreachBatch предоставляет batchId -- уникальный идентификатор micro-batch. При рестарте после сбоя Spark может повторно выполнить тот же batch. Для exactly-once разработчик должен использовать batchId как idempotency key: проверять, был ли batch уже записан, или использовать idempotent operations (MERGE вместо INSERT). Checkpoint обеспечивает exactly-once только для одного sink.",
+      "studyHint": "Повторите урок 2: Sources and Sinks -- foreachBatch API и batchId для idempotent writes",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m09-exam-q7",
+      "type": "multiple-choice",
+      "question": "Data engineer выбирает между complete mode и update mode для real-time dashboard с 50 000 уникальных ключей. Какие факторы определяют выбор?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Complete mode проще (dashboard получает полную таблицу), но при 50K ключах каждый batch перезаписывает 50K строк. Update mode записывает только изменённые ключи (обычно малый %%), но dashboard должен поддерживать merge-обновления"
+        },
+        {
+          "id": "b",
+          "text": "Всегда complete для dashboard -- update mode не поддерживает агрегации"
+        },
+        {
+          "id": "c",
+          "text": "Всегда update -- complete mode устарел"
+        },
+        {
+          "id": "d",
+          "text": "Оба mode записывают одинаковый объём данных при каждом batch"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Trade-off: complete mode отправляет все 50K строк при каждом batch -- простой для dashboard (replace all), но высокий I/O. Update mode отправляет только изменённые строки -- эффективнее по I/O (если в batch изменились 100 из 50K ключей), но dashboard должен уметь merge-обновлять свои данные. При малом числе ключей разница минимальна; при 50K+ update значительно эффективнее.",
+      "studyHint": "Повторите урок 3: Output Modes -- complete vs update trade-offs и сценарии использования",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m09-exam-q8",
+      "type": "multiple-choice",
+      "question": "mapGroupsWithState настроен с EventTimeTimeout. Что произойдёт, если для группы не приходит ни одного нового события в течение длительного времени?",
+      "options": [
+        {
+          "id": "a",
+          "text": "State будет удалён автоматически через 10 минут (default timeout)"
+        },
+        {
+          "id": "b",
+          "text": "Когда watermark потока проходит timestamp, установленный через state.setTimeoutTimestamp(), вызывается update-функция с пустым итератором событий -- разработчик решает, что делать с expired state"
+        },
+        {
+          "id": "c",
+          "text": "State хранится вечно -- EventTimeTimeout не удаляет state автоматически"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически перезапустит pipeline для очистки неактивных групп"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "EventTimeTimeout срабатывает, когда watermark потока проходит timestamp, установленный разработчиком через state.setTimeoutTimestamp(). В этот момент update-функция вызывается для expired группы с пустым итератором событий (state.hasTimedOut = true). Разработчик сам решает: вывести финальный результат, очистить state, или продлить timeout.",
+      "studyHint": "Повторите урок 6: Stateful Operations -- EventTimeTimeout и GroupState lifecycle",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m09-exam-q9",
+      "type": "multiple-choice",
+      "question": "Debezium-событие содержит op: \"r\" и source.snapshot: \"true\". Что означает эта комбинация в контексте CDC pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Это DELETE-событие, записанное в режиме snapshot"
+        },
+        {
+          "id": "b",
+          "text": "Это ошибка в формате -- op должен быть c, u или d"
+        },
+        {
+          "id": "c",
+          "text": "Это read-событие из начального снэпшота: Debezium читает все существующие строки таблицы при первом запуске. op=\"r\" отличается от op=\"c\" (INSERT) -- это не live-изменение, а snapshot существующих данных"
+        },
+        {
+          "id": "d",
+          "text": "Это replay-событие -- Debezium повторно отправляет ранее обработанное событие"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "op=\"r\" (read) + source.snapshot=\"true\" указывает на событие начального снэпшота. При первом запуске Debezium читает все существующие строки таблицы и отправляет их как read-события. Это отличается от op=\"c\" (create), который фиксирует live INSERT. В CDC pipeline важно различать: snapshot-события создают baseline данных, а live-события отражают последующие изменения.",
+      "studyHint": "Повторите урок 7: CDC -- формат Debezium-событий и различие между snapshot (op:r) и live-событиями (op:c/u/d)",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m09-exam-q10",
+      "type": "multiple-choice",
+      "question": "Session window с gap = 30 минут используется для группировки пользовательских сессий. Пользователь A отправляет события в 10:00, 10:15, 10:40, 11:20. Сколько сессий будет создано?",
+      "options": [
+        {
+          "id": "a",
+          "text": "1 сессия: все события в пределах 2 часов"
+        },
+        {
+          "id": "b",
+          "text": "3 сессии: [10:00-10:15], [10:40], [11:20]"
+        },
+        {
+          "id": "c",
+          "text": "4 сессии: каждое событие в отдельной сессии"
+        },
+        {
+          "id": "d",
+          "text": "2 сессии: [10:00-10:40] (gap между 10:15 и 10:40 = 25 мин < 30 мин) и [11:20] (gap между 10:40 и 11:20 = 40 мин > 30 мин)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Session window с gap=30 мин: сессия продолжается, пока интервал между событиями <= 30 мин. 10:00 -> 10:15 (gap 15 мин, < 30 мин, та же сессия). 10:15 -> 10:40 (gap 25 мин, < 30 мин, та же сессия). 10:40 -> 11:20 (gap 40 мин, > 30 мин, новая сессия). Итого: 2 сессии.",
+      "studyHint": "Повторите урок 5: Windowing -- session_window() с gap timeout и динамический размер сессий",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m09-exam-q11",
+      "type": "multiple-choice",
+      "question": "Production streaming pipeline внезапно замедлился: каждый micro-batch обрабатывается 5 минут вместо обычных 10 секунд. Spark UI показывает, что большая часть времени тратится на checkpoint. Какова наиболее вероятная причина?",
+      "options": [
+        {
+          "id": "a",
+          "text": "State store с in-memory backend вырос до размера, при котором сериализация и запись state в checkpoint при каждом batch занимает минуты. Решение: переключиться на RocksDB state backend с асинхронным checkpoint"
+        },
+        {
+          "id": "b",
+          "text": "Checkpoint directory переполнилась -- нужно удалить старые файлы"
+        },
+        {
+          "id": "c",
+          "text": "Kafka source замедлился из-за consumer lag"
+        },
+        {
+          "id": "d",
+          "text": "Delta Lake sink блокирует запись из-за ACID-блокировок"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "In-memory state backend выполняет синхронный checkpoint: весь state сериализуется и записывается на диск при каждом micro-batch. При большом state (миллионы ключей) это занимает минуты. RocksDB backend хранит state на диске и выполняет асинхронный incremental checkpoint, значительно быстрее для больших state.",
+      "studyHint": "Повторите урок 6: Stateful Operations -- state backends и RocksDB для production",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m09-exam-q12",
+      "type": "multiple-choice",
+      "question": "Какой Trigger режим обеспечивает наименьшую задержку (latency) в Structured Streaming?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Trigger.Once() -- обрабатывает все доступные данные за один batch"
+        },
+        {
+          "id": "b",
+          "text": "Trigger.ProcessingTime(\"0 seconds\") -- запускает новый micro-batch немедленно после завершения предыдущего, минимизируя idle time между batch'ами"
+        },
+        {
+          "id": "c",
+          "text": "Trigger.ProcessingTime(\"1 minute\") -- стандартный интервал"
+        },
+        {
+          "id": "d",
+          "text": "Trigger.AvailableNow() -- обрабатывает все доступные данные и останавливается"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Trigger.ProcessingTime(\"0 seconds\") (или Trigger.ProcessingTime(0)) запускает новый micro-batch немедленно после завершения предыдущего. Это минимизирует задержку между поступлением данных и их обработкой. Trigger.Once() и AvailableNow() -- batch-like: обрабатывают всё и останавливаются, не подходят для continuous low-latency.",
+      "studyHint": "Повторите урок 1: Streaming Fundamentals -- Trigger режимы и их влияние на latency/throughput",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m09-exam-q13",
+      "type": "multiple-choice",
+      "question": "CDC pipeline обрабатывает события из 3 Debezium-топиков (customers, orders, products). Для каждого топика нужна отдельная merge-логика в Delta Lake. Как организовать pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Один pipeline с subscribePattern, фильтрация по топику внутри foreachBatch"
+        },
+        {
+          "id": "b",
+          "text": "Один pipeline с join трёх топиков"
+        },
+        {
+          "id": "c",
+          "text": "Три отдельных streaming pipeline, каждый с subscribe на свой топик и своей foreachBatch-логикой для MERGE INTO соответствующей Delta-таблицы"
+        },
+        {
+          "id": "d",
+          "text": "Невозможно -- Spark поддерживает только один Kafka source на pipeline"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Три отдельных pipeline -- оптимальный подход: (1) каждый pipeline имеет свой checkpoint, обеспечивая independent exactly-once гарантии; (2) каждый foreachBatch содержит специфичную merge-логику для своей таблицы; (3) pipelines могут масштабироваться независимо. Один pipeline с фильтрацией усложняет checkpoint management и error handling.",
+      "studyHint": "Повторите урок 7: CDC pipeline architecture и урок 2: Sources and Sinks -- checkpoint isolation",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m09-exam-q14",
+      "type": "multiple-choice",
+      "question": "Streaming pipeline c withWatermark(\"event_time\", \"5 minutes\") и window(\"event_time\", \"10 minutes\") работает в append mode. Когда именно результат окна [10:00, 10:10) будет записан в sink?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Сразу после закрытия окна в 10:10"
+        },
+        {
+          "id": "b",
+          "text": "Когда в окне накопится определённое число событий"
+        },
+        {
+          "id": "c",
+          "text": "По расписанию Trigger.ProcessingTime"
+        },
+        {
+          "id": "d",
+          "text": "Когда watermark проходит верхнюю границу окна: max(event_time) достигает 10:15 (10:10 + 5 мин threshold), watermark = 10:15 - 5 мин = 10:10, окно [10:00, 10:10) финализируется"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "В append mode с watermark окно записывается, когда watermark проходит его верхнюю границу. Окно [10:00, 10:10) закрывается, когда watermark >= 10:10. Watermark = max(event_time) - threshold. Для watermark = 10:10 нужен max(event_time) = 10:10 + 5 мин = 10:15. Т.е. окно записывается с задержкой threshold после его фактического закрытия.",
+      "studyHint": "Повторите урок 4: Watermarks -- связь watermark с финализацией окон и задержкой записи",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

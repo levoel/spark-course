@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "07-storage-optimization/01-file-formats-comparison",
+  "moduleId": "07-storage-optimization",
+  "_meta": {
+    "idPrefix": "spark-m07-01",
+    "description": "Use IDs: m07-01-q1, m07-01-q2, ... for MC/TF; m07-01-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m07-01-q1",
+      "type": "multiple-choice",
+      "question": "Почему колоночные форматы (Parquet, ORC) дают лучшее сжатие, чем строковые (CSV)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Данные одного типа хранятся непрерывно, что позволяет применить type-specific encoding: dictionary encoding для строк, delta encoding для чисел, run-length для повторяющихся значений"
+        },
+        {
+          "id": "b",
+          "text": "Колоночные форматы используют более мощные алгоритмы сжатия"
+        },
+        {
+          "id": "c",
+          "text": "Колоночные форматы хранят меньше метаданных"
+        },
+        {
+          "id": "d",
+          "text": "Сжатие одинаково -- разница только в скорости чтения"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "В Parquet столбец department содержит ['IT', 'HR', 'IT', 'IT', 'HR'...] -- однотипные данные непрерывно. Dictionary encoding заменяет повторяющиеся строки числовыми ID (IT=0, HR=1). Run-length encoding сжимает последовательности одинаковых значений. В CSV рядом хранятся разнотипные данные (число, строка, дата), что не позволяет type-specific сжатие. Результат: Parquet в 3-5 раз компактнее CSV.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-01-q2",
+      "type": "multiple-choice",
+      "question": "Запрос SELECT avg(salary) FROM employees WHERE department = 'IT' на 1 ТБ таблице со 100 столбцами. CSV: 20 минут, Parquet: 12 секунд. Почему разница 100x?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Parquet быстрее читает данные с диска"
+        },
+        {
+          "id": "b",
+          "text": "Parquet: column pruning (читает только salary + department, ~2% данных) + predicate pushdown (min/max statistics пропускают row groups). CSV: читает все 100 столбцов всех строк"
+        },
+        {
+          "id": "c",
+          "text": "Parquet сжатие уменьшает данные в 100 раз"
+        },
+        {
+          "id": "d",
+          "text": "CSV не поддерживает SQL-запросы"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Два фактора: (1) Column Pruning: из 100 столбцов читаются только salary и department (~2% данных = ~20 ГБ). (2) Predicate Pushdown: min/max statistics по department в каждом row group пропускают ~80% row groups (если IT = 20% сотрудников). Итого: ~4 ГБ вместо 1 ТБ. CSV не поддерживает ни column pruning, ни predicate pushdown.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-01-q3",
+      "type": "multiple-choice",
+      "question": "Когда Avro предпочтительнее Parquet?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Для аналитических запросов с агрегациями"
+        },
+        {
+          "id": "b",
+          "text": "Для хранения больших таблиц в data warehouse"
+        },
+        {
+          "id": "c",
+          "text": "Потоковые данные (Kafka + Schema Registry), частая schema evolution, межсервисное взаимодействие"
+        },
+        {
+          "id": "d",
+          "text": "Avro всегда предпочтительнее Parquet"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Avro -- строковый формат с отличной schema evolution. Три сценария: (1) Kafka + Schema Registry -- streaming append-only данные; (2) частая schema evolution -- добавление/удаление/переименование полей с обратной совместимостью; (3) RPC/serialization -- компактный бинарный формат. Для аналитики Parquet всегда лучше: column pruning + predicate pushdown.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m07-01-q4",
+      "type": "true-false",
+      "question": "Snappy -- кодек сжатия по умолчанию в Spark для Parquet, оптимизированный для скорости, а не степени сжатия.",
+      "correctAnswer": true,
+      "explanation": "Верно. Snappy -- default codec в Spark для Parquet. Snappy оптимизирован для скорости: очень быстрая компрессия/декомпрессия при средней степени сжатия. Для cold storage лучше Zstd (лучший ratio, чуть медленнее). Gzip не рекомендуется для Spark -- медленная декомпрессия.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-01-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer записывает ETL-результат в CSV для 'совместимости'. Pipeline потребляет 5 ТБ хранилища и 20 минут на чтение. Какой формат сократит оба показателя?",
+      "options": [
+        {
+          "id": "a",
+          "text": "JSON -- более структурированный формат"
+        },
+        {
+          "id": "b",
+          "text": "Avro -- бинарный формат, экономит место"
+        },
+        {
+          "id": "c",
+          "text": "ORC -- лучше сжимает, чем Parquet"
+        },
+        {
+          "id": "d",
+          "text": "Parquet: ~1-1.5 ТБ хранилища (3-5x сжатие) и ~1-2 минуты чтения (column pruning + predicate pushdown)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Parquet: columnar + compression (Snappy/Zstd) = 3-5x меньше хранилища (5 ТБ -> ~1-1.5 ТБ). Column pruning: аналитические запросы читают 2-5% столбцов. Predicate pushdown: min/max statistics пропускают неподходящие row groups. Совокупный эффект: 10-100x ускорение чтения. JSON/CSV в production -- анти-паттерн.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m07-01-code-1",
+      "type": "code-challenge",
+      "question": "Создайте таблицу employees и запросите среднюю зарплату по отделам. Сравните, как column pruning работает: SELECT только нужные столбцы вместо SELECT *.",
+      "language": "sql",
+      "setupSQL": "CREATE TABLE employees (id INTEGER, name TEXT, department TEXT, salary INTEGER);\nINSERT INTO employees VALUES (1, 'Alice', 'IT', 90000);\nINSERT INTO employees VALUES (2, 'Bob', 'HR', 75000);\nINSERT INTO employees VALUES (3, 'Carol', 'IT', 95000);\nINSERT INTO employees VALUES (4, 'Dave', 'HR', 80000);\nINSERT INTO employees VALUES (5, 'Eve', 'IT', 105000);",
+      "starterCode": "-- Вычислите среднюю зарплату (AVG) по каждому department\n-- Используйте GROUP BY для группировки\n-- SELECT только нужные столбцы: department и avg(salary)\n\nSELECT -- TODO\n",
+      "solutionCode": "SELECT department, AVG(salary) AS avg_salary\nFROM employees\nGROUP BY department;",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "IT department present",
+          "input": "",
+          "expectedOutput": "IT",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "HR department present",
+          "input": "",
+          "expectedOutput": "HR",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Shows average values",
+          "input": "",
+          "expectedOutput": "96666",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "В Parquet этот запрос прочитает ТОЛЬКО столбцы department и salary (column pruning), пропуская id, name и все остальные. Для таблицы с 100 столбцами это 98% экономия I/O. GROUP BY department + AVG(salary) -- аналитический паттерн, идеально подходящий для колоночных форматов.",
+      "bloomLevel": "applied"
+    }
+  ]
+}

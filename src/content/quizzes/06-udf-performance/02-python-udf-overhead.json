@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "06-udf-performance/02-python-udf-overhead",
+  "moduleId": "06-udf-performance",
+  "_meta": {
+    "idPrefix": "spark-m06-02",
+    "description": "Use IDs: m06-02-q1, m06-02-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m06-02-q1",
+      "type": "multiple-choice",
+      "question": "Каков основной overhead Python UDF по сравнению со встроенными функциями?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Per-row сериализация: JVM -> pickle -> socket -> Python -> execute -> pickle -> socket -> JVM для КАЖДОЙ строки"
+        },
+        {
+          "id": "b",
+          "text": "Python медленнее JVM в 100 раз из-за интерпретации"
+        },
+        {
+          "id": "c",
+          "text": "Python UDF не может использовать несколько ядер CPU"
+        },
+        {
+          "id": "d",
+          "text": "Python UDF требует больше оперативной памяти"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Главный overhead -- per-row сериализация через JVM-Python bridge. Каждая строка: serialize (pickle) -> передача через socket -> десериализация в Python -> выполнение -> serialize результат -> socket -> JVM -> deserialize. Для 1 миллиарда строк это 1 миллиард циклов сериализации. Сама Python-логика занимает ~1% от общего времени.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-02-q2",
+      "type": "multiple-choice",
+      "question": "Python UDF upper() на 100M строк: 13 минут. Встроенная upper(): 8 секунд. Почему разница ~100x?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python-функция upper() работает медленнее Java upper()"
+        },
+        {
+          "id": "b",
+          "text": "Полезная работа upper() занимает ~5ns, но overhead сериализации ~5us (1000x больше) -- overhead доминирует в общем времени"
+        },
+        {
+          "id": "c",
+          "text": "Встроенная функция использует GPU"
+        },
+        {
+          "id": "d",
+          "text": "Python UDF выполняется в одном потоке"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Для простых операций (upper, trim) полезная работа ~5 наносекунд, а overhead сериализации ~5 микросекунд (1000x больше). Total per row = 5us + 5ns ≈ 5us -- overhead составляет 99.9% времени. Встроенная upper() выполняется в Tungsten CodeGen на JVM без сериализации -- total ~5ns per row. Отсюда разница ~1000x на уровне row, ~100x в aggregate.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-02-q3",
+      "type": "true-false",
+      "question": "Python UDF запускает отдельный Python-процесс (pyspark.daemon) для каждого executor, и данные передаются через socket.",
+      "correctAnswer": true,
+      "explanation": "Верно. PySpark запускает отдельный Python worker process (pyspark.daemon) для каждого executor. JVM передаёт данные в Python через socket с pickle-сериализацией. Этот архитектурный выбор позволяет использовать Python-библиотеки, но создаёт overhead на каждом вызове UDF.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-02-q4",
+      "type": "multiple-choice",
+      "question": "Почему Python UDF отключает Catalyst predicate pushdown для столбцов, используемых в UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Catalyst отключает все оптимизации при обнаружении Python-кода"
+        },
+        {
+          "id": "b",
+          "text": "Predicate pushdown не совместим с Python"
+        },
+        {
+          "id": "c",
+          "text": "UDF -- чёрный ящик; Catalyst не знает, какие столбцы используются внутри и какие преобразования выполняются, поэтому не может безопасно переставить UDF и filter"
+        },
+        {
+          "id": "d",
+          "text": "Python UDF всегда выполняется последним в pipeline"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Catalyst видит UDF как чёрный ящик: не знает, от каких столбцов зависит результат, какие инварианты поддерживаются, и можно ли безопасно переставить UDF с другими операторами. Поэтому Catalyst не может применить predicate pushdown через UDF -- фильтр не перемещается под Exchange, все данные проходят через shuffle.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-02-q5",
+      "type": "multiple-choice",
+      "question": "Какие ресурсы потребляет Python UDF на executor помимо CPU?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только CPU -- Python UDF не использует дополнительную память"
+        },
+        {
+          "id": "b",
+          "text": "Сетевой трафик между executors"
+        },
+        {
+          "id": "c",
+          "text": "GPU для ускорения Python-кода"
+        },
+        {
+          "id": "d",
+          "text": "Дополнительная память Python worker (отдельный от JVM heap), socket buffer и pickle-буферы для каждой строки"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Python worker process работает в отдельном address space с собственной памятью (не из JVM heap). Socket buffer между JVM и Python. Pickle-сериализация создаёт промежуточные объекты. Всё это дополнительное потребление памяти поверх основного JVM heap executor. spark.python.worker.memory контролирует лимит памяти Python worker.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-02-code-1",
+      "type": "code-challenge",
+      "question": "Реализуйте сложную классификацию заказов без UDF: используйте цепочку when/otherwise для категоризации заказов по 4 уровням приоритета на основе amount и quantity. Высший: amount > 5000 AND quantity > 10, Высокий: amount > 2000, Средний: quantity > 5, Низкий: остальные.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit\n\nspark = SparkSession.builder.appName(\"no_udf_classify\").getOrCreate()\n\norders = spark.createDataFrame([\n    (1, 6000, 15),   # Высший: >5000 AND >10\n    (2, 3000, 3),    # Высокий: >2000\n    (3, 500, 8),     # Средний: qty>5\n    (4, 200, 2),     # Низкий\n    (5, 7000, 20),   # Высший\n    (6, 2500, 12),   # Высокий (amount >2000, qty>10 но amount первый)\n    (7, 100, 6),     # Средний: qty>5\n], [\"order_id\", \"amount\", \"quantity\"])\n\n# TODO: Создайте колонку priority используя when/otherwise:\n# \"Высший\" — amount > 5000 AND quantity > 10\n# \"Высокий\" — amount > 2000\n# \"Средний\" — quantity > 5\n# \"Низкий\" — все остальные\n# result = orders.withColumn(\"priority\", when(...).when(...).when(...).otherwise(...))\n\n# TODO: Покажите результат\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit\n\nspark = SparkSession.builder.appName(\"no_udf_classify\").getOrCreate()\n\norders = spark.createDataFrame([\n    (1, 6000, 15),\n    (2, 3000, 3),\n    (3, 500, 8),\n    (4, 200, 2),\n    (5, 7000, 20),\n    (6, 2500, 12),\n    (7, 100, 6),\n], [\"order_id\", \"amount\", \"quantity\"])\n\nresult = orders.withColumn(\n    \"priority\",\n    when((col(\"amount\") > 5000) & (col(\"quantity\") > 10), lit(\"Высший\"))\n    .when(col(\"amount\") > 2000, lit(\"Высокий\"))\n    .when(col(\"quantity\") > 5, lit(\"Средний\"))\n    .otherwise(lit(\"Низкий\"))\n)\n\nresult.show()\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Заказ 1 (6000, 15) — Высший приоритет",
+          "input": "",
+          "expectedOutput": "Высший",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Заказ 4 (200, 2) — Низкий приоритет",
+          "input": "",
+          "expectedOutput": "Низкий",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Заказ 3 (500, 8) — Средний приоритет",
+          "input": "",
+          "expectedOutput": "Средний",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Цепочка when/otherwise компилируется Catalyst в единый оптимизированный expression, выполняемый в JVM без сериализации. Python UDF для той же логики создал бы отдельный Python-процесс на каждом executor, сериализовал бы каждую строку через Arrow/pickle, выполнил бы Python-функцию, и десериализовал обратно. При 100М строк overhead сериализации может занимать 90%+ времени выполнения. Catalyst также может оптимизировать порядок проверок и объединить их с другими предикатами.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

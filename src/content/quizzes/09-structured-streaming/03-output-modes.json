@@ -1,0 +1,165 @@
+{
+  "lessonSlug": "09-structured-streaming/03-output-modes",
+  "moduleId": "09-structured-streaming",
+  "_meta": {
+    "idPrefix": "spark-m09-03",
+    "description": "Use IDs: m09-03-q1, m09-03-q2, ... (5 questions on output modes)"
+  },
+  "questions": [
+    {
+      "id": "spark-m09-03-q1",
+      "type": "multiple-choice",
+      "question": "Data engineer пишет streaming агрегацию events.groupBy(\"user_id\").count() и выбирает outputMode(\"append\") без watermark. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Запрос запустится, но результаты будут неточными"
+        },
+        {
+          "id": "b",
+          "text": "Результат будет записываться по мере поступления данных без агрегации"
+        },
+        {
+          "id": "c",
+          "text": "Запрос запустится в complete mode автоматически"
+        },
+        {
+          "id": "d",
+          "text": "Spark выбросит AnalysisException до запуска запроса: append mode не поддерживает streaming-агрегации без watermark"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Append mode без watermark с агрегацией невозможен. Без watermark Spark не знает, когда агрегация \"финализирована\" -- новые данные могут изменить count. Spark отклоняет такой запрос с AnalysisException ещё до запуска, а не молча выдаёт неверные результаты.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 3: Output Modes -- ограничения append mode для агрегаций без watermark"
+    },
+    {
+      "id": "spark-m09-03-q2",
+      "type": "multiple-choice",
+      "question": "В чём главное отличие update mode от complete mode при выполнении агрегации?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Update mode записывает только строки, изменившиеся в текущем batch; complete mode перезаписывает ВСЮ Result Table при каждом batch"
+        },
+        {
+          "id": "b",
+          "text": "Update mode быстрее, а complete mode надёжнее"
+        },
+        {
+          "id": "c",
+          "text": "Update mode поддерживает only Kafka sink, а complete mode -- любой sink"
+        },
+        {
+          "id": "d",
+          "text": "Нет отличий -- оба записывают полную таблицу результатов"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Update mode записывает только те строки Result Table, которые были изменены или добавлены в текущем micro-batch. Complete mode записывает ВСЮ Result Table при каждом batch, полностью перезаписывая предыдущий результат. Для агрегации по 1 миллиону ключей update mode запишет только изменённые ключи, а complete -- все 1 миллион.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: Output Modes -- сравнение update и complete mode"
+    },
+    {
+      "id": "spark-m09-03-q3",
+      "type": "multiple-choice",
+      "question": "Dashboard обновляется каждые 30 секунд и показывает текущие итоги по всем категориям. Какой output mode наиболее подходит?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Append mode -- добавляет только новые строки"
+        },
+        {
+          "id": "b",
+          "text": "Complete mode -- при каждом batch dashboard получает полную актуальную таблицу результатов"
+        },
+        {
+          "id": "c",
+          "text": "Update mode -- dashboard получает только изменённые строки"
+        },
+        {
+          "id": "d",
+          "text": "Любой mode подойдёт одинаково"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Для dashboard, который отображает полную таблицу результатов, complete mode идеален: при каждом batch sink получает полную актуальную Result Table, и dashboard просто отображает последнюю версию. Update mode потребовал бы merge-логику на стороне dashboard, а append mode не поддерживает агрегации без watermark.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 3: Output Modes -- выбор complete mode для dashboard-сценариев"
+    },
+    {
+      "id": "spark-m09-03-q4",
+      "type": "multiple-choice",
+      "question": "Streaming pipeline без агрегаций фильтрует события и записывает в Delta Lake. Какой output mode следует использовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Complete mode -- записывает все отфильтрованные события"
+        },
+        {
+          "id": "b",
+          "text": "Update mode -- записывает только изменения"
+        },
+        {
+          "id": "c",
+          "text": "Append mode (по умолчанию) -- каждый batch добавляет только новые отфильтрованные строки"
+        },
+        {
+          "id": "d",
+          "text": "Complete mode -- Spark требует его для всех Delta sinks"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Для pipeline без агрегаций append mode -- естественный выбор (и значение по умолчанию). Каждый micro-batch добавляет новые строки в sink. Complete mode не подходит: он перезаписывает весь результат при каждом batch, а для filter-only pipeline это бессмысленно. Update mode для non-aggregation запросов эквивалентен append.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 3: Output Modes -- append mode для pipeline без агрегаций"
+    },
+    {
+      "id": "spark-m09-03-q5",
+      "type": "true-false",
+      "question": "Append mode с агрегациями работает, если добавить withWatermark() -- Spark записывает финализированные окна, когда watermark проходит их границу.",
+      "correctAnswer": true,
+      "explanation": "С watermark Spark знает, когда агрегация финализирована: когда watermark проходит верхнюю границу окна, новых данных для этого окна уже не будет. В этот момент Spark безопасно записывает результат окна в append mode. Это позволяет использовать append mode с агрегациями -- ключевая связка watermark + append.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: Output Modes -- связка watermark + append mode для агрегаций"
+    },
+    {
+      "id": "spark-m09-03-code-1",
+      "type": "code-challenge",
+      "question": "Сравнение семантики append vs complete output mode: обработайте один и тот же набор продаж двумя способами. Для 'append'-семантики — вычислите агрегат только для новых данных (sales с date >= '2024-01-03'). Для 'complete'-семантики — вычислите агрегат по ВСЕМ данным. Покажите оба результата. Это демонстрирует ключевую разницу: append выдаёт только новые строки, complete — полную пересчитанную таблицу.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, sum as spark_sum\n\nspark = SparkSession.builder.appName(\"output-modes\").getOrCreate()\n\nsales = spark.createDataFrame([\n    (\"electronics\", 100, \"2024-01-01\"),\n    (\"clothing\",    200, \"2024-01-01\"),\n    (\"electronics\", 150, \"2024-01-02\"),\n    (\"clothing\",     50, \"2024-01-02\"),\n    (\"electronics\", 300, \"2024-01-03\"),\n    (\"clothing\",    100, \"2024-01-03\"),\n], [\"category\", \"amount\", \"date\"])\n\n# TODO: append_result — агрегируйте ТОЛЬКО новые данные (date >= '2024-01-03')\n# Группируйте по category, посчитайте sum(amount)\n# append_result = sales.filter(...).groupBy(...).agg(...)\n\n# TODO: complete_result — агрегируйте ВСЕ данные\n# Группируйте по category, посчитайте sum(amount)\n# complete_result = sales.groupBy(...).agg(...)\n\nprint(\"=== APPEND MODE ===\")\n# append_result.show()\nprint(\"=== COMPLETE MODE ===\")\n# complete_result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, sum as spark_sum\n\nspark = SparkSession.builder.appName(\"output-modes\").getOrCreate()\n\nsales = spark.createDataFrame([\n    (\"electronics\", 100, \"2024-01-01\"),\n    (\"clothing\",    200, \"2024-01-01\"),\n    (\"electronics\", 150, \"2024-01-02\"),\n    (\"clothing\",     50, \"2024-01-02\"),\n    (\"electronics\", 300, \"2024-01-03\"),\n    (\"clothing\",    100, \"2024-01-03\"),\n], [\"category\", \"amount\", \"date\"])\n\nappend_result = sales.filter(col(\"date\") >= \"2024-01-03\").groupBy(\"category\").agg(spark_sum(\"amount\").alias(\"total\"))\n\ncomplete_result = sales.groupBy(\"category\").agg(spark_sum(\"amount\").alias(\"total\"))\n\nprint(\"=== APPEND MODE ===\")\nappend_result.show()\nprint(\"=== COMPLETE MODE ===\")\ncomplete_result.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Append содержит только данные за 01-03",
+          "input": "",
+          "expectedOutput": "300",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Complete содержит полную сумму electronics (550)",
+          "input": "",
+          "expectedOutput": "550",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Оба режима выведены",
+          "input": "",
+          "expectedOutput": "COMPLETE MODE",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "В Structured Streaming output mode определяет, какие строки записываются в sink. Append mode выдаёт только новые строки (в нашем примере — агрегаты только за 2024-01-03: electronics=300, clothing=100). Complete mode пересчитывает и выдаёт всю таблицу результатов (electronics=550, clothing=350). Update mode (не показан) выдаёт только изменившиеся строки.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

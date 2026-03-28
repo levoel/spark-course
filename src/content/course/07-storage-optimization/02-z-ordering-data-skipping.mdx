@@ -1,0 +1,166 @@
+---
+title: "Z-ordering и data skipping"
+description: "Как min/max statistics, predicate pushdown и Z-ordering ускоряют запросы, пропуская ненужные блоки данных"
+order: 2
+difficulty: "advanced"
+estimatedTime: 14
+topics: ["Z-ordering", "Data Skipping", "Min/Max Statistics", "Column Statistics", "Predicate Pushdown"]
+---
+
+import { MinMaxStatsDiagram, ZOrderingComparisonDiagram } from '../../../components/diagrams/module7';
+
+# Z-ordering и data skipping
+
+## Data skipping: пропускаем ненужные данные
+
+Data skipping -- это техника, при которой Spark **не читает** блоки данных, которые гарантированно не содержат нужных строк. Это работает благодаря **min/max statistics**, хранящимся в metadata каждого row group (Parquet) или stripe (ORC).
+
+### Как работают min/max statistics
+
+Каждый row group в Parquet хранит минимальное и максимальное значение для каждого столбца:
+
+<MinMaxStatsDiagram client:visible />
+
+### Predicate pushdown с min/max
+
+Когда Spark выполняет запрос с фильтром, он **проверяет min/max statistics** перед чтением row group:
+
+```python
+# Запрос: заказы за февраль 2024
+df = spark.read.parquet("/data/orders/")
+feb_orders = df.filter(col("order_date") >= "2024-02-01")
+```
+
+Spark проверяет каждый row group:
+- **Row Group 1**: max(order_date) = 2024-01-15 < 2024-02-01 → **SKIP** (не читаем!)
+- **Row Group 2**: max(order_date) = 2024-01-31 < 2024-02-01 → **SKIP**
+- **Row Group 3**: min(order_date) = 2024-02-01 >= 2024-02-01 → **READ**
+
+Результат: Spark прочитал **1/3 данных** вместо всего файла.
+
+<Callout type="tip">
+**Data skipping эффективен, когда данные отсортированы.** Если данные записаны в случайном порядке, min/max statistics охватывают весь диапазон значений в каждом row group, и пропустить блок невозможно. Сортировка перед записью -- простейший способ включить data skipping.
+</Callout>
+
+## Проблема: фильтрация по нескольким столбцам
+
+Данные можно отсортировать только по **одному** столбцу (или по нескольким, но с жёсткой иерархией). Если вы отсортировали по `order_date`, то фильтрация по `city` не будет эффективной -- значения города разбросаны по всем row groups.
+
+```python
+# Данные отсортированы по order_date
+# Запрос по дате -- data skipping работает отлично
+df.filter(col("order_date") == "2024-02-01")  # читает ~3% данных
+
+# Запрос по городу -- data skipping НЕ работает
+df.filter(col("city") == "Москва")  # читает 100% данных!
+# Потому что "Москва" есть в КАЖДОМ row group (min/max покрывает весь диапазон)
+```
+
+## Z-ordering: многомерная кластеризация
+
+**Z-ordering** решает эту проблему, организуя данные так, что строки с **похожими значениями по нескольким столбцам** оказываются в одних и тех же файлах/row groups.
+
+### Как работает Z-ordering
+
+Z-ordering использует **Z-кривую (кривую Мортона)** для отображения многомерных данных в одномерное пространство. Вместо сортировки по одному столбцу, данные организуются по **чередующимся битам** нескольких столбцов:
+
+<ZOrderingComparisonDiagram client:visible />
+
+Z-ordering обеспечивает **data skipping по обоим столбцам одновременно**.
+
+### Применение Z-ordering (Delta Lake)
+
+Z-ordering -- это прежде всего фича **Delta Lake** (и других lakehouse-форматов):
+
+```sql
+-- Delta Lake: Z-ordering при компактизации
+OPTIMIZE orders
+ZORDER BY (order_date, city)
+```
+
+```python
+# Через DeltaTable API
+from delta.tables import DeltaTable
+
+delta_table = DeltaTable.forPath(spark, "/data/orders/")
+delta_table.optimize().executeZOrderBy("order_date", "city")
+```
+
+<Callout type="warning">
+**Z-ordering -- это фича Delta Lake / Iceberg / Hudi, а не чистого Spark.** Стандартный Spark с Parquet не поддерживает Z-ordering напрямую. Для достижения похожего эффекта в чистом Spark можно использовать `repartitionByRange()` + `sortWithinPartitions()`, но это менее эффективно.
+
+Подробнее о Delta Lake -- в модуле Lakehouse (Phase 66).
+</Callout>
+
+### Эффект Z-ordering: Before vs After
+
+**Before Z-ordering** (стандартная запись):
+```
+Запрос: WHERE city = 'Москва' AND order_date = '2024-02-01'
+Файлов в таблице: 1000
+Файлов прочитано: 950 (95%)  ← data skipping почти не работает
+Данных прочитано: 9.5 GB из 10 GB
+Время выполнения: ~45 секунд
+```
+
+**After Z-ordering** (по city + order_date):
+```
+Запрос: WHERE city = 'Москва' AND order_date = '2024-02-01'
+Файлов в таблице: 1000
+Файлов прочитано: 50 (5%)   ← data skipping отсекает 95%
+Данных прочитано: 0.5 GB из 10 GB
+Время выполнения: ~2 секунды
+```
+
+**20x ускорение** за счёт чтения 5% данных вместо 95%.
+
+## Практические рекомендации
+
+### Выбор столбцов для Z-ordering
+
+| Критерий | Хороший кандидат | Плохой кандидат |
+|---------|-----------------|-----------------|
+| Кардинальность | Средняя (100-10000 значений) | Уникальные значения (user_id) |
+| Использование в фильтрах | Частое (WHERE, JOIN key) | Редкое |
+| Количество столбцов | 2-4 столбца | 10+ столбцов |
+
+**Оптимально:** 2-4 столбца, которые чаще всего используются в `WHERE` и `JOIN`.
+
+### Альтернатива Z-ordering в чистом Spark
+
+```python
+# Приближение Z-ordering через сортировку
+df.repartitionByRange(100, col("city"), col("order_date")) \
+  .sortWithinPartitions(col("city"), col("order_date")) \
+  .write.parquet("/data/orders_sorted/")
+```
+
+Это обеспечит хороший data skipping по `city` (первый столбец) и умеренный по `order_date` (второй столбец), но не настоящий Z-ordering.
+
+## Анти-паттерн: Z-ordering по высококардинальным уникальным столбцам
+
+```sql
+-- ПЛОХО: Z-ordering по уникальному столбцу
+OPTIMIZE orders
+ZORDER BY (user_id)  -- миллионы уникальных значений
+
+-- Каждый row group содержит уникальные user_id
+-- min/max statistics покрывают весь диапазон
+-- Data skipping не работает!
+```
+
+Z-ordering эффективен для столбцов со **средней кардинальностью** (сотни-тысячи уникальных значений). Для столбцов с миллионами уникальных значений используйте **bloom filters** (следующий урок).
+
+<KnowledgeCheck
+  question="Таблица orders содержит 1TB данных в 1000 Parquet-файлов. Запрос WHERE order_date = '2024-02-01' AND region = 'Moscow' читает 950 файлов. Как Z-ordering поможет?"
+  answer="Z-ordering по (order_date, region) реорганизует данные так, что строки с похожими комбинациями date+region окажутся в одних файлах. После Z-ordering min/max statistics для обоих столбцов будут иметь узкие диапазоны в каждом файле. Запрос сможет пропустить файлы, где min(order_date) > '2024-02-01' или max(order_date) < '2024-02-01' ИЛИ min(region) > 'Moscow' или max(region) < 'Moscow'. Вместо 950 файлов будет прочитано ~50-100, ускорение в 10-20x."
+/>
+
+<KnowledgeCheck
+  question="Почему сортировка по одному столбцу не решает проблему data skipping для запросов по нескольким столбцам?"
+  answer="Сортировка по столбцу A группирует данные только по этому столбцу. Значения столбца B оказываются случайно распределены по row groups. Для запроса WHERE A = x AND B = y data skipping работает только по A (min/max узкие), но не по B (min/max охватывают весь диапазон в каждом row group). Z-ordering решает это, чередуя биты обоих столбцов, что обеспечивает кластеризацию данных одновременно по нескольким измерениям."
+/>
+
+## Что дальше?
+
+В следующем уроке мы изучим **bloom filters** -- вероятностные структуры данных, которые дополняют min/max statistics для высококардинальных столбцов (user_id, session_id), где Z-ordering неэффективен.

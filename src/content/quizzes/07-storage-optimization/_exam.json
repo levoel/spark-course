@@ -1,0 +1,336 @@
+{
+  "lessonSlug": "07-storage-optimization/_exam",
+  "moduleId": "07-storage-optimization",
+  "examTitle": "Экзамен: Storage Optimization",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m07-exam",
+    "description": "Use IDs: m07-exam-q1, m07-exam-q2, ... (12-15 analytical questions)"
+  },
+  "questions": [
+    {
+      "id": "spark-m07-exam-q1",
+      "type": "multiple-choice",
+      "question": "Production pipeline читает 1 ТБ CSV таблицу с 200 столбцами. Запрос: SELECT avg(price) FROM products WHERE category='Electronics'. CSV: 30 минут. Предложите оптимизацию и оцените ускорение.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Конвертировать в Parquet: column pruning (2/200 столбцов = 1% данных) + predicate pushdown (пропуск row groups без Electronics). Оценка: ~10-20 ГБ чтения вместо 1 ТБ, ускорение ~50-100x"
+        },
+        {
+          "id": "b",
+          "text": "Сжать CSV через gzip для экономии места"
+        },
+        {
+          "id": "c",
+          "text": "Увеличить число executors для параллелизма"
+        },
+        {
+          "id": "d",
+          "text": "Кэшировать CSV в памяти"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Parquet: (1) column pruning: из 200 столбцов читаются только price и category = 1% данных (~10 ГБ). (2) predicate pushdown: min/max statistics по category пропускают row groups без 'Electronics' (~80% если Electronics = 20%). Итого: ~2 ГБ чтения vs 1 ТБ. Ускорение ~50-100x плюс 3-5x меньше хранилища.",
+      "studyHint": "Повторите урок 1: Column pruning + Predicate pushdown в Parquet",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q2",
+      "type": "multiple-choice",
+      "question": "Таблица transactions (500M строк) запрашивается по user_id (10M уникальных). Данные не отсортированы. Запрос WHERE user_id=12345 читает все 500M строк. Как оптимизировать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Добавить partitionBy('user_id') -- 10M директорий"
+        },
+        {
+          "id": "b",
+          "text": "Добавить Bloom-фильтр по user_id: для высококардинальных столбцов min/max неэффективны, bloom filter определяет, содержит ли row group конкретный user_id, пропуская ~99% row groups"
+        },
+        {
+          "id": "c",
+          "text": "Отсортировать данные по user_id"
+        },
+        {
+          "id": "d",
+          "text": "Увеличить число row groups для лучшего data skipping"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "user_id: 10M уникальных -- слишком высокая кардинальность для partitionBy (10M директорий = катастрофа). Min/max неэффективны: min=1, max=10M в каждом row group. Bloom filter: ~1% FPR, пропускает ~99% row groups. Сортировка помогла бы для range queries, но для point lookup bloom filter оптимальнее.",
+      "studyHint": "Повторите урок 3: Bloom-фильтры для высококардинальных столбцов",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q3",
+      "type": "multiple-choice",
+      "question": "Streaming pipeline: 100 micro-batches/час, 5 output partitions каждый. За месяц: 360K файлов по 50 КБ. Spark job на чтение занимает 15 минут (планирование 360K tasks). Решение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить executor memory"
+        },
+        {
+          "id": "b",
+          "text": "Уменьшить число output partitions до 1"
+        },
+        {
+          "id": "c",
+          "text": "Ежедневная compaction (OPTIMIZE): 360K файлов -> ~360 файлов по 50 МБ. Дополнительно: coalesce(1) перед sink и увеличить trigger interval"
+        },
+        {
+          "id": "d",
+          "text": "Переключить на batch ETL"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "360K файлов по 50 КБ = 18 ГБ, но 360K tasks. OPTIMIZE объединяет: 18 ГБ / 50 МБ = ~360 файлов. Ускорение чтения: ~1000x меньше tasks. Превентивные меры: (1) coalesce(1) перед sink уменьшает файлы/batch с 5 до 1; (2) trigger interval 30 сек -> 5 мин уменьшает batches/час с 100 до 12.",
+      "studyHint": "Повторите урок 5: Streaming small file problem + compaction",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q4",
+      "type": "multiple-choice",
+      "question": "Таблица запрашивается по двум столбцам: date и region. Обычная сортировка по date оптимизирует data skipping для date, но не для region. Что использовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Двойное партиционирование partitionBy('date', 'region')"
+        },
+        {
+          "id": "b",
+          "text": "Сортировка по date, region -- обычная multi-column sort"
+        },
+        {
+          "id": "c",
+          "text": "Создать два индекса: один по date, другой по region"
+        },
+        {
+          "id": "d",
+          "text": "Z-ordering по (date, region): сортировка по Z-кривой обеспечивает узкие min/max диапазоны по ОБОИМ столбцам, эффективный data skipping для любого фильтра"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Обычная sort(date, region): data skipping оптимален для date (первый ключ), но region внутри одной даты разбросан. Z-ordering чередует биты date и region, создавая row groups с узкими диапазонами по обоим столбцам. WHERE date='2024-01-15' AND region='Europe' -- data skipping по обоим. Multi-column sort помогает для date, но не для region-only queries.",
+      "studyHint": "Повторите урок 2: Z-ordering -- мультиколоночный data skipping",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q5",
+      "type": "multiple-choice",
+      "question": "Delta Lake таблица: 500 ГБ данных, ежедневные UPDATE затрагивают 5% строк. За 3 месяца без VACUUM: 4.5 ТБ на диске. Объясните и предложите решение.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Delta Lake copy-on-write: каждый UPDATE создаёт новые файлы, старые сохраняются для time travel. 90 дней * 5%/день * 500 ГБ = ~4 ТБ устаревших файлов. Решение: VACUUM RETAIN 168 HOURS (7 дней)"
+        },
+        {
+          "id": "b",
+          "text": "Дублирование данных при UPDATE"
+        },
+        {
+          "id": "c",
+          "text": "UPDATE дублирует всю таблицу"
+        },
+        {
+          "id": "d",
+          "text": "Проблема в формате Parquet -- перейти на ORC"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Delta Lake: каждый UPDATE перезаписывает затронутые файлы (copy-on-write). За 90 дней: ~90 * 5% * 500 ГБ = ~2.25 ТБ новых данных + ~2.25 ТБ устаревших версий. VACUUM RETAIN 168 HOURS удаляет файлы старше 7 дней, освобождая ~4 ТБ. Рекомендация: еженедельный VACUUM в maintenance window.",
+      "studyHint": "Повторите урок 4: VACUUM -- retention period и освобождение пространства",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q6",
+      "type": "multiple-choice",
+      "question": "ETL записывает 100 ГБ данных. spark.sql.shuffle.partitions=200, но после filter осталось 1 ГБ. Результат: 200 файлов по 5 МБ. Как получить ~10 файлов по 100 МБ?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Установить spark.sql.shuffle.partitions=10"
+        },
+        {
+          "id": "b",
+          "text": "Добавить .coalesce(10) перед .write.parquet() -- объединит 200 партиций в 10 без дополнительного shuffle"
+        },
+        {
+          "id": "c",
+          "text": "AQE автоматически объединит файлы при записи"
+        },
+        {
+          "id": "d",
+          "text": "Использовать maxRecordsPerFile для контроля размера"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "coalesce(10) перед write -- самый простой и эффективный способ. Объединяет 200 in-memory партиций в 10 через narrow dependency (без shuffle). Результат: 10 файлов по ~100 МБ. AQE coalesce работает для in-memory партиций, но не для output файлов. shuffle.partitions=10 влияет на все shuffle в pipeline, не только на запись.",
+      "studyHint": "Повторите урок 5: coalesce перед записью для контроля числа файлов",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q7",
+      "type": "multiple-choice",
+      "question": "Cold storage архив: данные читаются раз в месяц. Текущий codec: Snappy. Хранилище: 50 ТБ. Как уменьшить стоимость хранения?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Перейти на CSV для совместимости"
+        },
+        {
+          "id": "b",
+          "text": "Увеличить число executors для параллельного чтения"
+        },
+        {
+          "id": "c",
+          "text": "Перейти на Zstd codec: лучшая степень сжатия (~30-40% меньше, чем Snappy), немного медленнее декомпрессия, но для cold storage это приемлемо"
+        },
+        {
+          "id": "d",
+          "text": "Gzip -- максимальное сжатие"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Для cold storage (редкое чтение): Zstd оптимален. Zstd сжимает на 30-40% лучше Snappy (50 ТБ -> ~30-35 ТБ vs ~50 ТБ). Декомпрессия Zstd чуть медленнее, но для ежемесячного чтения разница незначительна. Gzip сжимает сильнее, но декомпрессия значительно медленнее и не поддерживает splittable -- не рекомендуется для Spark.",
+      "studyHint": "Повторите урок 1: Кодеки сжатия -- Snappy vs Zstd vs Gzip",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q8",
+      "type": "multiple-choice",
+      "question": "Bloom filter с FPR 1% для user_id (10M уникальных). Row group содержит 1M строк. Сколько памяти занимает bloom filter для одного row group?",
+      "options": [
+        {
+          "id": "a",
+          "text": "~10 КБ"
+        },
+        {
+          "id": "b",
+          "text": "Bloom filter не занимает дополнительного места"
+        },
+        {
+          "id": "c",
+          "text": "~100 МБ"
+        },
+        {
+          "id": "d",
+          "text": "~1.25 МБ (10 бит на элемент * 1M элементов = 10M бит ≈ 1.25 МБ для FPR ~1%)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Bloom filter для FPR 1%: ~10 бит на элемент (теоретический оптимум). Row group с 1M строк: 10 * 1M = 10M бит = 1.25 МБ. Это хранится в footer Parquet файла. Overhead: 1.25 МБ на 128 МБ row group = ~1%. Приемлемый компромисс: 1% дополнительного хранилища за ~99% data skipping для point lookups.",
+      "studyHint": "Повторите урок 3: Bloom filter sizing -- биты на элемент и FPR",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q9",
+      "type": "multiple-choice",
+      "question": "partitionBy('user_id') для таблицы с 10M пользователей. Какие проблемы возникнут?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Катастрофа: 10M директорий, каждая с крошечным файлом. NameNode перегружен, listing директории минуты, overhead планирования 10M tasks. Partition key должен иметь десятки-сотни уникальных значений (date, region)"
+        },
+        {
+          "id": "b",
+          "text": "Отличная производительность -- идеальный partition pruning"
+        },
+        {
+          "id": "c",
+          "text": "Проблемы только с HDFS, не с cloud storage"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически объединит маленькие директории"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "partitionBy с высокой кардинальностью = small file problem в экстремальной форме. 10M директорий: (1) NameNode: 10M * 150 байт = 1.5 ГБ только метаданных; (2) listing 10M записей -- минуты; (3) каждый файл < 1 КБ -- overhead > данных. Оптимальная кардинальность partition key: 10-1000 (date, region, status).",
+      "studyHint": "Повторите урок 5: High-cardinality partitionBy -- source of small file problem",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q10",
+      "type": "multiple-choice",
+      "question": "Kafka streaming -> Delta Lake. Avro в Kafka, Parquet на диске. Почему два разных формата?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Avro и Parquet несовместимы -- нужна конвертация"
+        },
+        {
+          "id": "b",
+          "text": "Avro оптимален для streaming (row-based запись, schema evolution, быстрый append). Parquet оптимален для аналитики (columnar, column pruning, predicate pushdown). Конвертация Avro->Parquet при записи в Delta Lake"
+        },
+        {
+          "id": "c",
+          "text": "Kafka не поддерживает Parquet"
+        },
+        {
+          "id": "d",
+          "text": "Это анти-паттерн -- нужно использовать один формат"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Avro в Kafka: (1) строковый -- быстрая запись по одной записи; (2) schema evolution -- Schema Registry обеспечивает совместимость; (3) компактный бинарный формат для streaming. Parquet на диске: (1) колоночный -- аналитические запросы в 10-100x быстрее; (2) сжатие 3-5x лучше. Spark Structured Streaming: read Avro -> transform -> write Parquet (Delta).",
+      "studyHint": "Повторите урок 1: Avro vs Parquet -- streaming vs analytics",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q11",
+      "type": "multiple-choice",
+      "question": "VACUUM RETAIN 0 HOURS выполняется на production таблице, по которой одновременно работает 4-часовой аналитический запрос. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Запрос продолжит работу без проблем"
+        },
+        {
+          "id": "b",
+          "text": "VACUUM автоматически подождёт завершения запроса"
+        },
+        {
+          "id": "c",
+          "text": "Запрос упадёт с FileNotFoundException: VACUUM удалит файлы версий, которые запрос использует для time travel. Delta Lake защищает от этого: retentionDurationCheck.enabled по умолчанию блокирует VACUUM < 168 часов"
+        },
+        {
+          "id": "d",
+          "text": "Запрос переключится на новые версии файлов"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "VACUUM RETAIN 0 HOURS немедленно удаляет все устаревшие файлы. Аналитический запрос, использующий snapshot из прошлых версий, потеряет файлы -> FileNotFoundException. Delta Lake защита: spark.databricks.delta.retentionDurationCheck.enabled=true блокирует retention < 7 дней. Правило: retention >= max active query duration.",
+      "studyHint": "Повторите урок 4: VACUUM retention -- safety vs storage tradeoff",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-exam-q12",
+      "type": "multiple-choice",
+      "question": "Z-ordered таблица по (date, city). Запрос 1: WHERE date='2024-01-15'. Запрос 2: WHERE city='Moscow'. Запрос 3: WHERE date='2024-01-15' AND city='Moscow'. Для какого запроса Z-ordering наиболее эффективен?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Запрос 1 -- date единственный фильтр"
+        },
+        {
+          "id": "b",
+          "text": "Все три одинаково эффективны"
+        },
+        {
+          "id": "c",
+          "text": "Запрос 2 -- city-only фильтр"
+        },
+        {
+          "id": "d",
+          "text": "Запрос 3 -- Z-ordering обеспечивает узкие min/max по ОБОИМ столбцам; комбинированный фильтр пропускает максимум row groups"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Z-ordering оптимизирует data skipping по ВСЕМ Z-ordered столбцам. Запрос 1 (date only): data skipping по date -- хорошо. Запрос 2 (city only): data skipping по city -- хорошо. Запрос 3 (date AND city): data skipping по обоим -- ОТЛИЧНО, пропускается максимум row groups. Z-ordering проявляется сильнее всего при комбинированных фильтрах.",
+      "studyHint": "Повторите урок 2: Z-ordering -- максимальный эффект при multi-column фильтрах",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

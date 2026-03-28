@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "08-monitoring-observability/03-metrics-prometheus",
+  "moduleId": "08-monitoring-observability",
+  "_meta": {
+    "idPrefix": "spark-m08-03",
+    "description": "Use IDs: m08-03-q1, m08-03-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m08-03-q1",
+      "type": "multiple-choice",
+      "question": "Почему Spark UI недостаточен для production мониторинга?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark UI слишком медленный"
+        },
+        {
+          "id": "b",
+          "text": "Spark UI показывает метрики по запросу (pull); production требует continuous monitoring: сбор каждые 15 секунд, хранение истории, алерты при аномалиях. Для этого нужен Prometheus"
+        },
+        {
+          "id": "c",
+          "text": "Spark UI не поддерживает SQL Tab"
+        },
+        {
+          "id": "d",
+          "text": "Spark UI работает только для standalone кластера"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Spark UI -- интерактивный инструмент: вы открываете страницу и видите текущее состояние. Для production нужно: (1) continuous collection каждые 15 сек; (2) retention: история за дни/недели; (3) alerting: автоматические уведомления при аномалиях (GC > 10%, executor down). Prometheus решает все три задачи.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-03-q2",
+      "type": "multiple-choice",
+      "question": "Как Spark экспортирует метрики для Prometheus?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark отправляет метрики напрямую в Prometheus"
+        },
+        {
+          "id": "b",
+          "text": "Через файл metrics.properties и JMX"
+        },
+        {
+          "id": "c",
+          "text": "PrometheusServlet: Spark открывает HTTP endpoint (порт 4040/metrics/prometheus), Prometheus периодически забирает (scrapes) метрики по pull-модели"
+        },
+        {
+          "id": "d",
+          "text": "Prometheus агент устанавливается на каждый executor"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Spark PrometheusServlet: HTTP endpoint на driver (4040/metrics/prometheus) и executors. Prometheus scrapes эти endpoint каждые N секунд (pull model). Конфигурация: metrics.properties с *.sink.prometheusServlet.class. Метрики включают: JVM (heap, GC), executor (tasks, shuffle), и application-level.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-03-q3",
+      "type": "multiple-choice",
+      "question": "Какие три категории метрик Spark экспортирует в Prometheus?",
+      "options": [
+        {
+          "id": "a",
+          "text": "CPU, Memory, Disk"
+        },
+        {
+          "id": "b",
+          "text": "Spark экспортирует только JVM метрики"
+        },
+        {
+          "id": "c",
+          "text": "Input, Output, Network"
+        },
+        {
+          "id": "d",
+          "text": "JVM metrics (heap, GC, threads), Executor metrics (tasks completed/failed, shuffle read/write), Application metrics (job duration, stage count)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Три категории: (1) JVM: heap used/committed, GC count/time, thread count -- для диагностики memory pressure; (2) Executor: active/completed/failed tasks, shuffle read/write bytes -- для производительности; (3) Application: job/stage count/duration -- для SLA мониторинга. Custom MetricSource добавляет бизнес-метрики.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-03-q4",
+      "type": "true-false",
+      "question": "Prometheus использует pull-модель: Prometheus сам забирает метрики с target endpoints по расписанию, а не target отправляет метрики в Prometheus.",
+      "correctAnswer": true,
+      "explanation": "Верно. Prometheus pull-модель: Prometheus server периодически (scrape_interval, обычно 15 секунд) HTTP GET на target endpoints. Преимущества pull: (1) Prometheus контролирует частоту; (2) targets не зависят от Prometheus availability; (3) service discovery автоматически находит targets. Push-модель (Pushgateway) используется только для short-lived jobs.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-03-q5",
+      "type": "multiple-choice",
+      "question": "Spark executor потерял heartbeat. Какие Prometheus метрики помогут диагностировать причину?",
+      "options": [
+        {
+          "id": "a",
+          "text": "jvm_gc_collection_seconds (GC паузы), jvm_memory_bytes_used/max (heap utilization), executor_runTime (task duration) -- помогут определить: OOM, GC storm, или frozen task"
+        },
+        {
+          "id": "b",
+          "text": "Только jvm_memory_bytes_used"
+        },
+        {
+          "id": "c",
+          "text": "spark_app_name"
+        },
+        {
+          "id": "d",
+          "text": "Prometheus не может диагностировать executor failures"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Для диагностики lost heartbeat: (1) jvm_gc_collection_seconds > N перед потерей -> GC storm (memory pressure). (2) jvm_memory_bytes_used/max приближается к 1.0 -> OOM imminent. (3) executor_runTime для одного task >> median -> straggler/skew. Combination: high GC + high heap = memory pressure, нужно увеличить memory или уменьшить data per task.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m08-03-code-1",
+      "type": "code-challenge",
+      "question": "Создайте DataFrame метрик Prometheus-формата (metric_name, timestamp, value). Используя window-функцию lag(), рассчитайте rate (скорость изменения) между последовательными измерениями. Пометьте аномалии: строки где rate превышает порог 100 единиц/секунду.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession, Window\nfrom pyspark.sql.functions import col, lag, when, lit, abs as _abs\n\nspark = SparkSession.builder.appName(\"prometheus_rate\").getOrCreate()\n\n# Метрики в Prometheus-формате: jvm_heap_used_bytes\nmetrics = spark.createDataFrame([\n    (\"jvm_heap_used\", 1000, 500),\n    (\"jvm_heap_used\", 1001, 520),\n    (\"jvm_heap_used\", 1002, 580),\n    (\"jvm_heap_used\", 1003, 590),\n    (\"jvm_heap_used\", 1004, 750),   # скачок +160\n    (\"jvm_heap_used\", 1005, 760),\n    (\"jvm_heap_used\", 1006, 600),   # падение -160 (GC?)\n    (\"jvm_heap_used\", 1007, 610),\n], [\"metric_name\", \"timestamp\", \"value\"])\n\n# TODO: Определите window по metric_name, отсортированный по timestamp\n# w = Window.partitionBy(\"metric_name\").orderBy(\"timestamp\")\n\n# TODO: Рассчитайте prev_value через lag и rate = value - prev_value\n# with_rate = metrics.withColumn(\"prev_value\", lag(\"value\").over(w)) \\\n#     .withColumn(\"rate\", col(\"value\") - col(\"prev_value\"))\n\n# TODO: Пометьте аномалии где |rate| > 100\n# result = with_rate.withColumn(\"is_anomaly\",\n#     when(_abs(col(\"rate\")) > 100, lit(\"ANOMALY\")).otherwise(lit(\"normal\"))\n# )\n\n# result.show()\n\n# TODO: Покажите только аномалии\n# result.filter(col(\"is_anomaly\") == \"ANOMALY\").show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession, Window\nfrom pyspark.sql.functions import col, lag, when, lit, abs as _abs\n\nspark = SparkSession.builder.appName(\"prometheus_rate\").getOrCreate()\n\nmetrics = spark.createDataFrame([\n    (\"jvm_heap_used\", 1000, 500),\n    (\"jvm_heap_used\", 1001, 520),\n    (\"jvm_heap_used\", 1002, 580),\n    (\"jvm_heap_used\", 1003, 590),\n    (\"jvm_heap_used\", 1004, 750),\n    (\"jvm_heap_used\", 1005, 760),\n    (\"jvm_heap_used\", 1006, 600),\n    (\"jvm_heap_used\", 1007, 610),\n], [\"metric_name\", \"timestamp\", \"value\"])\n\nw = Window.partitionBy(\"metric_name\").orderBy(\"timestamp\")\n\nwith_rate = metrics.withColumn(\"prev_value\", lag(\"value\").over(w))     .withColumn(\"rate\", col(\"value\") - col(\"prev_value\"))\n\nresult = with_rate.withColumn(\"is_anomaly\",\n    when(_abs(col(\"rate\")) > 100, lit(\"ANOMALY\")).otherwise(lit(\"normal\"))\n)\n\nresult.show()\n\nresult.filter(col(\"is_anomaly\") == \"ANOMALY\").show()\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Timestamp 1004 — аномалия (скачок +160)",
+          "input": "",
+          "expectedOutput": "ANOMALY",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит is_anomaly и rate",
+          "input": "",
+          "expectedOutput": "is_anomaly",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Timestamp 1006 — аномалия (падение -160)",
+          "input": "",
+          "expectedOutput": "-160",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Prometheus rate() вычисляет скорость изменения counter/gauge метрик за период. Мы воспроизводим это через lag() window-функцию: rate = current - previous. Порог аномалии (>100) — это alert rule в Prometheus/AlertManager. В production Spark экспортирует JVM и executor метрики в Prometheus формате через /metrics/prometheus endpoint, а AlertManager генерирует оповещения при отклонениях. Паттерн lag() + when() — универсальный для анализа time-series данных.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

@@ -1,0 +1,165 @@
+{
+  "lessonSlug": "14-advanced-topics/01-spark-connect",
+  "moduleId": "14-advanced-topics",
+  "_meta": {
+    "idPrefix": "spark-m14-01",
+    "description": "Use IDs: m14-01-q1, m14-01-q2, ... (5 questions on Spark Connect client-server architecture, gRPC, pyspark-client)"
+  },
+  "questions": [
+    {
+      "id": "spark-m14-01-q1",
+      "type": "multiple-choice",
+      "question": "Какую проблему решает Spark Connect по сравнению с традиционным режимом PySpark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Ускоряет выполнение SQL-запросов в 10 раз за счёт нового optimizer"
+        },
+        {
+          "id": "b",
+          "text": "Заменяет Catalyst optimizer на более эффективную реализацию"
+        },
+        {
+          "id": "c",
+          "text": "Выносит driver из клиента на сервер, устраняя tight coupling: crash клиента не убивает job, клиент не требует JVM, версии клиента и сервера независимы"
+        },
+        {
+          "id": "d",
+          "text": "Добавляет поддержку GPU-ускорения для DataFrame операций"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "В традиционном режиме driver (JVM) работает на клиентской машине, потребляя ~300MB и создавая tight coupling: crash клиента = потеря job, версии должны совпадать. Spark Connect выносит driver на сервер -- клиент отправляет только описание плана через gRPC, а сервер выполняет всё остальное. Это обеспечивает crash isolation, version independence и multi-tenancy.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Spark Connect -- проблема традиционного режима и клиент-серверная декомпозиция"
+    },
+    {
+      "id": "spark-m14-01-q2",
+      "type": "multiple-choice",
+      "question": "Какой протокол используется для обмена между клиентом и Spark Connect сервером, и в каком формате возвращаются данные?",
+      "options": [
+        {
+          "id": "a",
+          "text": "REST API + JSON -- стандартный подход для клиент-серверных систем"
+        },
+        {
+          "id": "b",
+          "text": "JDBC + Parquet для SQL-запросов и результатов"
+        },
+        {
+          "id": "c",
+          "text": "WebSocket + Avro для двунаправленного обмена"
+        },
+        {
+          "id": "d",
+          "text": "gRPC + Protocol Buffers для отправки планов, Apache Arrow для возврата данных"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Клиент отправляет запросы через gRPC с Protocol Buffers -- бинарную сериализацию, оптимальную для передачи Logical Plan. Результаты возвращаются в формате Apache Arrow RecordBatch -- columnar формат с zero-copy десериализацией. Комбинация gRPC (control plane) + Arrow (data plane) обеспечивает минимальный overhead.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Spark Connect -- gRPC, Protocol Buffers и Apache Arrow"
+    },
+    {
+      "id": "spark-m14-01-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer устанавливает pip install pyspark[connect] вместо pip install pyspark. Что он получает и чего лишается?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Получает лёгкий gRPC-клиент (~5MB, без JVM). Лишается возможности запускать driver локально и использовать low-level RDD API"
+        },
+        {
+          "id": "b",
+          "text": "Получает полный PySpark с дополнительным Connect-модулем"
+        },
+        {
+          "id": "c",
+          "text": "Получает только SQL-интерфейс без DataFrame API"
+        },
+        {
+          "id": "d",
+          "text": "Получает Docker-контейнер со Spark, который запускается автоматически"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "pyspark[connect] содержит только gRPC-клиент, DataFrame API (трансляция в proto-сообщения) и Arrow-десериализацию -- ~5MB, не требует JAVA_HOME или SPARK_HOME. Лишается: локального driver, RDD API. Все DataFrame/SQL/MLlib операции доступны через Connect, но low-level RDD API -- нет (он и не рекомендуется для новых проектов).",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 1: Spark Connect -- pyspark[connect] и лёгкий клиент"
+    },
+    {
+      "id": "spark-m14-01-q4",
+      "type": "true-false",
+      "question": "В Spark Connect каждый клиент получает изолированную SparkSession на сервере, поэтому crash одного клиента не влияет на работу других клиентов.",
+      "correctAnswer": true,
+      "explanation": "True. Spark Connect server создаёт изолированную SparkSession для каждого клиента. Server управляет lifecycle сессий: timeout, cleanup, resource limits. Один клиент не может уронить другого -- сервер изолирует fault domains. Это ключевое преимущество для multi-tenancy.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Spark Connect -- resource isolation и multi-tenancy"
+    },
+    {
+      "id": "spark-m14-01-q5",
+      "type": "multiple-choice",
+      "question": "Компания поддерживает 50 аналитиков, каждый из которых запускает PySpark-скрипты. В традиционном режиме каждый аналитик запускает свой JVM-driver. Какое архитектурное преимущество даёт Spark Connect в этом сценарии?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Каждый аналитик получит выделенный кластер"
+        },
+        {
+          "id": "b",
+          "text": "50 аналитиков подключаются к одному серверу через лёгкие gRPC-клиенты. Server изолирует сессии, управляет ресурсами. Клиентские машины не нуждаются в JVM и full PySpark"
+        },
+        {
+          "id": "c",
+          "text": "Spark Connect автоматически масштабирует кластер под 50 пользователей"
+        },
+        {
+          "id": "d",
+          "text": "Аналитики переходят на Spark SQL и не используют PySpark"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Без Spark Connect: 50 JVM-driver процессов на клиентских машинах, каждый ~300MB, tight coupling с кластером. С Spark Connect: 50 лёгких gRPC-клиентов (~5MB каждый) подключаются к одному серверу. Сервер изолирует SparkSession каждого клиента, управляет ресурсами и lifecycle. Это классический multi-tenancy сценарий.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 1: Spark Connect -- multi-tenancy и resource isolation для 50+ пользователей"
+    },
+    {
+      "id": "spark-m14-01-code-1",
+      "type": "code-challenge",
+      "question": "Проанализируйте лог клиентских сессий Spark Connect. Вычислите: среднюю длительность и количество запросов по типу клиента, найдите аномальные сессии (queries > 100), определите error rate по типу клиента.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, avg, count, sum as _sum, when, lit, round as spark_round, desc\n\nspark = SparkSession.builder.appName(\"spark_connect_analysis\").getOrCreate()\n\nsessions = spark.createDataFrame([\n    (\"s1\", \"python\", 120, 15, \"success\"),\n    (\"s2\", \"scala\", 300, 45, \"success\"),\n    (\"s3\", \"python\", 60, 8, \"error\"),\n    (\"s4\", \"python\", 180, 22, \"success\"),\n    (\"s5\", \"scala\", 240, 150, \"success\"),\n    (\"s6\", \"r\", 90, 5, \"error\"),\n    (\"s7\", \"python\", 150, 200, \"success\"),\n    (\"s8\", \"scala\", 200, 30, \"success\"),\n    (\"s9\", \"r\", 45, 3, \"success\"),\n    (\"s10\", \"python\", 100, 12, \"error\"),\n], [\"session_id\", \"client_type\", \"duration_sec\", \"queries_count\", \"status\"])\n\n# TODO: Агрегаты по client_type: avg_duration, avg_queries, total_sessions\n# TODO: Покажите таблицу\n# TODO: Аномальные сессии (queries > 100): print(f\"Anomalous sessions: {count}\")\n# TODO: Error rate по client_type\n# TODO: print(f\"Overall error rate: {rate}%\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, avg, count, sum as _sum, when, lit, round as spark_round, desc\n\nspark = SparkSession.builder.appName(\"spark_connect_analysis\").getOrCreate()\n\nsessions = spark.createDataFrame([\n    (\"s1\", \"python\", 120, 15, \"success\"),\n    (\"s2\", \"scala\", 300, 45, \"success\"),\n    (\"s3\", \"python\", 60, 8, \"error\"),\n    (\"s4\", \"python\", 180, 22, \"success\"),\n    (\"s5\", \"scala\", 240, 150, \"success\"),\n    (\"s6\", \"r\", 90, 5, \"error\"),\n    (\"s7\", \"python\", 150, 200, \"success\"),\n    (\"s8\", \"scala\", 200, 30, \"success\"),\n    (\"s9\", \"r\", 45, 3, \"success\"),\n    (\"s10\", \"python\", 100, 12, \"error\"),\n], [\"session_id\", \"client_type\", \"duration_sec\", \"queries_count\", \"status\"])\n\nagg_df = sessions.groupBy(\"client_type\").agg(\n    spark_round(avg(\"duration_sec\"), 1).alias(\"avg_duration\"),\n    spark_round(avg(\"queries_count\"), 1).alias(\"avg_queries\"),\n    count(\"session_id\").alias(\"total_sessions\")\n)\nagg_df.orderBy(desc(\"total_sessions\")).show()\n\nanom_count = sessions.filter(col(\"queries_count\") > 100).count()\nprint(f\"Anomalous sessions: {anom_count}\")\n\nerror_rates = sessions.groupBy(\"client_type\").agg(\n    count(\"session_id\").alias(\"total\"),\n    _sum(when(col(\"status\") == \"error\", lit(1)).otherwise(lit(0))).alias(\"errors\")\n)\nerror_rates = error_rates.withColumn(\"error_rate\", spark_round(col(\"errors\") / col(\"total\") * 100, 1))\nerror_rates.select(\"client_type\", \"error_rate\").show()\n\ntotal_errors = sessions.filter(col(\"status\") == \"error\").count()\noverall_rate = round(total_errors / sessions.count() * 100, 1)\nprint(f\"Overall error rate: {overall_rate}%\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Аномальные сессии",
+          "input": "",
+          "expectedOutput": "Anomalous sessions:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Общий error rate",
+          "input": "",
+          "expectedOutput": "Overall error rate:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит avg_duration",
+          "input": "",
+          "expectedOutput": "avg_duration",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Spark Connect (с версии 3.4) позволяет подключаться к Spark из любого клиента через gRPC. Анализ логов сессий выявляет паттерны: какие клиенты генерируют больше нагрузки, какие сессии аномальны (>100 запросов — возможно, плохо оптимизированный код), и где чаще ошибки. Error rate по типу клиента помогает приоритизировать улучшения SDK.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

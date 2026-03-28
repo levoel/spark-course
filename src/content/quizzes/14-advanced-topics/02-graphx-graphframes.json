@@ -1,0 +1,156 @@
+{
+  "lessonSlug": "14-advanced-topics/02-graphx-graphframes",
+  "moduleId": "14-advanced-topics",
+  "_meta": {
+    "idPrefix": "spark-m14-02",
+    "description": "Use IDs: m14-02-q1, m14-02-q2, ... (4 questions on graph primitives, PageRank, GraphFrames vs GraphX, motif finding)"
+  },
+  "questions": [
+    {
+      "id": "spark-m14-02-q1",
+      "type": "multiple-choice",
+      "question": "Какие основные абстракции использует GraphX для представления графа?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Node, Relationship, Property -- как в Neo4j"
+        },
+        {
+          "id": "b",
+          "text": "DataFrame с колонками source, target, weight"
+        },
+        {
+          "id": "c",
+          "text": "VertexRDD (вершины с атрибутами), EdgeRDD (рёбра с атрибутами), Graph[VD, ED] (immutable distributed граф) и EdgeTriplet (src + edge + dst для traversal)"
+        },
+        {
+          "id": "d",
+          "text": "Adjacency matrix в виде sparse RDD"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "GraphX использует типизированные RDD: VertexRDD[VD] хранит вершины как (VertexId: Long, attribute: VD), EdgeRDD[ED] хранит рёбра как Edge(srcId, dstId, attr: ED). Graph[VD, ED] -- immutable distributed граф, объединяющий оба RDD. EdgeTriplet содержит src + edge + dst для traversal и join операций.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: GraphX -- core abstractions (VertexRDD, EdgeRDD, Graph, EdgeTriplet)"
+    },
+    {
+      "id": "spark-m14-02-q2",
+      "type": "multiple-choice",
+      "question": "PageRank определил, что Carol имеет наивысший ранг в социальной сети из 5 пользователей. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Carol имеет больше всего исходящих рёбер -- она активнее всех"
+        },
+        {
+          "id": "b",
+          "text": "Carol единственная женщина с высоким атрибутом age"
+        },
+        {
+          "id": "c",
+          "text": "Carol создана первой в RDD -- порядок определяет ранг"
+        },
+        {
+          "id": "d",
+          "text": "Carol получает 3 входящих ребра от разных вершин (Bob, Alice через цикл, Eve). PageRank определяет влиятельность по количеству и качеству входящих рёбер"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "PageRank -- итеративный алгоритм, определяющий влиятельность вершины по количеству и качеству входящих рёбер. Carol получает наивысший ранг (0.3856), потому что на неё ссылаются 3 вершины: Bob напрямую, Alice через цикл (Carol->Alice->Bob->Carol), и Eve (Dave->Eve->Carol). Исходящие рёбра не увеличивают собственный ранг.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: GraphX -- PageRank и определение влиятельности через входящие рёбра"
+    },
+    {
+      "id": "spark-m14-02-q3",
+      "type": "multiple-choice",
+      "question": "В чём ключевые преимущества GraphFrames перед GraphX?",
+      "options": [
+        {
+          "id": "a",
+          "text": "GraphFrames работает с DataFrame API (Catalyst optimization), поддерживает Python/Scala/Java (не только Scala), имеет motif finding для декларативного поиска паттернов"
+        },
+        {
+          "id": "b",
+          "text": "GraphFrames быстрее в 10 раз благодаря GPU-ускорению"
+        },
+        {
+          "id": "c",
+          "text": "GraphFrames поддерживает миллиарды рёбер, а GraphX -- только миллионы"
+        },
+        {
+          "id": "d",
+          "text": "GraphFrames часть ядра Spark, а GraphX -- внешний пакет"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "GraphFrames использует DataFrame API (получая Catalyst optimization), работает с Python, Scala, Java (GraphX -- только Scala), и поддерживает motif finding -- декларативный поиск структурных паттернов в графе. GraphX находится в maintenance mode, GraphFrames активно развивается. Однако GraphFrames -- отдельный пакет, а GraphX -- часть ядра Spark (наоборот).",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: GraphFrames -- сравнение с GraphX (DataFrame API, multi-language, motif finding)"
+    },
+    {
+      "id": "spark-m14-02-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет найти все цепочки A->B->C->A (треугольники) в графе социальной сети. Какой инструмент подходит лучше всего?",
+      "options": [
+        {
+          "id": "a",
+          "text": "GraphX graph.triangleCount() -- возвращает количество треугольников для каждой вершины"
+        },
+        {
+          "id": "b",
+          "text": "GraphFrames motif finding: g.find(\"(a)-[]->(b); (b)-[]->(c); (c)-[]->(a)\") -- декларативный поиск паттерна с возвратом конкретных вершин и рёбер"
+        },
+        {
+          "id": "c",
+          "text": "Spark SQL с self-join таблицы рёбер"
+        },
+        {
+          "id": "d",
+          "text": "GraphX connectedComponents() -- найдёт все связные компоненты"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "GraphX triangleCount() возвращает только количество треугольников для вершины, но не сами тройки вершин. GraphFrames motif finding позволяет декларативно описать паттерн «(a)-[]->(b); (b)-[]->(c); (c)-[]->(a)» и получить конкретные вершины и рёбра, удовлетворяющие паттерну. Motif-выражения транслируются в оптимизированные DataFrame join через Catalyst.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 2: GraphFrames -- motif finding для поиска структурных паттернов"
+    },
+    {
+      "id": "spark-m14-02-code-1",
+      "type": "code-challenge",
+      "question": "Смоделируйте граф социальной сети как vertices и edges DataFrames. Вычислите in-degree и out-degree для каждой вершины, найдите наиболее связанную вершину и изолированные вершины (без связей).",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, coalesce, lit, desc\n\nspark = SparkSession.builder.appName(\"graph_analysis\").getOrCreate()\n\nvertices = spark.createDataFrame([\n    (1, \"Alice\", \"Moscow\"), (2, \"Bob\", \"SPb\"),\n    (3, \"Charlie\", \"Moscow\"), (4, \"Diana\", \"Kazan\"),\n    (5, \"Eve\", \"SPb\"), (6, \"Frank\", \"Novosibirsk\"),\n], [\"id\", \"name\", \"city\"])\n\nedges = spark.createDataFrame([\n    (1, 2, \"friend\"), (1, 3, \"friend\"),\n    (2, 3, \"colleague\"), (2, 4, \"friend\"),\n    (3, 1, \"friend\"), (4, 5, \"colleague\"),\n    (5, 2, \"friend\"),\n], [\"src\", \"dst\", \"relationship\"])\n\n# TODO: out_degree для каждой вершины\n# TODO: in_degree для каждой вершины\n# TODO: Join vertices с degree, null -> 0, добавьте total_connections\n# TODO: Покажите таблицу по total_connections desc\n# TODO: print(f\"Most connected: {name}\")\n# TODO: print(f\"Isolated: {список}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, coalesce, lit, desc\n\nspark = SparkSession.builder.appName(\"graph_analysis\").getOrCreate()\n\nvertices = spark.createDataFrame([\n    (1, \"Alice\", \"Moscow\"), (2, \"Bob\", \"SPb\"),\n    (3, \"Charlie\", \"Moscow\"), (4, \"Diana\", \"Kazan\"),\n    (5, \"Eve\", \"SPb\"), (6, \"Frank\", \"Novosibirsk\"),\n], [\"id\", \"name\", \"city\"])\n\nedges = spark.createDataFrame([\n    (1, 2, \"friend\"), (1, 3, \"friend\"),\n    (2, 3, \"colleague\"), (2, 4, \"friend\"),\n    (3, 1, \"friend\"), (4, 5, \"colleague\"),\n    (5, 2, \"friend\"),\n], [\"src\", \"dst\", \"relationship\"])\n\nout_deg = edges.groupBy(\"src\").agg(count(\"dst\").alias(\"out_degree\"))\nin_deg = edges.groupBy(\"dst\").agg(count(\"src\").alias(\"in_degree\"))\n\nresult = vertices.join(out_deg, vertices[\"id\"] == out_deg[\"src\"], \"left\") \\\n    .join(in_deg, vertices[\"id\"] == in_deg[\"dst\"], \"left\") \\\n    .select(\"id\", \"name\", \"city\",\n            coalesce(col(\"out_degree\"), lit(0)).alias(\"out_degree\"),\n            coalesce(col(\"in_degree\"), lit(0)).alias(\"in_degree\"))\nresult = result.withColumn(\"total_connections\", col(\"in_degree\") + col(\"out_degree\"))\n\nresult.orderBy(desc(\"total_connections\")).show()\n\nmost = result.orderBy(desc(\"total_connections\")).select(\"name\").collect()[0][0]\nprint(f\"Most connected: {most}\")\n\nisolated = result.filter(col(\"total_connections\") == 0).select(\"name\").collect()\nprint(f\"Isolated: {[r[0] for r in isolated]}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Самая связанная вершина",
+          "input": "",
+          "expectedOutput": "Most connected:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Изолированные вершины",
+          "input": "",
+          "expectedOutput": "Isolated:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит total_connections",
+          "input": "",
+          "expectedOutput": "total_connections",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "GraphX и GraphFrames моделируют графы через два DataFrame: vertices и edges. In-degree и out-degree вычисляются через groupBy на рёбрах. Left join гарантирует, что изолированные вершины (Frank) не теряются. Total_connections выявляет хабы (наиболее влиятельные узлы).",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

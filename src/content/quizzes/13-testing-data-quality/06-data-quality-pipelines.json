@@ -1,0 +1,156 @@
+{
+  "lessonSlug": "13-testing-data-quality/06-data-quality-pipelines",
+  "moduleId": "13-testing-data-quality",
+  "_meta": {
+    "idPrefix": "spark-m13-06",
+    "description": "Use IDs: m13-06-q1, m13-06-q2, ... (4 questions on validate-on-write, quarantine, multi-layer)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-06-q1",
+      "type": "multiple-choice",
+      "question": "В чём разница между validate-on-read и validate-on-write подходами к качеству данных?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет разницы -- оба подхода одинаковы"
+        },
+        {
+          "id": "b",
+          "text": "Validate-on-write проверяет данные ПЕРЕД записью (плохие данные не попадают в target). Validate-on-read проверяет при чтении (плохие данные уже в target). Рекомендация: validate-on-write как основной"
+        },
+        {
+          "id": "c",
+          "text": "Validate-on-read быстрее и надёжнее"
+        },
+        {
+          "id": "d",
+          "text": "Validate-on-write только для batch, validate-on-read только для streaming"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Validate-on-write: проверка ПЕРЕД записью -- плохие данные не попадают в target, но задерживает pipeline при ошибке. Validate-on-read: проверка при чтении -- не блокирует запись, но плохие данные уже в target. Рекомендация: validate-on-write как основной подход, validate-on-read как дополнительный для legacy данных.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 6: Pipeline качества данных -- validate-on-write vs validate-on-read"
+    },
+    {
+      "id": "spark-m13-06-q2",
+      "type": "multiple-choice",
+      "question": "Что такое quarantine pattern в data quality pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Удаление плохих данных без сохранения"
+        },
+        {
+          "id": "b",
+          "text": "Блокировка всего pipeline при обнаружении ошибки"
+        },
+        {
+          "id": "c",
+          "text": "Перенос строк, не прошедших валидацию, в отдельную quarantine-таблицу для ручного review, вместо отбрасывания. Хорошие данные записываются в target"
+        },
+        {
+          "id": "d",
+          "text": "Повторная обработка данных до прохождения валидации"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Quarantine pattern: при validate-on-write строки, не прошедшие валидацию, не отбрасываются и не блокируют pipeline. Они переносятся в quarantine-таблицу для ручного review и исправления. Хорошие данные записываются в target. Это предотвращает потерю данных и позволяет расследовать причины ошибок.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Pipeline качества данных -- quarantine pattern"
+    },
+    {
+      "id": "spark-m13-06-q3",
+      "type": "multiple-choice",
+      "question": "В lakehouse multi-layer валидации, какие проверки выполняются на bronze слое?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Бизнес-правила и cross-table consistency"
+        },
+        {
+          "id": "b",
+          "text": "Никаких проверок -- bronze принимает всё"
+        },
+        {
+          "id": "c",
+          "text": "Те же проверки, что и на gold слое"
+        },
+        {
+          "id": "d",
+          "text": "Schema validation (типы, имена колонок), row count > 0, primary key NOT NULL, timestamp в разумном диапазоне -- минимальные проверки для raw ingestion"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Bronze -- raw ingestion layer. Проверки минимальны: (1) schema validation -- типы и имена колонок соответствуют ожиданиям; (2) row count > 0 -- данные вообще пришли; (3) primary key NOT NULL; (4) timestamp в разумном диапазоне. Silver добавляет бизнес-правила, gold -- cross-table consistency и агрегации.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Pipeline качества данных -- multi-layer валидация bronze/silver/gold"
+    },
+    {
+      "id": "spark-m13-06-q4",
+      "type": "multiple-choice",
+      "question": "Pipeline обрабатывает заказы. Валидация на silver слое обнаружила, что 15% строк имеют amount = NULL. Что должен сделать pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Хорошие строки (85%) записать в silver target, строки с amount=NULL отправить в quarantine, отправить alert команде для расследования"
+        },
+        {
+          "id": "b",
+          "text": "Остановиться полностью -- ни одна строка не будет записана"
+        },
+        {
+          "id": "c",
+          "text": "Записать все данные в gold -- NULL допустим"
+        },
+        {
+          "id": "d",
+          "text": "Заполнить NULL средним значением и продолжить"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Quarantine pattern: хорошие данные (85%) записываются в target для downstream-потребителей. Плохие (15% с NULL amount) -- в quarantine-таблицу. Alert отправляется команде для расследования причины (источник отправляет NULL? ETL ошибка?). Автозаполнение средним опасно -- маскирует проблему и может исказить аналитику.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 6: Pipeline качества данных -- quarantine + alerting при массовых ошибках"
+    },
+    {
+      "id": "spark-m13-06-code-1",
+      "type": "code-challenge",
+      "question": "Постройте DQ-scoring pipeline. Для каждой строки вычислите: completeness (non-null полей), accuracy (значения в допустимых диапазонах), итоговый dq_score. Строки с dq_score < 0.7 помечаются как quarantine.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit, round as spark_round\n\nspark = SparkSession.builder.appName(\"dq_pipeline\").getOrCreate()\n\nrecords = spark.createDataFrame([\n    (1, \"ProductA\", 29.99, 100, \"electronics\"),\n    (2, \"ProductB\", -5.00, 50, \"clothing\"),\n    (3, None, 149.99, None, \"electronics\"),\n    (4, \"ProductD\", 0.00, 200, \"furniture\"),\n    (5, \"ProductE\", 89.50, 75, \"electronics\"),\n    (6, \"ProductF\", 999.99, 10, None),\n    (7, \"ProductG\", 45.00, -20, \"clothing\"),\n    (8, \"ProductH\", 199.99, 150, \"electronics\"),\n], [\"id\", \"name\", \"price\", \"quantity\", \"category\"])\n\n# TODO: name_complete = 1 если не null, иначе 0\n# TODO: price_valid = 1 если price > 0, иначе 0\n# TODO: qty_valid = 1 если quantity не null И >= 0, иначе 0\n# TODO: cat_complete = 1 если не null, иначе 0\n# TODO: dq_score = (name_complete + price_valid + qty_valid + cat_complete) / 4.0\n# TODO: status = quarantine если dq_score < 0.7, иначе passed\n# TODO: Покажите (id, name, dq_score, status)\n# TODO: print(f\"Quarantined: {count} of {total}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit, round as spark_round\n\nspark = SparkSession.builder.appName(\"dq_pipeline\").getOrCreate()\n\nrecords = spark.createDataFrame([\n    (1, \"ProductA\", 29.99, 100, \"electronics\"),\n    (2, \"ProductB\", -5.00, 50, \"clothing\"),\n    (3, None, 149.99, None, \"electronics\"),\n    (4, \"ProductD\", 0.00, 200, \"furniture\"),\n    (5, \"ProductE\", 89.50, 75, \"electronics\"),\n    (6, \"ProductF\", 999.99, 10, None),\n    (7, \"ProductG\", 45.00, -20, \"clothing\"),\n    (8, \"ProductH\", 199.99, 150, \"electronics\"),\n], [\"id\", \"name\", \"price\", \"quantity\", \"category\"])\n\nresult = records.withColumn(\"name_complete\", when(col(\"name\").isNotNull(), lit(1)).otherwise(lit(0)))\nresult = result.withColumn(\"price_valid\", when(col(\"price\") > 0, lit(1)).otherwise(lit(0)))\nresult = result.withColumn(\"qty_valid\", when(col(\"quantity\").isNotNull() & (col(\"quantity\") >= 0), lit(1)).otherwise(lit(0)))\nresult = result.withColumn(\"cat_complete\", when(col(\"category\").isNotNull(), lit(1)).otherwise(lit(0)))\nresult = result.withColumn(\"dq_score\", spark_round((col(\"name_complete\") + col(\"price_valid\") + col(\"qty_valid\") + col(\"cat_complete\")) / lit(4.0), 2))\nresult = result.withColumn(\"status\", when(col(\"dq_score\") < 0.7, lit(\"quarantine\")).otherwise(lit(\"passed\")))\n\nresult.select(\"id\", \"name\", \"dq_score\", \"status\").show()\n\nq_count = result.filter(col(\"status\") == \"quarantine\").count()\ntotal = result.count()\nprint(f\"Quarantined: {q_count} of {total}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Подсчёт карантина",
+          "input": "",
+          "expectedOutput": "Quarantined:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит quarantine",
+          "input": "",
+          "expectedOutput": "quarantine",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит dq_score",
+          "input": "",
+          "expectedOutput": "dq_score",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "DQ scoring pipeline — ключевой паттерн: каждая строка получает числовую оценку качества на основе метрик (completeness, accuracy, validity). Строки ниже порога автоматически попадают в quarantine. В данных: null name (id=3), отрицательная цена (id=2), нулевая цена (id=4), null quantity (id=3), null category (id=6), отрицательное quantity (id=7).",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

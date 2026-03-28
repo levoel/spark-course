@@ -1,0 +1,126 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/05-window-functions",
+  "moduleId": "03-dataframes-spark-sql",
+  "_meta": {
+    "idPrefix": "spark-m03-05",
+    "description": "Use IDs: m03-05-q1, m03-05-q2, ... for MC/TF; m03-05-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-05-q1",
+      "type": "multiple-choice",
+      "question": "В чём ключевое отличие window-функций от groupBy + agg?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Window-функции быстрее, потому что не вызывают shuffle"
+        },
+        {
+          "id": "b",
+          "text": "Window-функции не требуют partitionBy, в отличие от groupBy"
+        },
+        {
+          "id": "c",
+          "text": "Window-функции вычисляют значение по окну строк, сохраняя каждую исходную строку в результате; groupBy + agg схлопывает строки до одной на группу"
+        },
+        {
+          "id": "d",
+          "text": "groupBy + agg поддерживает только числовые колонки, window -- любые"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "groupBy().agg() агрегирует строки: результат содержит одну строку на группу. Window-функции вычисляют значение для каждой строки относительно её окна (группы строк), но количество строк в результате равно количеству строк на входе. Это позволяет, например, добавить ранг или накопительную сумму к каждой строке без потери детализации.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-05-q2",
+      "type": "multiple-choice",
+      "question": "Три сотрудника Sales имеют зарплаты: Alice 80000, Bob 80000, Carol 70000. Какие значения вернут row_number(), rank() и dense_rank() для Bob (второй при ties)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "row_number=2, rank=2, dense_rank=2"
+        },
+        {
+          "id": "b",
+          "text": "row_number=2, rank=2, dense_rank=2"
+        },
+        {
+          "id": "c",
+          "text": "row_number=1, rank=1, dense_rank=1"
+        },
+        {
+          "id": "d",
+          "text": "row_number=2, rank=1, dense_rank=1"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Alice и Bob имеют одинаковую зарплату 80000. row_number() всегда возвращает уникальный номер -- Alice=1, Bob=2 (порядок при ties не определён). rank() присваивает одинаковый ранг при ties: Alice=1, Bob=1, Carol=3 (пропускает 2). dense_rank() тоже одинаковый ранг при ties, но без пропусков: Alice=1, Bob=1, Carol=2. Итого для Bob: row_number=2, rank=1, dense_rank=1.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-05-q3",
+      "type": "multiple-choice",
+      "question": "Почему Window.orderBy('salary') без partitionBy() опасен на большом DataFrame?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Без partitionBy весь DataFrame обрабатывается как одна партиция: все данные перемещаются на один executor, что убивает параллелизм и может вызвать OOM"
+        },
+        {
+          "id": "b",
+          "text": "orderBy без partitionBy вызывает ошибку компиляции"
+        },
+        {
+          "id": "c",
+          "text": "Window-функция без partitionBy возвращает NULL для всех строк"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически добавляет partitionBy по первой колонке"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Без partitionBy() Spark рассматривает весь DataFrame как одну гигантскую партицию. Все данные перемещаются на один executor для выполнения window-функции. Для таблицы с миллиардами строк это: (1) OOM -- все данные в памяти одного executor; (2) нулевой параллелизм -- одна задача вместо сотен. Всегда указывайте partitionBy() для ограничения размера окна.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-05-code-1",
+      "type": "code-challenge",
+      "question": "Добавьте колонку row_num с порядковым номером сотрудника внутри каждого отдела, упорядоченным по зарплате по убыванию. Используйте Window.partitionBy и row_number().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession, Window\nfrom pyspark.sql.functions import row_number, col\n\nspark = SparkSession.builder.appName(\"window-demo\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (\"Alice\", \"Engineering\", 80000),\n    (\"Bob\", \"Engineering\", 70000),\n    (\"Carol\", \"Marketing\", 65000),\n    (\"Dave\", \"Marketing\", 60000),\n], [\"name\", \"department\", \"salary\"])\n\n# TODO: Определите window spec: partitionBy department, orderBy salary desc\n# window_spec = Window.partitionBy(...).orderBy(...)\n\n# TODO: Добавьте колонку row_num через row_number().over(window_spec)\n# result = employees.withColumn(...)\n\n# TODO: Вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession, Window\nfrom pyspark.sql.functions import row_number, col\n\nspark = SparkSession.builder.appName(\"window-demo\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (\"Alice\", \"Engineering\", 80000),\n    (\"Bob\", \"Engineering\", 70000),\n    (\"Carol\", \"Marketing\", 65000),\n    (\"Dave\", \"Marketing\", 60000),\n], [\"name\", \"department\", \"salary\"])\n\nwindow_spec = Window.partitionBy(\"department\").orderBy(col(\"salary\").desc())\n\nresult = employees.withColumn(\"row_num\", row_number().over(window_spec))\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Alice присутствует",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Колонка row_num присутствует",
+          "input": "",
+          "expectedOutput": "row_num",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Содержит номер 1",
+          "input": "",
+          "expectedOutput": "1",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Window.partitionBy('department') создаёт отдельное окно для каждого отдела. orderBy(col('salary').desc()) сортирует по зарплате по убыванию внутри каждого окна. row_number().over(window_spec) присваивает уникальный порядковый номер: в Engineering Alice=1 (80000), Bob=2 (70000); в Marketing Carol=1 (65000), Dave=2 (60000). Количество строк в результате равно входному -- window-функции не схлопывают строки.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

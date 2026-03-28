@@ -1,0 +1,149 @@
+---
+title: "Управление памятью: Unified Memory Manager"
+description: "Как Spark управляет памятью executor через Unified Memory Manager"
+order: 7
+difficulty: "advanced"
+estimatedTime: 20
+topics: ["Memory", "Unified Memory Manager", "Storage", "Execution", "Spill"]
+---
+
+import { MemoryLayoutDiagram } from '../../../components/diagrams/module1';
+
+# Управление памятью: Unified Memory Manager
+
+Правильная настройка памяти -- разница между Spark-приложением, завершающимся за 5 минут, и приложением, падающим с `OutOfMemoryError` через 2 часа. В этом уроке мы разберём **Unified Memory Manager** -- модель управления памятью, используемую Spark с версии 1.6.
+
+## Executor JVM Heap: три региона
+
+Каждый executor -- это JVM-процесс с фиксированным объёмом heap (`spark.executor.memory`). Unified Memory Manager разделяет его на три региона:
+
+<MemoryLayoutDiagram client:visible />
+
+### Ключевые параметры
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|---------|
+| `spark.memory.fraction` | **0.6** | Доля heap для Spark Memory (storage + execution) |
+| `spark.memory.storageFraction` | **0.5** | Доля Spark Memory для Storage (начальная граница) |
+
+Для executor с 4 ГБ heap:
+
+```
+Reserved:  300 МБ (фиксировано)
+User:      (1 - 0.6) * (4096 - 300) = 0.4 * 3796 = 1518 МБ
+Spark:     0.6 * (4096 - 300) = 2278 МБ
+  Storage: 0.5 * 2278 = 1139 МБ
+  Execution: 0.5 * 2278 = 1139 МБ
+```
+
+## "Soft Boundary": правила заимствования
+
+Ключевое отличие Unified Memory Manager от старой статической модели -- граница между Storage и Execution **мягкая** (soft boundary). Оба региона могут заимствовать память друг у друга:
+
+### Storage может заимствовать у Execution
+
+Если execution memory не используется (например, нет активных shuffle), storage может занять эту свободную память для кэширования:
+
+```python
+# Много кэширования, мало shuffle -- storage заимствует execution
+df1.cache()  # 800 МБ
+df2.cache()  # 600 МБ
+# Итого: 1400 МБ > 1139 МБ storage default
+# Storage заимствует ~261 МБ из execution
+```
+
+### Execution может заимствовать у Storage
+
+Если storage memory не используется полностью, execution может занять свободную память для shuffle/sort buffers.
+
+### Execution может ВЫТЕСНИТЬ Storage
+
+Это **ключевое правило**: execution memory может **вытеснить** (evict) кэшированные данные из storage, если ей не хватает места. Storage **не может вытеснить** execution.
+
+```
+Приоритет: Execution > Storage
+
+Сценарий: storage занимает 1500 МБ (кэш), execution нужно 800 МБ для shuffle
+  1. Execution забирает 800 МБ из storage
+  2. Кэшированные блоки удаляются или spill-ятся на диск
+  3. Storage уменьшается до 700 МБ
+
+Обратный сценарий: execution занимает 1500 МБ, storage хочет кэшировать
+  1. Storage НЕ может вытеснить execution
+  2. Кэширование отклоняется или ждёт завершения shuffle
+```
+
+Почему так? Потому что вытеснение execution (shuffle buffers) привело бы к **повторному вычислению** всей стадии. Вытеснение storage (кэш) -- лишь к перечитыванию данных из источника, что значительно дешевле.
+
+<Callout type="warning">
+Ниже границы `storageFraction` кэшированные блоки **защищены** от вытеснения execution. Это гарантирует, что критически важный кэш не будет полностью вытеснен. Если storageFraction = 0.5 и Spark Memory = 2278 МБ, то первые 1139 МБ кэша защищены.
+</Callout>
+
+## Spill-to-Disk
+
+Когда ни execution, ни storage не могут найти свободную память, Spark использует **spill-to-disk**: данные записываются из RAM на локальный диск executor.
+
+```
+Memory full -> Spill to disk -> Continue processing (10-100x slower)
+```
+
+Spill работает, но значительно замедляет выполнение:
+- **RAM:** ~10 ns доступ, 10+ ГБ/с пропускная способность
+- **SSD:** ~100 мкс доступ, ~500 МБ/с пропускная способность
+- **HDD:** ~10 мс доступ, ~100 МБ/с пропускная способность
+
+Если вы видите spill в Spark UI (Tasks tab, "Spill (Memory)" и "Spill (Disk)" columns), это сигнал, что executor memory недостаточна.
+
+## Настройка под нагрузку
+
+### Тяжёлый кэш (interactive analytics)
+
+```python
+# Много повторных чтений из кэша, мало shuffle
+spark.conf.set("spark.memory.fraction", "0.7")       # больше managed memory
+spark.conf.set("spark.memory.storageFraction", "0.6") # больше под кэш
+```
+
+### Тяжёлый shuffle (ETL pipelines)
+
+```python
+# Много JOIN/groupBy, мало кэширования
+spark.conf.set("spark.memory.fraction", "0.7")       # больше managed memory
+spark.conf.set("spark.memory.storageFraction", "0.3") # больше под execution
+```
+
+### Тяжёлые UDF (ML pipelines)
+
+```python
+# UDF создают много пользовательских объектов
+spark.conf.set("spark.memory.fraction", "0.5")       # больше user memory
+```
+
+## Не путайте driver и executor memory
+
+Unified Memory Manager управляет только **executor memory**. Driver memory (`spark.driver.memory`) -- это отдельная конфигурация с другим назначением:
+
+- **Driver memory:** метаданные DAG, broadcast-переменные, результаты `collect()`, Spark UI данные
+- **Executor memory:** партиции данных (storage), shuffle/join/sort buffers (execution), UDF объекты (user)
+
+Увеличение `spark.memory.fraction` на driver **ничего не даёт** -- этот параметр влияет только на executors.
+
+## Off-Heap Memory (обзор)
+
+Spark также поддерживает **off-heap memory** -- память за пределами JVM heap, не подверженную garbage collection:
+
+```python
+spark.conf.set("spark.memory.offHeap.enabled", "true")
+spark.conf.set("spark.memory.offHeap.size", "2g")
+```
+
+Off-heap memory управляется через `sun.misc.Unsafe` (Tungsten engine) и позволяет избежать GC pauses на больших heap (>32 ГБ). Мы подробно разберём Tungsten и off-heap в Module 02 (Catalyst & Tungsten Internals).
+
+<KnowledgeCheck
+  question="Что произойдёт, если execution memory заполнена, но storage memory использует только 20% от своего лимита?"
+  answer="Execution заберёт свободную память из storage. Так как storage использует только 20% от своего storageFraction, остальные 80% свободны и доступны для execution. Более того, если execution нужно ещё больше памяти, она может вытеснить часть кэшированных данных из storage (но только выше границы storageFraction). Кэшированные блоки ниже storageFraction защищены от вытеснения."
+/>
+
+## Что дальше?
+
+Вы изучили архитектуру Spark от обзора до управления памятью. В следующем модуле мы погрузимся в **Catalyst Optimizer** и **Tungsten Engine** -- системы, которые автоматически оптимизируют ваши запросы и управляют памятью на бинарном уровне.

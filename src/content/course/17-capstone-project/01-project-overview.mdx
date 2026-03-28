@@ -1,0 +1,106 @@
+---
+title: "Обзор капстоун-проекта"
+description: "Архитектура end-to-end pipeline для e-commerce: источники данных, слои обработки, валидация качества и сервисный слой"
+order: 1
+difficulty: "advanced"
+estimatedTime: 12
+topics: ["Capstone", "Pipeline Architecture", "E-Commerce", "Data Engineering", "Bronze-Silver-Gold"]
+---
+
+import { CapstonePipelineDiagram } from '../../../components/diagrams/module17';
+
+# Обзор капстоун-проекта
+
+## Цель проекта
+
+В этом модуле вы построите **полный data pipeline** для e-commerce платформы -- от сырых файлов до агрегированных бизнес-таблиц. Pipeline интегрирует навыки из всех предыдущих модулей: DataFrames (М03), joins и window functions (М03), Delta Lake (М10), Great Expectations (М13) и паттерны production deployment (М12).
+
+Результат -- рабочий pipeline, который:
+
+- **Загружает** данные из CSV и JSON файлов с явной схемой
+- **Трансформирует** через joins, aggregations и window functions
+- **Сохраняет** в Delta Lake с bronze/silver/gold архитектурой
+- **Валидирует** качество через Great Expectations
+- **Публикует** агрегированные таблицы для аналитики
+
+## Архитектура pipeline
+
+Pipeline следует классической **medallion architecture** -- трёхслойной модели обработки данных, которую мы изучали в модуле М01 (архитектура Spark) и М10 (lakehouse форматы):
+
+<CapstonePipelineDiagram client:visible />
+
+Каждый переход между слоями проходит через **quality gate** на базе Great Expectations. Если критические expectations не проходят -- pipeline останавливается. Некритические ошибки отправляют строки в **quarantine table**.
+
+## Схема данных
+
+Проект использует две таблицы из e-commerce домена. Этот набор данных даёт естественные сценарии для joins, aggregations, window functions и SCD-паттернов.
+
+### Таблица orders (CSV)
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| order_id | INT | Уникальный идентификатор заказа |
+| customer_id | INT | FK на таблицу customers |
+| product_id | INT | Идентификатор товара |
+| quantity | INT | Количество единиц |
+| price | DECIMAL(10,2) | Цена за единицу |
+| order_date | DATE | Дата заказа |
+| status | STRING | completed, pending, cancelled, returned |
+
+### Таблица customers (JSON)
+
+| Поле | Тип | Описание |
+|------|-----|----------|
+| customer_id | INT | Уникальный идентификатор клиента |
+| name | STRING | Имя клиента |
+| email | STRING | Email |
+| city | STRING | Город |
+| registration_date | DATE | Дата регистрации |
+
+CSV для orders и JSON для customers -- типичная ситуация в production: разные source-системы экспортируют данные в разных форматах. PySpark умеет читать оба формата через единый DataFrame API.
+
+## Слои обработки
+
+### Bronze Layer (сырые данные)
+
+Bronze -- «зеркало» исходных данных. Мы читаем CSV/JSON **с явной схемой** (StructType), партиционируем по `order_date` (year/month) и сохраняем в Delta Lake. Никаких трансформаций -- только schema enforcement и append.
+
+### Silver Layer (обогащённые данные)
+
+Silver -- результат **join orders + customers** по `customer_id`. На этом уровне мы:
+- Удаляем дубликаты (dropDuplicates)
+- Применяем SCD Type 1 merge для customer dimension
+- Добавляем вычисляемые колонки (total_amount = quantity * price)
+
+### Gold Layer (бизнес-агрегаты)
+
+Gold -- готовые для потребления таблицы:
+- **daily_revenue** -- выручка по дням
+- **city_revenue** -- выручка по городам с running total (window function)
+- **product_rankings** -- ранжирование товаров по revenue (rank, dense_rank)
+
+## Запуск проекта
+
+Для запуска pipeline используйте Docker-лабораторию (LAB-06), которая объединяет компоненты из предыдущих лабораторных:
+- **Spark cluster** (master + workers) -- из LAB-01
+- **MinIO** (S3-compatible storage) -- из LAB-03
+- **Jupyter Notebook** -- интерактивная среда для пошагового выполнения
+
+Все файлы pipeline можно запускать как ячейки в Jupyter Notebook или как spark-submit скрипты.
+
+## План работы
+
+В следующих уроках мы последовательно построим каждый слой:
+
+1. **Загрузка данных** (этот модуль, урок 02) -- чтение CSV/JSON, schema enforcement, запись в bronze
+2. **Трансформации и хранилище** (урок 03) -- joins, aggregations, window functions, silver/gold layers
+3. **Валидация качества** (урок 04) -- Great Expectations quality gates на каждом слое
+4. **Сервисный слой и обзор** (урок 05) -- публикация gold tables, pipeline DAG, production considerations
+
+Каждый урок содержит полные примеры кода -- вы можете запускать их последовательно в Jupyter и наблюдать, как pipeline растёт от сырых файлов до агрегированных бизнес-таблиц.
+
+<KnowledgeCheck>
+**Вопрос:** В архитектуре medallion (bronze/silver/gold) на каком слое выполняются joins и business-логика: bronze, silver или gold?
+
+**Ответ:** На **silver** слое. Bronze хранит сырые данные без трансформаций. Silver -- это обогащённый слой, где выполняются joins, деduplication и бизнес-правила. Gold содержит уже агрегированные таблицы, готовые для потребления.
+</KnowledgeCheck>

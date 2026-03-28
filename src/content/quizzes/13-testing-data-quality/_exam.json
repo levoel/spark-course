@@ -1,0 +1,390 @@
+{
+  "lessonSlug": "13-testing-data-quality/_exam",
+  "moduleId": "13-testing-data-quality",
+  "examTitle": "Экзамен: Testing & Data Quality",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m13-exam",
+    "description": "Use IDs: m13-exam-q1, m13-exam-q2, ... (14 questions covering all M13 lessons)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-exam-q1",
+      "type": "multiple-choice",
+      "question": "Data engineer написал Spark pipeline с трансформациями как методами класса, которые читают из S3 и пишут в Delta напрямую. Тесты занимают 15 минут (поднимают LocalStack). Как улучшить тестируемость?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Рефакторинг: вынести трансформации в чистые функции (DataFrame -> DataFrame). Unit-тесты используют spark.createDataFrame() без S3/LocalStack и занимают секунды. S3-интеграцию тестировать отдельно при merge"
+        },
+        {
+          "id": "b",
+          "text": "Увеличить timeout для тестов до 30 минут"
+        },
+        {
+          "id": "c",
+          "text": "Отказаться от тестов -- pipeline работает в production"
+        },
+        {
+          "id": "d",
+          "text": "Заменить S3 на локальный диск во всех тестах"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Главный принцип тестируемого Spark-кода -- трансформации как чистые функции. Функция принимает DataFrame, возвращает DataFrame, без side effects. Unit-тесты: createDataFrame() -> transform() -> assertDataFrameEqual(), секунды. Интеграционные (S3, Delta) -- отдельно, при merge/nightly. Это тестовая пирамида.",
+      "studyHint": "Повторите урок 1: Unit-тестирование -- чистые функции и урок 2: Integration-тестирование -- тестовая пирамида",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m13-exam-q2",
+      "type": "multiple-choice",
+      "question": "Pipeline проходит GE валидацию на bronze слое (schema OK, row count > 0), но downstream gold-таблица показывает нулевые суммы revenue. Какая проверка отсутствует?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Bronze-проверки достаточны -- ошибка в gold-трансформации"
+        },
+        {
+          "id": "b",
+          "text": "Silver-слой должен проверять бизнес-правила: expect_column_values_to_be_between('amount', min_value=0.01). Bronze проверяет только schema и наличие данных, silver -- семантическую корректность значений"
+        },
+        {
+          "id": "c",
+          "text": "Gold-слой должен иметь проверку sum > 0"
+        },
+        {
+          "id": "d",
+          "text": "Нужно добавить lineage для отслеживания"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Multi-layer валидация: Bronze проверяет только структурное (schema, row count, PK NOT NULL). Silver добавляет семантические проверки: значения в допустимых диапазонах (amount > 0, age 0-150), enum-валидация (status in set), referential integrity. Без silver-валидации amount=0 или NULL проходит bronze и обнуляет gold-агрегаты.",
+      "studyHint": "Повторите урок 6: Pipeline качества данных -- multi-layer валидация bronze/silver/gold",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m13-exam-q3",
+      "type": "multiple-choice",
+      "question": "Два data engineer спорят: один хочет assertDataFrameEqual (PySpark 3.5+), другой -- spark-testing-base DataFrameSuiteBase. Проект новый, Python-only, PySpark 4.0. Что рекомендуете?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark-testing-base -- более зрелая библиотека"
+        },
+        {
+          "id": "b",
+          "text": "Оба одинаково хороши"
+        },
+        {
+          "id": "c",
+          "text": "assertDataFrameEqual -- встроен в PySpark 4.0, не нужна дополнительная зависимость, поддерживает rtol для float tolerance. spark-testing-base актуальна для legacy Scala-проектов"
+        },
+        {
+          "id": "d",
+          "text": "Ни один -- нужно писать custom assertions"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Для нового Python-проекта на PySpark 4.0: assertDataFrameEqual встроен (pyspark.testing.utils), поддерживает schema + data comparison, rtol для float tolerance, не требует установки. spark-testing-base -- дополнительная зависимость, создана до PySpark 3.5, актуальна для Scala-проектов с ScalaTest.",
+      "studyHint": "Повторите урок 3: spark-testing-base -- сравнение с нативным assertDataFrameEqual",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m13-exam-q4",
+      "type": "multiple-choice",
+      "question": "GE checkpoint для daily orders pipeline показал fail: expect_column_values_to_be_in_set('status', ['pending', 'completed', 'refunded']) упал. В данных появился статус 'cancelled'. Pipeline использует validate-before-write. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Данные запишутся -- один failed expectation не критичен"
+        },
+        {
+          "id": "b",
+          "text": "Pipeline перезапустится автоматически"
+        },
+        {
+          "id": "c",
+          "text": "GE автоматически удалит строки со статусом 'cancelled'"
+        },
+        {
+          "id": "d",
+          "text": "Pipeline останавливается, данные НЕ записываются в target. Отправляется alert. Команда решает: добавить 'cancelled' в допустимые значения или расследовать источник"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Validate-before-write: при fail checkpoint -> данные НЕ записываются -> alert. Это предотвращает попадание unexpected data в downstream таблицы. Команда расследует: если 'cancelled' -- легитимный новый статус, обновляют expectation suite. Если ошибка источника -- исправляют upstream.",
+      "studyHint": "Повторите урок 4: Great Expectations -- validate-before-write и реакция на failed checkpoint",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m13-exam-q5",
+      "type": "multiple-choice",
+      "question": "Deequ ConstraintSuggestionRunner проанализировал таблицу customers и предложил: isComplete('email'), isUnique('customer_id'), hasCompleteness('phone', _ >= 0.8). Что означает третий constraint?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Минимум 80% строк в колонке phone должны быть NOT NULL. ConstraintSuggestion определил, что исторический completeness rate phone = ~80%, и предложил порог"
+        },
+        {
+          "id": "b",
+          "text": "Колонка phone должна содержать минимум 80 символов"
+        },
+        {
+          "id": "c",
+          "text": "Телефон должен начинаться с +7 или +8"
+        },
+        {
+          "id": "d",
+          "text": "80% клиентов должны иметь уникальный phone"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "hasCompleteness('phone', _ >= 0.8) означает: completeness (доля NOT NULL) колонки phone >= 80%. ConstraintSuggestionRunner профилировал данные, обнаружил, что phone заполнен на ~80% (не все клиенты указывают телефон), и предложил этот порог. isComplete -- это hasCompleteness с порогом 100%.",
+      "studyHint": "Повторите урок 5: Amazon Deequ -- ConstraintSuggestions и метрика completeness",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m13-exam-q6",
+      "type": "multiple-choice",
+      "question": "OpenLineage отправляет 4 типа событий жизненного цикла. Spark job прочитал данные из S3 и начал обработку. Какое событие уже отправлено?",
+      "options": [
+        {
+          "id": "a",
+          "text": "COMPLETE -- чтение завершено"
+        },
+        {
+          "id": "b",
+          "text": "START -- job начал выполнение, input datasets (S3 paths) уже известны и отправлены в event"
+        },
+        {
+          "id": "c",
+          "text": "RUNNING -- промежуточное обновление"
+        },
+        {
+          "id": "d",
+          "text": "Никакое -- OpenLineage отправляет только при завершении"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "OpenLineage lifecycle events: START (job начал, inputs known), RUNNING (промежуточные обновления, опционально), COMPLETE (job завершён, outputs known), FAIL (job завершён с ошибкой). При чтении из S3 уже отправлен START event с input datasets (S3 paths, schema facets). COMPLETE отправится после записи.",
+      "studyHint": "Повторите урок 7: Data Lineage -- OpenLineage lifecycle events: START, RUNNING, COMPLETE, FAIL",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m13-exam-q7",
+      "type": "multiple-choice",
+      "question": "Production pipeline: Airflow -> Spark (read Kafka -> transform -> GE validate -> write Delta). GE validation показал 95% pass rate (5% строк нарушают expectations). Pipeline настроен с quarantine pattern. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Весь pipeline остановится -- 95% недостаточно"
+        },
+        {
+          "id": "b",
+          "text": "Все 100% строк записываются -- 95% достаточно"
+        },
+        {
+          "id": "c",
+          "text": "95% хороших строк записываются в Delta target. 5% плохих строк отправляются в quarantine-таблицу для review. Alert отправляется команде. Downstream-потребители получают валидные данные"
+        },
+        {
+          "id": "d",
+          "text": "Pipeline перезапустится для повторной валидации"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Quarantine pattern: при частичном fail валидации хорошие строки (95%) записываются в target для downstream-потребителей. Плохие строки (5%) -- в quarantine-таблицу для ручного review. Alert отправляется команде. Это баланс: downstream не блокируется, но плохие данные не теряются и не попадают в аналитику.",
+      "studyHint": "Повторите урок 6: Pipeline качества данных -- quarantine pattern для partial validation failure",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m13-exam-q8",
+      "type": "multiple-choice",
+      "question": "Data engineer настроил conftest.py с SparkSession fixture scope='function' вместо scope='session'. Тестовый suite из 30 тестов запускается 10 минут вместо 30 секунд. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "scope='function' создаёт больше партиций"
+        },
+        {
+          "id": "b",
+          "text": "Ошибка в pytest -- scope='function' должен быть быстрее"
+        },
+        {
+          "id": "c",
+          "text": "scope='function' загружает больше данных"
+        },
+        {
+          "id": "d",
+          "text": "scope='function' создаёт новый SparkSession (и JVM) для КАЖДОГО теста. 30 тестов * ~20 сек (JVM startup) = 10 минут. scope='session' создаёт JVM один раз на весь прогон"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "SparkSession запускает JVM (~5-20 секунд в зависимости от машины). scope='function' = JVM для каждого теста: 30 * 20s = 600s = 10 минут. scope='session' = 1 JVM для всех тестов: 20s startup + 10s tests = 30 секунд. Это самая частая ошибка в настройке Spark-тестов.",
+      "studyHint": "Повторите урок 1: Unit-тестирование -- SparkSession scope='session' для performance",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m13-exam-q9",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет убедиться, что Spark правильно читает данные из PostgreSQL через JDBC. Какой тип теста и инструмент использовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Интеграционный тест с Testcontainers: поднять PostgreSQL в Docker, загрузить test data, проверить spark.read.jdbc() результат. Пометить @pytest.mark.integration для раздельного запуска в CI"
+        },
+        {
+          "id": "b",
+          "text": "Unit-тест с mock JDBC"
+        },
+        {
+          "id": "c",
+          "text": "Unit-тест с assertDataFrameEqual"
+        },
+        {
+          "id": "d",
+          "text": "Manual testing в production"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Чтение из PostgreSQL через JDBC -- интеграция Spark + внешняя система. Нужен интеграционный тест: Testcontainers поднимает реальный PostgreSQL в Docker, вы загружаете test data, проверяете spark.read.jdbc(). @pytest.mark.integration позволяет запускать отдельно (при merge/nightly, не при каждом commit).",
+      "studyHint": "Повторите урок 2: Интеграционное тестирование -- Testcontainers и pytest markers",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m13-exam-q10",
+      "type": "multiple-choice",
+      "question": "GE SparkDFExecutionEngine выполняет expect_column_values_to_not_be_null на DataFrame с 10 миллионами строк. Как GE обрабатывает такой объём?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Собирает все данные на driver через collect() и проверяет в Python"
+        },
+        {
+          "id": "b",
+          "text": "Транслирует expectation в Spark SQL операцию (filter + count), которая выполняется распределённо с оптимизациями Catalyst. Данные не покидают executor"
+        },
+        {
+          "id": "c",
+          "text": "Семплирует 1% данных для быстрой проверки"
+        },
+        {
+          "id": "d",
+          "text": "Проверяет только первые 1000 строк"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "SparkDFExecutionEngine транслирует expectations в Spark SQL операции. Например, expect_column_values_to_not_be_null('user_id') -> df.filter(col('user_id').isNull()).count(). Это выполняется распределённо на executor с Catalyst optimizations. Данные не collect()-ятся на driver. 10M строк обрабатываются за секунды.",
+      "studyHint": "Повторите урок 4: Great Expectations -- SparkDFExecutionEngine и распределённое выполнение",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m13-exam-q11",
+      "type": "multiple-choice",
+      "question": "Команда хочет отслеживать lineage Spark jobs на мультиоблачном стеке (AWS + GCP). Какой инструмент lineage подходит для vendor-neutral подхода?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Unity Catalog -- работает на любом облаке"
+        },
+        {
+          "id": "b",
+          "text": "Apache Atlas -- универсальный для любого облака"
+        },
+        {
+          "id": "c",
+          "text": "OpenLineage + Marquez -- открытый стандарт, не привязан к вендору, интегрируется через SparkListener на любой инфраструктуре"
+        },
+        {
+          "id": "d",
+          "text": "AWS Glue Data Catalog -- работает с GCP через API"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "OpenLineage -- открытый стандарт, не привязан к вендору. Интегрируется с Spark через SparkListener, с Airflow, dbt и другими инструментами. Marquez -- open-source backend для хранения и визуализации lineage. Unity Catalog -- Databricks only. Atlas -- Hadoop-centric. Для мультиоблака OpenLineage -- единственный vendor-neutral вариант.",
+      "studyHint": "Повторите урок 7: Data Lineage -- OpenLineage как vendor-neutral стандарт",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m13-exam-q12",
+      "type": "multiple-choice",
+      "question": "В Docker lab для data quality используется Great Expectations, а не Deequ. Какая техническая причина этого выбора?",
+      "options": [
+        {
+          "id": "a",
+          "text": "GE мощнее Deequ"
+        },
+        {
+          "id": "b",
+          "text": "GE бесплатен, Deequ платный"
+        },
+        {
+          "id": "c",
+          "text": "Deequ не поддерживает Docker"
+        },
+        {
+          "id": "d",
+          "text": "GE -- Python-native (pip install), легко интегрируется с Jupyter и PySpark. Deequ -- Scala/JVM, требует sbt и JVM toolchain, значительно усложняя Docker lab setup"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "GE: pip install great-expectations -- одна команда в Jupyter. Deequ: Scala-based, требует sbt для сборки, JVM runtime, Maven dependency resolution. В Docker lab с Jupyter (Python) GE интегрируется нативно. Deequ потребовал бы отдельный Scala-контейнер или JVM toolchain в Jupyter, усложняя setup без добавленной ценности для lab.",
+      "studyHint": "Повторите урок 8: Лабораторная DQ -- выбор GE для Docker lab",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m13-exam-q13",
+      "type": "multiple-choice",
+      "question": "Production pipeline обнаружил аномалию: таблица silver.customers обычно содержит 1M строк, но сегодня -- только 100K. GE expectation expect_table_row_count_to_be_between(min_value=500000) упал. Как lineage помогает в расследовании?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Lineage graph показывает upstream путь: source (CRM PostgreSQL) -> bronze.customers -> silver.customers. Инженер проверяет каждый этап и обнаруживает, что bronze тоже содержит 100K -- проблема в source, не в трансформации"
+        },
+        {
+          "id": "b",
+          "text": "Lineage автоматически исправляет аномалию"
+        },
+        {
+          "id": "c",
+          "text": "Lineage показывает downstream impact, но не помогает с upstream debugging"
+        },
+        {
+          "id": "d",
+          "text": "Lineage не связан с data quality проверками"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Debugging -- одно из трёх применений lineage. Graph показывает полный путь: source -> bronze -> silver. Инженер проверяет каждый этап: если bronze тоже 100K -- проблема в source (CRM отдал partial export). Если bronze 1M, silver 100K -- ошибка в трансформации (filter/join потерял строки). Lineage сужает область поиска.",
+      "studyHint": "Повторите урок 7: Data Lineage -- debugging через upstream lineage graph",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m13-exam-q14",
+      "type": "multiple-choice",
+      "question": "Data engineer разрабатывает тест для функции clean_emails, которая нормализует email (trim + lowercase) и ставит NULL для невалидных. Какой набор test cases покрывает edge cases?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Один тест с корректным email"
+        },
+        {
+          "id": "b",
+          "text": "Несколько тестов: (1) нормализация case+spaces ('  Alice@Example.COM  ' -> 'alice@example.com'), (2) невалидный email -> NULL ('not-an-email' -> None), (3) уже корректный email остаётся unchanged, (4) NULL на входе -> NULL на выходе"
+        },
+        {
+          "id": "c",
+          "text": "Тест на 1 миллион строк для performance"
+        },
+        {
+          "id": "d",
+          "text": "Тест только на NULL значения"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Edge cases для clean_emails: (1) trim+lowercase -- spaces и mixed case нормализуются; (2) невалидный email -> NULL (regex не match); (3) корректный email без изменений (idempotent); (4) NULL input -> NULL output (не падает на NULL). Каждый test case проверяет конкретное поведение. assertDataFrameEqual или collect() для проверки результата.",
+      "studyHint": "Повторите урок 1: Unit-тестирование -- паттерн тестирования трансформаций с edge cases",
+      "bloomLevel": "applied"
+    }
+  ]
+}

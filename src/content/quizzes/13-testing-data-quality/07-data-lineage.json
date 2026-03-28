@@ -1,0 +1,118 @@
+{
+  "lessonSlug": "13-testing-data-quality/07-data-lineage",
+  "moduleId": "13-testing-data-quality",
+  "_meta": {
+    "idPrefix": "spark-m13-07",
+    "description": "Use IDs: m13-07-q1, m13-07-q2, ... (4 questions on OpenLineage, Atlas, Unity Catalog)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-07-q1",
+      "type": "multiple-choice",
+      "question": "Какие три сущности составляют модель данных OpenLineage?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Table, Column, Index"
+        },
+        {
+          "id": "b",
+          "text": "Dataset (таблица/файл, input или output), Job (трансформация), Run (конкретный запуск Job с ID и статусом)"
+        },
+        {
+          "id": "c",
+          "text": "Source, Transform, Sink"
+        },
+        {
+          "id": "d",
+          "text": "Schema, Data, Metadata"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "OpenLineage модель: Dataset (таблица, файл, topic -- input или output), Job (трансформация: Spark job, dbt model, Airflow task), Run (конкретный запуск Job с уникальным ID, временем, статусом START/COMPLETE/FAIL). Facets -- метаданные, прикреплённые к любой сущности (schema, row count, SQL query).",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 7: Data Lineage -- модель данных OpenLineage: Dataset, Job, Run, Facets"
+    },
+    {
+      "id": "spark-m13-07-q2",
+      "type": "multiple-choice",
+      "question": "Как OpenLineage интегрируется с Spark? Нужно ли менять код pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нужно добавить OpenLineage API вызовы в каждый read/write"
+        },
+        {
+          "id": "b",
+          "text": "Через специальный DataFrame reader: spark.read.format('openlineage')"
+        },
+        {
+          "id": "c",
+          "text": "Через SparkListener (spark.extraListeners). Нулевые изменения кода -- listener автоматически перехватывает read/write и отправляет events с metadata"
+        },
+        {
+          "id": "d",
+          "text": "OpenLineage работает только через REST API после завершения job"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Zero-code integration: OpenLineage подключается через spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener. Listener перехватывает все Spark events (read, write, SQL) и отправляет OpenLineage events с metadata: input/output datasets, schema facets, SQL queries, timing. Код pipeline не меняется.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 7: Data Lineage -- Spark + OpenLineage через SparkListener"
+    },
+    {
+      "id": "spark-m13-07-q3",
+      "type": "multiple-choice",
+      "question": "Компания на Databricks хочет column-level lineage из коробки. Компания с Hadoop-кластером хочет lineage для Hive/HBase. Компания на AWS с multi-tool стеком хочет открытый стандарт. Какой инструмент для каждой?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Все три должны использовать OpenLineage"
+        },
+        {
+          "id": "b",
+          "text": "Все три -> Apache Atlas"
+        },
+        {
+          "id": "c",
+          "text": "Databricks -> Atlas, Hadoop -> Unity Catalog, Multi-tool -> Deequ"
+        },
+        {
+          "id": "d",
+          "text": "Databricks -> Unity Catalog (column-level, из коробки). Hadoop -> Apache Atlas (нативная интеграция). Multi-tool -> OpenLineage + Marquez (открытый стандарт)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Decision tree: (1) Databricks? -> Unity Catalog (column-level lineage из коробки, zero config); (2) Hadoop-кластер? -> Apache Atlas (нативная интеграция с Hive, HBase, Kafka); (3) Cloud-native / multi-tool? -> OpenLineage + Marquez (открытый стандарт, не привязан к вендору). Каждый инструмент оптимален для своей инфраструктуры.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 7: Data Lineage -- decision tree: Unity Catalog vs Atlas vs OpenLineage"
+    },
+    {
+      "id": "spark-m13-07-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет удалить колонку discount из silver.orders. Как data lineage помогает избежать инцидента?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Lineage graph показывает downstream зависимости: silver.orders -> gold.revenue_daily (использует discount) -> dashboard_finance. Engineer видит impact, мигрирует downstream таблицы, затем безопасно удаляет колонку"
+        },
+        {
+          "id": "b",
+          "text": "Lineage автоматически блокирует удаление"
+        },
+        {
+          "id": "c",
+          "text": "Lineage отправляет email владельцам downstream таблиц"
+        },
+        {
+          "id": "d",
+          "text": "Lineage не помогает в этом сценарии"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Impact analysis -- одно из трёх ключевых применений lineage (compliance, impact analysis, debugging). Lineage graph визуализирует: silver.orders -> gold.revenue_daily (discount для net_revenue) -> dashboard_finance. Без lineage: удалили колонку -> dashboard сломался -> инцидент. С lineage: увидели зависимость -> мигрировали -> безопасно удалили.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 7: Data Lineage -- impact analysis для безопасных изменений"
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "05-aqe-deep-dive/05-runtime-filter-adaptation",
+  "moduleId": "05-aqe-deep-dive",
+  "_meta": {
+    "idPrefix": "spark-m05-05",
+    "description": "Use IDs: m05-05-q1, m05-05-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m05-05-q1",
+      "type": "multiple-choice",
+      "question": "Catalyst выбрал SortMergeJoin для двух таблиц (метаданные: 50 ГБ + 2 ГБ). После фильтра первая таблица уменьшилась до 50 МБ. Что сделает AQE?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Переключит на BroadcastHashJoin, потому что реальный размер (50 МБ) меньше autoBroadcastJoinThreshold"
+        },
+        {
+          "id": "b",
+          "text": "Продолжит SortMergeJoin -- стратегия не меняется"
+        },
+        {
+          "id": "c",
+          "text": "Отменит запрос и предложит пользователю перезапустить"
+        },
+        {
+          "id": "d",
+          "text": "Уменьшит число партиций, но сохранит SortMergeJoin"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "AQE собирает реальные размеры данных после выполнения stage с фильтром. Обнаружив, что таблица уменьшилась с 50 ГБ до 50 МБ (< autoBroadcastJoinThreshold), AQE динамически переключает стратегию join с SortMergeJoin на BroadcastHashJoin. Это устраняет shuffle для обеих таблиц -- значительное ускорение.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m05-05-q2",
+      "type": "multiple-choice",
+      "question": "Что такое local shuffle read в контексте AQE?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Кэширование shuffle-данных в памяти"
+        },
+        {
+          "id": "b",
+          "text": "Чтение shuffle-данных из локального диска без сетевого трансфера, когда reducer и mapper на одном executor"
+        },
+        {
+          "id": "c",
+          "text": "Чтение только локальных партиций без remote"
+        },
+        {
+          "id": "d",
+          "text": "Уменьшение объёма shuffle-данных через сжатие"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Когда AQE переключает join на broadcast, shuffle-данные одной стороны уже записаны на диск mapper-executors. Local shuffle read позволяет читать эти данные локально (без сетевого трансфера), если reducer schedule на том же executor. Это оптимизация AQE, уменьшающая сетевой overhead.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m05-05-q3",
+      "type": "multiple-choice",
+      "question": "AQE может динамически менять стратегию join. Какое из этих изменений AQE может выполнить?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SortMergeJoin -> ShuffleHashJoin"
+        },
+        {
+          "id": "b",
+          "text": "BroadcastHashJoin -> SortMergeJoin"
+        },
+        {
+          "id": "c",
+          "text": "SortMergeJoin -> BroadcastHashJoin (когда реальный размер одной стороны < broadcast threshold)"
+        },
+        {
+          "id": "d",
+          "text": "Все три варианта возможны"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Самое типичное переключение AQE: SortMergeJoin -> BroadcastHashJoin. Это происходит, когда после фильтрации одна из таблиц оказывается меньше autoBroadcastJoinThreshold. Обратное переключение (broadcast -> sort-merge) не типично, потому что broadcast выбирается только для маленьких таблиц.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-05-q4",
+      "type": "true-false",
+      "question": "AQE runtime statistics точнее, чем CBO (Cost-Based Optimizer) statistics, потому что AQE измеряет реальные размеры данных после выполнения, а CBO использует метаданные каталога.",
+      "correctAnswer": true,
+      "explanation": "Верно. CBO (Catalyst Cost-Based Optimizer) полагается на статистики каталога (ANALYZE TABLE), которые могут быть устаревшими или отсутствовать. AQE собирает статистики ПОСЛЕ выполнения каждого stage -- реальные размеры партиций, количество строк, объёмы данных. AQE не заменяет CBO, а корректирует его решения на основе фактических данных.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-05-q5",
+      "type": "multiple-choice",
+      "question": "Компания использует Spark 3.5. AQE включён. Какие из этих проблем AQE НЕ может решить?",
+      "options": [
+        {
+          "id": "a",
+          "text": "200 пустых партиций после фильтрации"
+        },
+        {
+          "id": "b",
+          "text": "Data skew при SortMergeJoin"
+        },
+        {
+          "id": "c",
+          "text": "SortMergeJoin вместо BroadcastHashJoin для маленькой таблицы"
+        },
+        {
+          "id": "d",
+          "text": "Неправильную схему данных, отсутствие индексов и плохой data model"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "AQE не может исправить фундаментальные проблемы дизайна: неправильную схему данных, отсутствие индексов, плохой data model. AQE оптимизирует план выполнения между shuffle-границами, но если данные организованы неправильно, никакая runtime-оптимизация не поможет. Пустые партиции, выбор join-стратегии и skew -- всё это AQE обрабатывает.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-05-code-1",
+      "type": "code-challenge",
+      "question": "Постройте пайплайн с цепочкой фильтров: начните с большого DataFrame (1000 строк), примените фильтры в оптимальном порядке (сначала самый селективный — status='active' ~10%, затем amount > 500 ~50%, затем join с маленьким справочником). Покажите размер DataFrame после каждого шага.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit\n\nspark = SparkSession.builder.appName(\"filter_adaptation\").getOrCreate()\n\n# Большой DataFrame: 1000 строк, ~10% active, ~50% amount > 500\nrows = [(i, f\"dept_{i % 5}\",\n         \"active\" if i % 10 == 0 else \"inactive\",\n         (i * 17) % 1000) for i in range(1000)]\nevents = spark.createDataFrame(rows, [\"event_id\", \"dept_id\", \"status\", \"amount\"])\n\ndepartments = spark.createDataFrame([\n    (\"dept_0\", \"Engineering\"), (\"dept_1\", \"Sales\"),\n    (\"dept_2\", \"Marketing\"), (\"dept_3\", \"Support\"),\n    (\"dept_4\", \"HR\")\n], [\"dept_id\", \"dept_name\"])\n\nprint(f\"Step 0 - Raw events: {events.count()}\")\n\n# TODO: Шаг 1 — Самый селективный фильтр: только active (~10%)\n# step1 = events.filter(...)\n# print(f\"Step 1 - After status filter: {step1.count()}\")\n\n# TODO: Шаг 2 — Второй фильтр: amount > 500\n# step2 = step1.filter(...)\n# print(f\"Step 2 - After amount filter: {step2.count()}\")\n\n# TODO: Шаг 3 — Join с маленьким справочником\n# result = step2.join(...)\n# print(f\"Step 3 - After join: {result.count()}\")\n# result.show(5)\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit\n\nspark = SparkSession.builder.appName(\"filter_adaptation\").getOrCreate()\n\nrows = [(i, f\"dept_{i % 5}\",\n         \"active\" if i % 10 == 0 else \"inactive\",\n         (i * 17) % 1000) for i in range(1000)]\nevents = spark.createDataFrame(rows, [\"event_id\", \"dept_id\", \"status\", \"amount\"])\n\ndepartments = spark.createDataFrame([\n    (\"dept_0\", \"Engineering\"), (\"dept_1\", \"Sales\"),\n    (\"dept_2\", \"Marketing\"), (\"dept_3\", \"Support\"),\n    (\"dept_4\", \"HR\")\n], [\"dept_id\", \"dept_name\"])\n\nprint(f\"Step 0 - Raw events: {events.count()}\")\n\nstep1 = events.filter(col(\"status\") == \"active\")\nprint(f\"Step 1 - After status filter: {step1.count()}\")\n\nstep2 = step1.filter(col(\"amount\") > 500)\nprint(f\"Step 2 - After amount filter: {step2.count()}\")\n\nresult = step2.join(departments, \"dept_id\")\nprint(f\"Step 3 - After join: {result.count()}\")\nresult.show(5)\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Исходные данные — 1000 строк",
+          "input": "",
+          "expectedOutput": "Step 0 - Raw events: 1000",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "После status фильтра — 100 строк (10%)",
+          "input": "",
+          "expectedOutput": "Step 1 - After status filter: 100",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Результат содержит dept_name из справочника",
+          "input": "",
+          "expectedOutput": "dept_name",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Порядок фильтров критически влияет на производительность. Ставим самый селективный фильтр первым (status='active' отсекает 90% данных), затем менее селективный (amount > 500), и join выполняем над минимальным набором. AQE Runtime Filter Adaptation делает это автоматически: собирает статистику о размере данных в runtime и переставляет/добавляет фильтры для минимизации промежуточных данных. Принцип: filter early, filter aggressively.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

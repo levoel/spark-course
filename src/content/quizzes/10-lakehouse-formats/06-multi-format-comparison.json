@@ -1,0 +1,183 @@
+{
+  "lessonSlug": "10-lakehouse-formats/06-multi-format-comparison",
+  "moduleId": "10-lakehouse-formats",
+  "_meta": {
+    "idPrefix": "spark-m10-06",
+    "description": "Use IDs: m10-06-q1, m10-06-q2, ... (5 questions on format comparison)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-06-q1",
+      "type": "multiple-choice",
+      "question": "Компания использует Spark для ETL и Trino для ad-hoc аналитики. Какой lakehouse-формат наиболее подходит?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Delta Lake -- нативная Spark-интеграция"
+        },
+        {
+          "id": "b",
+          "text": "Apache Iceberg -- engine-agnostic формат с поддержкой и Spark, и Trino без дополнительных прослоек"
+        },
+        {
+          "id": "c",
+          "text": "Apache Hudi -- лучший для ETL"
+        },
+        {
+          "id": "d",
+          "text": "Apache Paimon -- подходит для всех движков"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Для мультидвижковых сред Iceberg -- оптимальный выбор: engine-agnostic с самой широкой поддержкой (Spark, Trino, Flink, Snowflake, Presto, Dremio). Одна Iceberg-таблица доступна всем движкам без конвертации. Delta + UniForm -- альтернатива, но Iceberg нативно поддерживается большинством движков.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Сравнение форматов -- выбор формата для мультидвижковых сред"
+    },
+    {
+      "id": "spark-m10-06-q2",
+      "type": "multiple-choice",
+      "question": "Стартап строит real-time pipeline: Kafka -> обработка -> Lakehouse. 80% операций -- upserts по primary key. Данные обновляются 5-10 раз. Какой формат?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Delta Lake"
+        },
+        {
+          "id": "b",
+          "text": "Apache Iceberg"
+        },
+        {
+          "id": "c",
+          "text": "Apache Hudi -- COW/MOR table types оптимизированы для upsert-heavy workloads, incremental queries для downstream"
+        },
+        {
+          "id": "d",
+          "text": "Apache Paimon"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Hudi создан Uber для upsert-heavy workloads. MOR table type записывает delta logs (быстрый upsert), compaction сливает в base files. Incremental queries позволяют downstream читать только изменения. Для CDC-like workloads с частыми обновлениями Hudi -- специализированное решение.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Сравнение форматов -- Hudi для upsert-heavy workloads"
+    },
+    {
+      "id": "spark-m10-06-q3",
+      "type": "multiple-choice",
+      "question": "Decision tree для выбора формата: какой формат рекомендуется для streaming-first архитектуры с непрерывной записью из Kafka/Flink?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Delta Lake"
+        },
+        {
+          "id": "b",
+          "text": "Apache Hudi"
+        },
+        {
+          "id": "c",
+          "text": "Apache Iceberg"
+        },
+        {
+          "id": "d",
+          "text": "Apache Paimon -- LSM-tree + native changelog CDC, streaming-first дизайн с auto-compaction"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Decision tree: streaming-first -> Paimon. LSM-tree оптимизирован для непрерывной высокочастотной записи (sequential append). Changelog producer генерирует CDC-поток нативно. Auto-compaction работает в фоне. Нативная Flink-интеграция. Для Spark-centric или batch-first сценариев Delta или Iceberg лучше.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Сравнение форматов -- decision tree и выбор Paimon для streaming-first"
+    },
+    {
+      "id": "spark-m10-06-q4",
+      "type": "multiple-choice",
+      "question": "Все четыре lakehouse-формата обеспечивают ACID поверх объектного хранилища. Какой параметр НЕ является общим для всех четырёх?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Partition evolution без rewrite данных (in-place) -- уникальная фича Iceberg"
+        },
+        {
+          "id": "b",
+          "text": "Time travel"
+        },
+        {
+          "id": "c",
+          "text": "ACID-транзакции"
+        },
+        {
+          "id": "d",
+          "text": "Schema evolution (добавление колонок)"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "ACID, time travel и базовая schema evolution (add columns) поддерживаются всеми четырьмя форматами. Partition evolution без rewrite -- уникальная фича Iceberg: можно изменить partition spec (day -> hour), и старые данные остаются в старых партициях. Delta, Hudi и Paimon требуют full rewrite для изменения партиционирования.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 6: Сравнение форматов -- уникальные фичи каждого формата"
+    },
+    {
+      "id": "spark-m10-06-q5",
+      "type": "multiple-choice",
+      "question": "Команда работает в Databricks и хочет обеспечить interop с Snowflake для аналитиков. Какой подход оптимален?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Записывать данные в Iceberg, читать из Databricks и Snowflake нативно"
+        },
+        {
+          "id": "b",
+          "text": "Записывать в Delta Lake с UniForm -- данные хранятся в Delta, Snowflake читает через автоматически сгенерированные Iceberg-метаданные"
+        },
+        {
+          "id": "c",
+          "text": "Дублировать данные: одна копия в Delta для Databricks, вторая в Iceberg для Snowflake"
+        },
+        {
+          "id": "d",
+          "text": "Использовать JDBC connector между Databricks и Snowflake"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Delta + UniForm -- оптимальный подход для Databricks-first с interop. Databricks использует Delta нативно (максимальная производительность), а Snowflake читает ту же таблицу через Iceberg-интерфейс, автоматически генерируемый UniForm. Одна копия данных, два движка.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 6: Сравнение форматов -- Delta UniForm для interop Databricks + Snowflake"
+    },
+    {
+      "id": "spark-m10-06-code-1",
+      "type": "code-challenge",
+      "question": "Постройте DataFrame для сравнения lakehouse-форматов: создайте матрицу из характеристик (ACID, streaming, time travel, schema evolution, compaction) для Delta Lake, Apache Iceberg и Apache Hudi. Подсчитайте общий балл поддержки для каждого формата (sum столбцов-характеристик) и отсортируйте по убыванию. Вызовите show().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col\n\nspark = SparkSession.builder.appName(\"format-comparison\").getOrCreate()\n\n# Матрица характеристик (1 = полная поддержка, 0 = нет)\nformats = spark.createDataFrame([\n    (\"Delta Lake\",      1, 1, 1, 1, 1),\n    (\"Apache Iceberg\",  1, 1, 1, 1, 0),\n    (\"Apache Hudi\",     1, 1, 1, 1, 1),\n], [\"format\", \"acid\", \"streaming\", \"time_travel\", \"schema_evolution\", \"compaction\"])\n\n# TODO: Добавьте колонку total_score = сумма всех числовых характеристик\n# scored = formats.withColumn(\"total_score\", col(\"acid\") + col(\"streaming\") + ...)\n\n# TODO: Отсортируйте по total_score по убыванию\n# result = scored.orderBy(...)\n\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, desc\n\nspark = SparkSession.builder.appName(\"format-comparison\").getOrCreate()\n\nformats = spark.createDataFrame([\n    (\"Delta Lake\",      1, 1, 1, 1, 1),\n    (\"Apache Iceberg\",  1, 1, 1, 1, 0),\n    (\"Apache Hudi\",     1, 1, 1, 1, 1),\n], [\"format\", \"acid\", \"streaming\", \"time_travel\", \"schema_evolution\", \"compaction\"])\n\nscored = formats.withColumn(\n    \"total_score\",\n    col(\"acid\") + col(\"streaming\") + col(\"time_travel\") + col(\"schema_evolution\") + col(\"compaction\")\n)\n\nresult = scored.orderBy(desc(\"total_score\"))\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Delta Lake и Hudi с максимальным score 5",
+          "input": "",
+          "expectedOutput": "5",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Iceberg с score 4",
+          "input": "",
+          "expectedOutput": "4",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Колонка total_score присутствует",
+          "input": "",
+          "expectedOutput": "total_score",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Все три формата поддерживают ACID-транзакции, streaming и time travel. Delta Lake и Hudi получают score 5/5 за полную поддержку compaction (OPTIMIZE/Z-ORDER для Delta, compaction service для Hudi). Iceberg получает 4/5 — он использует metadata-based compaction, который менее зрелый. Такая матрица помогает при выборе формата под конкретный use case.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "06-udf-performance/03-pandas-udfs-arrow",
+  "moduleId": "06-udf-performance",
+  "_meta": {
+    "idPrefix": "spark-m06-03",
+    "description": "Use IDs: m06-03-q1, m06-03-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m06-03-q1",
+      "type": "multiple-choice",
+      "question": "Чем Pandas UDF отличается от обычного Python UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Pandas UDF использует Apache Arrow для батчевой передачи данных (вместо per-row pickle-сериализации), что сокращает overhead сериализации в ~20x"
+        },
+        {
+          "id": "b",
+          "text": "Pandas UDF быстрее, потому что использует C-оптимизированный pandas"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF выполняется на JVM вместо Python"
+        },
+        {
+          "id": "d",
+          "text": "Pandas UDF не требует Python worker process"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Ключевое отличие: Apache Arrow. Вместо per-row pickle-сериализации (1 миллиард вызовов для 1B строк), Pandas UDF передаёт данные батчами через Arrow (columnar format, zero-copy when possible). Batch size контролируется spark.sql.execution.arrow.pyspark.maxRecordsPerBatch (по умолчанию 10000). Это сокращает overhead с ~100x до ~5x.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-03-q2",
+      "type": "multiple-choice",
+      "question": "Какие три типа Pandas UDF существуют?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Input, Output, Transform"
+        },
+        {
+          "id": "b",
+          "text": "Scalar (Series -> Series), Iterator (Iterator[Series] -> Iterator[Series]), Grouped Map (DataFrame -> DataFrame via applyInPandas)"
+        },
+        {
+          "id": "c",
+          "text": "Map, Reduce, Filter"
+        },
+        {
+          "id": "d",
+          "text": "Row-level, Partition-level, Global"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Три типа: (1) Scalar (Series -> Series) -- элементные операции, каждый батч обрабатывается независимо; (2) Iterator (Iterator[Series] -> Iterator[Series]) -- для ML-инференса, позволяет загрузить модель один раз и применять к каждому батчу; (3) Grouped Map (applyInPandas) -- получает группу как pandas DataFrame и возвращает DataFrame.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-03-q3",
+      "type": "multiple-choice",
+      "question": "Для ML-инференса (применение обученной модели к каждой строке) какой тип Pandas UDF оптимален?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Scalar -- применяет модель к каждому батчу"
+        },
+        {
+          "id": "b",
+          "text": "Grouped Map -- группирует данные по модели"
+        },
+        {
+          "id": "c",
+          "text": "Iterator -- позволяет загрузить модель ОДИН раз в начале и применять к каждому батчу, избегая повторной загрузки"
+        },
+        {
+          "id": "d",
+          "text": "Обычный Python UDF -- ML-модели не совместимы с Pandas UDF"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Iterator Pandas UDF (Iterator[Series] -> Iterator[Series]) идеален для ML-инференса: модель загружается один раз при первом вызове итератора и переиспользуется для всех последующих батчей. Scalar UDF загружал бы модель для каждого батча. Iterator экономит время инициализации, что критично для тяжёлых моделей (PyTorch, TensorFlow).",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-03-q4",
+      "type": "true-false",
+      "question": "Apache Arrow использует columnar memory format, что позволяет zero-copy передачу данных между JVM и Python в Pandas UDF.",
+      "correctAnswer": true,
+      "explanation": "Верно. Apache Arrow -- columnar in-memory format, разработанный для эффективного обмена данными между системами. Arrow позволяет передавать данные между JVM и Python без глубокого копирования (zero-copy), что значительно быстрее per-row pickle-сериализации. pandas использует Arrow-совместимый формат, что делает конвертацию JVM -> Arrow -> pandas DataFrame эффективной.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-03-q5",
+      "type": "multiple-choice",
+      "question": "maxRecordsPerBatch = 10000 (по умолчанию). Для Pandas UDF на 1 миллионе строк, сколько батчей будет создано?",
+      "options": [
+        {
+          "id": "a",
+          "text": "1 батч (все строки)"
+        },
+        {
+          "id": "b",
+          "text": "Зависит от размера строки в байтах"
+        },
+        {
+          "id": "c",
+          "text": "10000 батчей"
+        },
+        {
+          "id": "d",
+          "text": "100 батчей (1M / 10000)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "maxRecordsPerBatch определяет максимальное число строк в одном Arrow-батче. 1,000,000 / 10,000 = 100 батчей. Каждый батч передаётся через Arrow как единый блок (вместо 10,000 отдельных pickle-вызовов). Увеличение batch size сокращает overhead, но увеличивает пиковое потребление памяти Python worker.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-03-code-1",
+      "type": "code-challenge",
+      "question": "Реализуйте векторизованное вычисление: для DataFrame с метриками сотрудников рассчитайте performance_score = (revenue * 0.6 + satisfaction * 40) / experience, округлите до 2 знаков. Используйте только встроенные функции (col, lit, round) — это паттерн, который pandas_udf оптимизирует через Arrow.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, lit, round as _round\n\nspark = SparkSession.builder.appName(\"vectorized_pattern\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Алексей\", 50000, 4.5, 3),\n    (2, \"Мария\", 75000, 4.8, 7),\n    (3, \"Дмитрий\", 30000, 3.9, 1),\n    (4, \"Елена\", 60000, 4.2, 5),\n    (5, \"Сергей\", 90000, 4.9, 10),\n], [\"emp_id\", \"name\", \"revenue\", \"satisfaction\", \"experience\"])\n\n# TODO: Рассчитайте performance_score = (revenue * 0.6 + satisfaction * 40) / experience\n# Округлите до 2 знаков\n# result = employees.withColumn(\"performance_score\", ...)\n\n# TODO: Покажите результат отсортированным по score убыванию\n# result.orderBy(...).show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, lit, round as _round, desc\n\nspark = SparkSession.builder.appName(\"vectorized_pattern\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Алексей\", 50000, 4.5, 3),\n    (2, \"Мария\", 75000, 4.8, 7),\n    (3, \"Дмитрий\", 30000, 3.9, 1),\n    (4, \"Елена\", 60000, 4.2, 5),\n    (5, \"Сергей\", 90000, 4.9, 10),\n], [\"emp_id\", \"name\", \"revenue\", \"satisfaction\", \"experience\"])\n\nresult = employees.withColumn(\n    \"performance_score\",\n    _round((col(\"revenue\") * 0.6 + col(\"satisfaction\") * 40) / col(\"experience\"), 2)\n)\n\nresult.orderBy(desc(\"performance_score\")).show()\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Дмитрий (30000*0.6+3.9*40)/1 = 18156.0",
+          "input": "",
+          "expectedOutput": "18156.0",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит performance_score",
+          "input": "",
+          "expectedOutput": "performance_score",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Алексей (50000*0.6+4.5*40)/3 = 10060.0",
+          "input": "",
+          "expectedOutput": "10060.0",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Это вычисление — идеальный кандидат для встроенных функций: арифметика + round работают в Tungsten без сериализации. Если бы мы использовали Python UDF, каждая строка сериализовалась бы в Python. pandas_udf решает эту проблему: данные передаются батчами через Apache Arrow (zero-copy), и numpy-операции работают над столбцами, а не строками. Но если формула выражается встроенными функциями — они ещё быстрее, т.к. работают полностью в JVM.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

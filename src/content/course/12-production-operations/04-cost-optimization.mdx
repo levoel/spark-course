@@ -1,0 +1,245 @@
+---
+title: "Оптимизация стоимости Spark-кластеров"
+description: "Instance selection, spot instances, autoscaling, right-sizing и формулы расчёта стоимости для Spark workloads"
+order: 4
+difficulty: "advanced"
+estimatedTime: 12
+topics: ["Cost Optimization", "Spot Instances", "Autoscaling", "Instance Selection", "Right-Sizing", "Dynamic Allocation"]
+---
+
+import { SpotOnDemandDiagram } from '../../../components/diagrams/module12';
+
+# Оптимизация стоимости Spark-кластеров
+
+## Почему стоимость -- архитектурное решение
+
+Spark-кластер в production может стоить от сотен до десятков тысяч долларов в месяц. Неправильный выбор instance types или стратегии масштабирования легко увеличивает бюджет в 2-3 раза без улучшения производительности.
+
+Три ключевых рычага оптимизации:
+1. **Instance selection** -- правильный тип вычислительных ресурсов
+2. **Spot instances** -- снижение стоимости compute на 60-90%
+3. **Autoscaling** -- платить только за то, что используете
+
+## Instance Selection
+
+Не все задачи Spark одинаковы. Выбор instance type зависит от характера workload:
+
+| Instance Type | Пример (AWS) | vCPU | RAM | Цена/час | Когда использовать |
+|--------------|-------------|------|-----|----------|-------------------|
+| **General Purpose** | m5.xlarge | 4 | 16 GB | $0.192 | Сбалансированные задачи |
+| **Memory Optimized** | r5.xlarge | 4 | 32 GB | $0.252 | Кеширование, joins, aggregations |
+| **Compute Optimized** | c5.xlarge | 4 | 8 GB | $0.170 | CPU-intensive (ML, UDF) |
+| **Storage Optimized** | i3.xlarge | 4 | 30.5 GB | $0.312 | Shuffle-heavy, spill to disk |
+
+**Конкретный пример:** shuffle-heavy ETL pipeline обрабатывает 500 GB данных с множеством joins:
+
+```
+Вариант A: 10x m5.xlarge ($0.192/hr)
+  RAM: 10 * 16GB = 160GB total
+  Стоимость: $1.92/hr
+  Результат: частые spill-to-disk, job ~4 часа
+  Итого: $7.68
+
+Вариант B: 10x r5.xlarge ($0.252/hr)
+  RAM: 10 * 32GB = 320GB total
+  Стоимость: $2.52/hr
+  Результат: данные в памяти, job ~2 часа
+  Итого: $5.04  <-- дешевле на 34%!
+```
+
+<Callout type="tip">
+**Больше памяти может быть дешевле.** r5.xlarge стоит на 31% дороже m5.xlarge за час, но если job завершается в 2 раза быстрее (нет spill), общая стоимость ниже. Всегда считайте **стоимость за job**, а не **стоимость за час**.
+</Callout>
+
+## Spot Instances
+
+**Spot instances** (AWS) / **Preemptible VMs** (GCP) / **Spot VMs** (Azure) -- это unused capacity облачного провайдера по сниженной цене (60-90% скидка). Риск: облако может забрать instance с уведомлением за 2 минуты.
+
+**Стратегия для Spark:**
+
+<SpotOnDemandDiagram client:visible />
+
+```properties
+# spark-defaults.conf -- spot instance resilience
+# Graceful decommissioning (Spark 3.1+)
+spark.decommission.enabled                     true
+spark.storage.decommission.rddBlocks.enabled   true
+spark.storage.decommission.shuffleBlocks.enabled true
+
+# Speculative execution для задач на spot
+spark.speculation                              true
+spark.speculation.interval                     100ms
+spark.speculation.quantile                     0.9
+```
+
+**Checkpointing для длительных jobs:**
+
+```python
+# Checkpoint каждые N строк для recovery при потере executor
+df.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .option("checkpointInterval", 10) \
+    .save("/output/intermediate/")
+
+# Или разбейте длинный pipeline на stages с intermediate output
+# Stage 1 -> save to /tmp/stage1/
+# Stage 2 -> read /tmp/stage1/ -> save to /tmp/stage2/
+# Если spot прервёт stage 2, stage 1 не нужно перезапускать
+```
+
+<Callout type="warning">
+**Никогда не запускайте Spark driver на spot instance.** Потеря driver = потеря всего приложения. Driver должен работать на on-demand instance. Executor можно терять -- Spark автоматически перезапустит потерянные tasks.
+</Callout>
+
+## Autoscaling: Dynamic Allocation
+
+**Dynamic allocation** -- встроенный механизм Spark для автоматического масштабирования executor:
+
+```properties
+# spark-defaults.conf -- Dynamic Allocation
+spark.dynamicAllocation.enabled                true
+spark.dynamicAllocation.minExecutors           2
+spark.dynamicAllocation.maxExecutors           50
+spark.dynamicAllocation.initialExecutors       5
+
+# Когда добавлять executor
+spark.dynamicAllocation.schedulerBacklogTimeout      1s
+spark.dynamicAllocation.sustainedSchedulerBacklogTimeout  5s
+
+# Когда убирать executor
+spark.dynamicAllocation.executorIdleTimeout          60s
+spark.dynamicAllocation.cachedExecutorIdleTimeout    300s
+
+# Для Kubernetes/Spark 3.0+
+spark.dynamicAllocation.shuffleTracking.enabled      true
+```
+
+```
+Dynamic Allocation Timeline:
+  Executors
+  50 ┤                    ████
+  40 ┤               █████    ████
+  30 ┤          █████              ████
+  20 ┤     █████                       ████
+  10 ┤████                                  ████
+   5 ┤                                          █████
+   2 ┤                                               ████
+     └──────────────────────────────────────────────────────
+       idle   scan   join   agg  write   idle     next job
+```
+
+**Cloud-level autoscaling** дополняет dynamic allocation:
+
+```yaml
+# Kubernetes HPA для Spark (через custom metrics)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: spark-executor-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: spark-executors
+  minReplicas: 2
+  maxReplicas: 50
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 75
+```
+
+## Right-Sizing: формулы
+
+**Executor memory:**
+
+```
+Рекомендация: 4-8 GB на executor
+  - Меньше 4 GB: overhead GC, частые spill
+  - Больше 16 GB: долгие GC паузы, неэффективное использование
+
+Формула для executor memory:
+  total_executor_memory = spark.executor.memory + spark.executor.memoryOverhead
+  memoryOverhead = MAX(384MB, 0.10 * executor_memory)
+
+Пример: executor-memory=8g
+  overhead = MAX(384MB, 0.10 * 8GB) = 800MB
+  total = 8GB + 800MB = 8.8GB -> нужен instance с >=9GB RAM
+```
+
+**Executor cores:**
+
+```
+Рекомендация: 4-5 cores на executor
+  - 1 core: неэффективно (нет параллелизма внутри executor)
+  - >5 cores: HDFS throughput degradation
+  - 4-5 cores: оптимальный баланс
+
+Пример для r5.4xlarge (16 vCPU, 128 GB):
+  - Оставить 1 core для OS
+  - 15 cores / 5 cores per executor = 3 executor на node
+  - 128GB - 1GB(OS) = 127GB / 3 = ~42GB per executor (слишком много)
+  - Лучше: 4 executor * 4 cores = 16 (используем все), ~31GB per executor
+```
+
+**Cluster sizing:**
+
+```
+Формула: cost_per_TB = (cluster_cost_per_hour * job_duration) / data_size_TB
+
+Пример:
+  Кластер: 10x r5.xlarge = $2.52/hr
+  Job: 2 часа для 500GB
+  cost = ($2.52 * 2) / 0.5TB = $10.08/TB
+
+  С spot (70% скидка на executor):
+  Driver: 1x m5.xlarge on-demand = $0.192
+  Executors: 9x r5.xlarge spot = 9 * $0.252 * 0.3 = $0.68
+  Total: ($0.192 + $0.68) * 2 / 0.5 = $3.49/TB  <-- 65% экономия
+```
+
+## Storage Optimization
+
+Стоимость compute -- не единственный фактор. Storage и I/O тоже влияют:
+
+```python
+# Compression: snappy vs zstd
+# Snappy: быстрая компрессия, ratio ~2x (default для Parquet)
+# Zstd: медленнее на ~20%, ratio ~3-4x (экономия storage)
+
+df.write \
+    .option("compression", "zstd") \
+    .parquet("/output/compressed/")
+
+# Partition pruning: читать только нужные партиции
+# БЕЗ pruning: scan 365 дней = 365 * 10GB = 3.65TB
+# С pruning: scan 30 дней = 30 * 10GB = 300GB (экономия 92%)
+df = spark.read.parquet("/data/events/") \
+    .filter("event_date >= '2024-01-01' AND event_date < '2024-02-01'")
+```
+
+| Стратегия | Экономия | Усилие |
+|-----------|----------|--------|
+| Partition pruning | 50-95% scan cost | Низкое |
+| Columnar format (Parquet) | 60-80% vs CSV | Низкое |
+| Zstd compression | 30-50% vs Snappy | Минимальное |
+| Predicate pushdown | 30-70% scan cost | Автоматическое |
+| Z-ordering (Delta/Iceberg) | 20-50% scan cost | Среднее |
+
+<KnowledgeCheck
+  question="Почему r5.xlarge ($0.252/hr) может быть дешевле m5.xlarge ($0.192/hr) для shuffle-heavy Spark job?"
+  answer="r5.xlarge имеет 32 GB RAM (vs 16 GB у m5.xlarge). Для shuffle-heavy job дополнительная память позволяет: (1) хранить shuffle-данные в памяти без spill to disk; (2) кешировать промежуточные DataFrame; (3) уменьшить GC pressure. Результат -- job завершается значительно быстрее. Если job на m5.xlarge занимает 4 часа ($0.192*4=$0.77), а на r5.xlarge -- 2 часа ($0.252*2=$0.50), то r5 дешевле на 34% несмотря на более высокую почасовую стоимость. Ключевая метрика -- cost per job, не cost per hour."
+/>
+
+<KnowledgeCheck
+  question="Как правильно использовать spot instances для Spark-кластера? Какие компоненты должны быть on-demand?"
+  answer="Driver ВСЕГДА на on-demand (потеря driver = потеря всего job). Core executors (30%) на on-demand для гарантированного минимума. Task executors (70%) на spot для масштабирования. Дополнительные меры: (1) spark.decommission.enabled=true для graceful decommissioning; (2) spark.speculation=true для перезапуска медленных задач; (3) checkpointing для длинных pipeline; (4) разбиение pipeline на stages с intermediate saves. Также используйте instance fleet с несколькими типами -- если один тип spot недоступен, Spark выберет другой."
+/>
+
+## Что дальше?
+
+В следующем уроке мы рассмотрим **CI/CD для Spark-приложений** -- как автоматизировать сборку, тестирование и деплой Spark jobs.

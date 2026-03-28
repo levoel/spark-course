@@ -1,0 +1,186 @@
+{
+  "lessonSlug": "08-monitoring-observability/01-spark-ui-deep-dive",
+  "moduleId": "08-monitoring-observability",
+  "_meta": {
+    "idPrefix": "spark-m08-01",
+    "description": "Use IDs: m08-01-q1, m08-01-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m08-01-q1",
+      "type": "multiple-choice",
+      "question": "В Spark UI Summary Metrics для Stage: Min Duration=0.1s, Median=0.4s, Max=45.2s. Что это указывает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Data skew: Max в 100x больше Median означает, что одна партиция содержит значительно больше данных, создавая straggler task"
+        },
+        {
+          "id": "b",
+          "text": "Нормальное распределение task durations"
+        },
+        {
+          "id": "c",
+          "text": "Медленный executor в кластере"
+        },
+        {
+          "id": "d",
+          "text": "Недостаточно executor memory"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Max/Median ratio 100x -- классический индикатор data skew. Straggler task обрабатывает 100x больше данных. Для медленного node: duration отличается, но Shuffle Read Size одинаков. Для data skew: и duration, и Shuffle Read Size различаются (проверьте Shuffle Read Max vs Median). Решение: salting, AQE skew join, broadcast.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m08-01-q2",
+      "type": "multiple-choice",
+      "question": "GC Time > 10% от task duration в Spark UI. Какие три причины и решения?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нехватка CPU -- добавить cores"
+        },
+        {
+          "id": "b",
+          "text": "Причины: слишком мало executor memory, слишком большие партиции, чрезмерное кэширование. Решения: увеличить spark.executor.memory, увеличить число партиций (repartition), unpersist ненужных DataFrame"
+        },
+        {
+          "id": "c",
+          "text": "Bug в JVM -- обновить Java"
+        },
+        {
+          "id": "d",
+          "text": "GC Time не влияет на производительность"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "GC Time > 10% означает, что executor тратит больше времени на сборку мусора, чем на полезную работу. Три причины и решения: (1) мало memory -> увеличить spark.executor.memory; (2) большие партиции -> repartition для уменьшения данных на task; (3) чрезмерный cache -> unpersist ненужных DataFrame, чтобы освободить storage memory.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m08-01-q3",
+      "type": "multiple-choice",
+      "question": "На SQL Tab видно: SortMergeJoin с Exchange 2.3 ГБ для orders (1.2B строк) и Exchange 450 МБ для customers (10M строк). Как оптимизировать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить shuffle.partitions для равномерного распределения"
+        },
+        {
+          "id": "b",
+          "text": "Кэшировать обе таблицы"
+        },
+        {
+          "id": "c",
+          "text": "Broadcast customers (450 МБ): broadcast(df_customers) или увеличить autoBroadcastJoinThreshold. Устраняет оба Exchange, заменяя SortMergeJoin на BroadcastHashJoin"
+        },
+        {
+          "id": "d",
+          "text": "Добавить индекс на customer_id"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "customers (450 МБ) достаточно мала для broadcast. broadcast(df_customers) или threshold >= 450 МБ. BroadcastHashJoin: customers отправляется на все executors (450 МБ * N_executors одноразово). Устраняет оба Exchange: orders не шаффлятся (2.3 ГБ экономии), customers broadcast (450 МБ одноразово). SQL Tab покажет BroadcastHashJoin вместо SortMergeJoin.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m08-01-q4",
+      "type": "true-false",
+      "question": "В Storage Tab Spark UI, Fraction Cached < 100% означает, что часть кэшированных данных была вытеснена из памяти.",
+      "correctAnswer": true,
+      "explanation": "Верно. Fraction Cached показывает, какой процент DataFrame находится в памяти. < 100% означает eviction: часть данных вытеснена из storage memory (возможно execution memory потребовала ресурсы). При MEMORY_AND_DISK вытесненные данные на диске. При MEMORY_ONLY -- пересчитываются при следующем доступе.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m08-01-q5",
+      "type": "multiple-choice",
+      "question": "Чеклист диагностики медленного Spark job: 5 шагов. Какой правильный порядок?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SQL -> Storage -> Jobs -> Stages -> Environment"
+        },
+        {
+          "id": "b",
+          "text": "Порядок не имеет значения"
+        },
+        {
+          "id": "c",
+          "text": "Environment -> Jobs -> Stages -> SQL -> Storage"
+        },
+        {
+          "id": "d",
+          "text": "Jobs (какой job долгий?) -> Stages (где bottleneck, GC, task distribution?) -> SQL (ненужные shuffle, broadcast?) -> Storage (кэш переполнен?) -> Environment (AQE, memory, partitions?)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Методичный подход от общего к частному: (1) Jobs: определить самый долгий job. (2) Stages: найти bottleneck stage, проверить GC Time и task distribution. (3) SQL: анализ плана -- ненужные Exchange, возможность broadcast. (4) Storage: кэш не переполнен? (5) Environment: правильные настройки AQE, памяти, partitions.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m08-01-q6",
+      "type": "multiple-choice",
+      "question": "В Stages Tab: Input = 500 ГБ для stage с простым SELECT count(*) FROM table WHERE date = '2024-01-15'. Таблица partitioned by date. Что не так?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Partition pruning не сработал: Spark читает все партиции (500 ГБ) вместо одной даты. Проверить: формат фильтра (string vs date type mismatch), метаданные каталога, и наличие predicate pushdown в SQL Tab"
+        },
+        {
+          "id": "b",
+          "text": "500 ГБ -- нормальный объём для count(*)"
+        },
+        {
+          "id": "c",
+          "text": "count(*) всегда читает все данные"
+        },
+        {
+          "id": "d",
+          "text": "Проблема в сетевой передаче данных"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Для partitioned таблицы WHERE date='2024-01-15' должна прочитать одну директорию (~1-2 ГБ), не 500 ГБ. Причины failed pruning: (1) type mismatch: date столбец как string vs filter как date; (2) UDF в фильтре (чёрный ящик для Catalyst); (3) отсутствие метаданных. Проверить SQL Tab: есть ли PartitionFilter в FileScan.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m08-01-code-1",
+      "type": "code-challenge",
+      "question": "Создайте DataFrame с метриками выполнения задач (task_id, executor_id, duration_ms, shuffle_read_mb, shuffle_write_mb). Рассчитайте per-executor статистику: avg_duration, total_shuffle_read, total_shuffle_write, task_count. Найдите самый медленный executor. Покажите статистику и имя медленного executor.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, avg, sum as _sum, count, max as _max, round as _round, desc\n\nspark = SparkSession.builder.appName(\"spark_ui_analysis\").getOrCreate()\n\n# Метрики задач (как в Spark UI → Stages → Tasks)\ntask_metrics = spark.createDataFrame([\n    (1, \"exec-1\", 1200, 50, 30), (2, \"exec-1\", 800, 40, 25),\n    (3, \"exec-1\", 1500, 60, 35), (4, \"exec-2\", 300, 20, 10),\n    (5, \"exec-2\", 350, 25, 15), (6, \"exec-2\", 280, 18, 12),\n    (7, \"exec-3\", 5000, 200, 100), (8, \"exec-3\", 4500, 180, 90),\n    (9, \"exec-3\", 4800, 190, 95), (10, \"exec-1\", 900, 45, 28),\n], [\"task_id\", \"executor_id\", \"duration_ms\", \"shuffle_read_mb\", \"shuffle_write_mb\"])\n\n# TODO: Рассчитайте per-executor статистику\n# executor_stats = task_metrics.groupBy(\"executor_id\").agg(\n#     _round(avg(\"duration_ms\"), 0).alias(\"avg_duration_ms\"),\n#     _sum(\"shuffle_read_mb\").alias(\"total_shuffle_read\"),\n#     _sum(\"shuffle_write_mb\").alias(\"total_shuffle_write\"),\n#     count(\"task_id\").alias(\"task_count\")\n# )\n\n# TODO: Покажите статистику отсортированную по avg_duration_ms убыванию\n# executor_stats.orderBy(desc(\"avg_duration_ms\")).show()\n\n# TODO: Найдите самый медленный executor\n# slowest = executor_stats.orderBy(desc(\"avg_duration_ms\")).first()\n# print(f\"Slowest executor: {slowest['executor_id']} (avg {slowest['avg_duration_ms']}ms)\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, avg, sum as _sum, count, max as _max, round as _round, desc\n\nspark = SparkSession.builder.appName(\"spark_ui_analysis\").getOrCreate()\n\ntask_metrics = spark.createDataFrame([\n    (1, \"exec-1\", 1200, 50, 30), (2, \"exec-1\", 800, 40, 25),\n    (3, \"exec-1\", 1500, 60, 35), (4, \"exec-2\", 300, 20, 10),\n    (5, \"exec-2\", 350, 25, 15), (6, \"exec-2\", 280, 18, 12),\n    (7, \"exec-3\", 5000, 200, 100), (8, \"exec-3\", 4500, 180, 90),\n    (9, \"exec-3\", 4800, 190, 95), (10, \"exec-1\", 900, 45, 28),\n], [\"task_id\", \"executor_id\", \"duration_ms\", \"shuffle_read_mb\", \"shuffle_write_mb\"])\n\nexecutor_stats = task_metrics.groupBy(\"executor_id\").agg(\n    _round(avg(\"duration_ms\"), 0).alias(\"avg_duration_ms\"),\n    _sum(\"shuffle_read_mb\").alias(\"total_shuffle_read\"),\n    _sum(\"shuffle_write_mb\").alias(\"total_shuffle_write\"),\n    count(\"task_id\").alias(\"task_count\")\n)\n\nexecutor_stats.orderBy(desc(\"avg_duration_ms\")).show()\n\nslowest = executor_stats.orderBy(desc(\"avg_duration_ms\")).first()\nprint(f\"Slowest executor: {slowest['executor_id']} (avg {slowest['avg_duration_ms']}ms)\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Самый медленный executor — exec-3",
+          "input": "",
+          "expectedOutput": "Slowest executor: exec-3",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит avg_duration_ms",
+          "input": "",
+          "expectedOutput": "avg_duration_ms",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "exec-2 имеет 3 задачи",
+          "input": "",
+          "expectedOutput": "3",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Это аналитика, которую Spark UI показывает на вкладке Stages → Tasks. Группировка по executor выявляет data skew (exec-3 в среднем 4767ms vs exec-2 310ms — разница 15x). В production такой перекос указывает на: неравномерное распределение данных, hardware проблемы (медленный диск, GC давление), или неоптимальное размещение задач. Spark UI показывает эти метрики визуально — здесь мы воспроизводим анализ программно.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

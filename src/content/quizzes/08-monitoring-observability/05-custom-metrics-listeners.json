@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "08-monitoring-observability/05-custom-metrics-listeners",
+  "moduleId": "08-monitoring-observability",
+  "_meta": {
+    "idPrefix": "spark-m08-05",
+    "description": "Use IDs: m08-05-q1, m08-05-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m08-05-q1",
+      "type": "multiple-choice",
+      "question": "Зачем нужны custom метрики, если Spark уже экспортирует JVM, executor и shuffle метрики?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Встроенных метрик всегда достаточно"
+        },
+        {
+          "id": "b",
+          "text": "Встроенные метрики -- инфраструктурные. Production требует бизнес-метрики: записи прошедшие validation, количество дубликатов, время до SLA deadline. Для этого: SparkListener, AccumulatorV2, custom MetricSource"
+        },
+        {
+          "id": "c",
+          "text": "Custom метрики быстрее встроенных"
+        },
+        {
+          "id": "d",
+          "text": "Prometheus не поддерживает встроенные метрики Spark"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Встроенные метрики покрывают инфраструктуру: JVM heap, GC, shuffle bytes. Но production pipeline нуждается в бизнес-метриках: (1) сколько записей прошло validation; (2) сколько дубликатов отфильтровано; (3) укладывается ли pipeline в SLA. Три механизма: SparkListener (events), AccumulatorV2 (aggregation), custom MetricSource (Prometheus export).",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-05-q2",
+      "type": "multiple-choice",
+      "question": "Что такое SparkListener?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Компонент для чтения данных из Spark"
+        },
+        {
+          "id": "b",
+          "text": "Модуль для записи логов в файл"
+        },
+        {
+          "id": "c",
+          "text": "Интерфейс для перехвата событий Spark: onJobStart, onJobEnd, onStageCompleted, onTaskEnd. Позволяет выполнять кастомную логику при каждом событии"
+        },
+        {
+          "id": "d",
+          "text": "Альтернатива Spark UI"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "SparkListener -- callback интерфейс. Вы реализуете методы: onJobStart, onJobEnd, onStageCompleted, onTaskEnd, и Spark вызывает их при каждом событии. Применение: логирование метрик, отправка алертов, отслеживание прогресса pipeline. Event содержит все метрики task/stage/job.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-05-q3",
+      "type": "multiple-choice",
+      "question": "AccumulatorV2 позволяет агрегировать значения через tasks. Какой типичный сценарий использования?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Замена groupBy для агрегаций"
+        },
+        {
+          "id": "b",
+          "text": "Замена broadcast variables"
+        },
+        {
+          "id": "c",
+          "text": "Передача данных между executors"
+        },
+        {
+          "id": "d",
+          "text": "Подсчёт business-метрик: количество невалидных записей, дубликатов, null-значений -- агрегируются через все tasks и доступны на driver"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "AccumulatorV2: write-only на executors, read на driver. Каждый task инкрементирует аккумулятор, Spark агрегирует через mergeAccumulators. Сценарии: (1) invalid_records_counter -- подсчёт невалидных записей; (2) duplicates_counter -- обнаруженные дубликаты; (3) null_values_counter -- missing data. Доступны через SparkContext.accumulator() или как custom AccumulatorV2.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m08-05-q4",
+      "type": "true-false",
+      "question": "AccumulatorV2 значения доступны для чтения как на driver, так и на executors.",
+      "correctAnswer": false,
+      "explanation": "Неверно. AccumulatorV2 -- write-only на executors, read-only на driver. Executor может только add() к аккумулятору, но не может прочитать агрегированное значение (чтение на executor возвращает локальное значение task, не глобальное). Только driver видит финальное агрегированное значение через accum.value.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m08-05-q5",
+      "type": "multiple-choice",
+      "question": "Как экспортировать custom бизнес-метрики в Prometheus для Grafana dashboard?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Создать custom MetricSource, зарегистрировать его в SparkEnv, и метрики будут доступны через PrometheusServlet endpoint вместе со встроенными метриками"
+        },
+        {
+          "id": "b",
+          "text": "Записать метрики в файл и настроить Prometheus на чтение файла"
+        },
+        {
+          "id": "c",
+          "text": "Отправить метрики напрямую в Grafana через HTTP"
+        },
+        {
+          "id": "d",
+          "text": "Custom метрики невозможно экспортировать в Prometheus"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Custom MetricSource: (1) создаёте класс, наследующий Source; (2) регистрируете Gauge/Counter/Histogram для бизнес-метрик; (3) регистрируете в SparkEnv metrics system. PrometheusServlet автоматически экспортирует все зарегистрированные метрики (включая custom) на /metrics/prometheus endpoint. Prometheus scrapes, Grafana визуализирует.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m08-05-code-1",
+      "type": "code-challenge",
+      "question": "Создайте DataFrame событий Spark (event_type, stage_id, timestamp, metric_value). Рассчитайте per-stage статистику: duration (max-min timestamp), peak_metric, task_count. Вычислите общий health_score = (кол-во stages с duration < 5000) / total_stages * 100, округлённый до целого.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, min as _min, max as _max, count, round as _round, lit, when, sum as _sum\n\nspark = SparkSession.builder.appName(\"custom_metrics\").getOrCreate()\n\n# События Spark (как собирает SparkListener)\nevents = spark.createDataFrame([\n    (\"task_end\", 1, 1000, 256), (\"task_end\", 1, 1500, 512),\n    (\"task_end\", 1, 2000, 384), (\"task_end\", 1, 3000, 640),\n    (\"task_end\", 2, 4000, 128), (\"task_end\", 2, 4200, 256),\n    (\"task_end\", 2, 4500, 192),\n    (\"task_end\", 3, 5000, 1024), (\"task_end\", 3, 8000, 2048),\n    (\"task_end\", 3, 12000, 4096), (\"task_end\", 3, 15000, 3072),\n    (\"task_end\", 3, 18000, 2560),\n], [\"event_type\", \"stage_id\", \"timestamp\", \"metric_value\"])\n\n# TODO: Рассчитайте per-stage статистику\n# stage_stats = events.groupBy(\"stage_id\").agg(\n#     (_max(\"timestamp\") - _min(\"timestamp\")).alias(\"duration_ms\"),\n#     _max(\"metric_value\").alias(\"peak_metric\"),\n#     count(\"*\").alias(\"task_count\")\n# )\n# stage_stats.orderBy(\"stage_id\").show()\n\n# TODO: Подсчитайте health_score\n# total_stages = stage_stats.count()\n# healthy_stages = stage_stats.filter(col(\"duration_ms\") < 5000).count()\n# health_score = round(healthy_stages / total_stages * 100)\n# print(f\"Job health score: {health_score}% ({healthy_stages}/{total_stages} healthy stages)\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, min as _min, max as _max, count, round as _round, lit, when, sum as _sum\n\nspark = SparkSession.builder.appName(\"custom_metrics\").getOrCreate()\n\nevents = spark.createDataFrame([\n    (\"task_end\", 1, 1000, 256), (\"task_end\", 1, 1500, 512),\n    (\"task_end\", 1, 2000, 384), (\"task_end\", 1, 3000, 640),\n    (\"task_end\", 2, 4000, 128), (\"task_end\", 2, 4200, 256),\n    (\"task_end\", 2, 4500, 192),\n    (\"task_end\", 3, 5000, 1024), (\"task_end\", 3, 8000, 2048),\n    (\"task_end\", 3, 12000, 4096), (\"task_end\", 3, 15000, 3072),\n    (\"task_end\", 3, 18000, 2560),\n], [\"event_type\", \"stage_id\", \"timestamp\", \"metric_value\"])\n\nstage_stats = events.groupBy(\"stage_id\").agg(\n    (_max(\"timestamp\") - _min(\"timestamp\")).alias(\"duration_ms\"),\n    _max(\"metric_value\").alias(\"peak_metric\"),\n    count(\"*\").alias(\"task_count\")\n)\nstage_stats.orderBy(\"stage_id\").show()\n\ntotal_stages = stage_stats.count()\nhealthy_stages = stage_stats.filter(col(\"duration_ms\") < 5000).count()\nhealth_score = round(healthy_stages / total_stages * 100)\nprint(f\"Job health score: {health_score}% ({healthy_stages}/{total_stages} healthy stages)\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Health score 67% (2 из 3 stages здоровые)",
+          "input": "",
+          "expectedOutput": "Job health score: 67%",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит duration_ms и peak_metric",
+          "input": "",
+          "expectedOutput": "peak_metric",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Stage 3 — медленный (duration 13000ms > 5000)",
+          "input": "",
+          "expectedOutput": "13000",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "SparkListener получает события onTaskEnd, onStageCompleted, onJobEnd и агрегирует метрики. Здесь мы реализуем эту агрегацию программно: per-stage duration, peak memory, task count. Health score — простая метрика 'процент stages завершившихся вовремя'. В production SparkListener может: отправлять метрики в Prometheus, записывать в лог для ELK, триггерить алерты при превышении порогов. Stage 3 (13s, 5 tasks, peak 4096) — кандидат на оптимизацию.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

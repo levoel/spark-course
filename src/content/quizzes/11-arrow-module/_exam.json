@@ -1,0 +1,309 @@
+{
+  "lessonSlug": "11-arrow-module/_exam",
+  "moduleId": "11-arrow-module",
+  "examTitle": "Экзамен: Apache Arrow и Spark",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m11-exam",
+    "description": "Use IDs: m11-exam-q1, m11-exam-q2, ... (11 questions covering all M11 lessons)"
+  },
+  "questions": [
+    {
+      "id": "spark-m11-exam-q1",
+      "type": "multiple-choice",
+      "question": "Data engineer замечает, что toPandas() на DataFrame с 50 млн строк занимает 3 минуты и потребляет 40 ГБ RAM на driver (хотя DataFrame всего 5 ГБ). Какова причина и решение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "DataFrame слишком большой для collect на driver"
+        },
+        {
+          "id": "b",
+          "text": "Без arrow.pyspark.enabled: pickle serialize row-by-row (JVM) -> Py4J -> pickle deserialize (Python) -> pandas row-by-row assembly. Overhead: ~8x memory (pickle buffers + Python objects + pandas construction). Включение Arrow = Arrow RecordBatch (columnar, compact) -> pandas (zero-copy). Решение: spark.conf.set('spark.sql.execution.arrow.pyspark.enabled', 'true')"
+        },
+        {
+          "id": "c",
+          "text": "Pandas не поддерживает DataFrame больше 1 ГБ"
+        },
+        {
+          "id": "d",
+          "text": "Нужно увеличить driver memory до 80 ГБ"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Без Arrow: pickle сериализует каждую строку отдельно, создавая промежуточные Python-объекты. 50 млн строк * pickle overhead = 8x memory amplification (5 ГБ -> 40 ГБ). С Arrow: данные передаются batch'ами в columnar format, PyArrow -> pandas с минимальным overhead (~1.2x memory). Ускорение 10-100x + экономия памяти.",
+      "studyHint": "Повторите урок 5: PyArrow и Spark -- arrow.pyspark.enabled и benchmark toPandas с/без Arrow",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m11-exam-q2",
+      "type": "multiple-choice",
+      "question": "Компания использует JDBC для передачи 10 ГБ результата от аналитического движка к Python-клиенту. Операция занимает 5 минут. Архитектор предлагает перейти на Arrow Flight. Какое ускорение ожидать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "2-3x -- Flight немного быстрее JDBC"
+        },
+        {
+          "id": "b",
+          "text": "Нет ускорения -- bottleneck в сети, а не в протоколе"
+        },
+        {
+          "id": "c",
+          "text": "50-100x -- JDBC тратит 95% времени на row-oriented serialize/deserialize (CPU-bound). Flight стримит Arrow RecordBatch без сериализации: ~3 секунды вместо 5 минут для 10 ГБ"
+        },
+        {
+          "id": "d",
+          "text": "10x -- Flight оптимизирует только сетевой протокол"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "JDBC performance bottleneck -- CPU на serialize/deserialize, а не сеть. Row-by-row текстовая сериализация 10 ГБ = ~300 сек CPU. Flight: данные уже в Arrow columnar format, нет serialize/deserialize, parallel gRPC streams. 10 ГБ / ~3 ГБ/сек = ~3 секунды. Ускорение ~100x типично для аналитических workloads.",
+      "studyHint": "Повторите урок 3: Arrow Flight -- benchmark Flight vs JDBC для больших результатов",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m11-exam-q3",
+      "type": "multiple-choice",
+      "question": "Arrow определяет стандартизированный byte layout для всех типов данных. Какие ТРИ преимущества это даёт для аналитических workloads?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Автоматическое шифрование, сжатие, индексация"
+        },
+        {
+          "id": "b",
+          "text": "Автоматическое масштабирование, отказоустойчивость, мониторинг"
+        },
+        {
+          "id": "c",
+          "text": "Поддержка GPU, TPU, FPGA"
+        },
+        {
+          "id": "d",
+          "text": "(1) Cross-language zero-copy (Python, Java, C++ работают с одними байтами); (2) SIMD-векторизация (contiguous data одного типа); (3) cache locality (CPU cache line загружает 8 значений int64 за раз)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Три преимущества стандартного byte layout: (1) Cross-language zero-copy: данные в Python и Java -- одни и те же байты, передача = передача указателя. (2) SIMD: contiguous values одного типа, процессор обрабатывает 4-8 за инструкцию (AVX2/AVX-512). (3) Cache locality: все salary рядом в RAM, cache line (64 байт) = 8 int64. Все три невозможны с row-oriented данными.",
+      "studyHint": "Повторите урок 1: Arrow columnar format -- SIMD, cache locality и cross-language",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m11-exam-q4",
+      "type": "multiple-choice",
+      "question": "Spark Connect заменяет традиционный PySpark (JVM на ноутбуке). Какие компоненты участвуют в выполнении запроса через Spark Connect?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python client (~10 МБ, без JVM) -> gRPC (protobuf plan) -> Spark Connect Server (JVM + Catalyst + executors) -> Arrow Flight (RecordBatch stream) -> Python client"
+        },
+        {
+          "id": "b",
+          "text": "Python -> Py4J -> JVM (local) -> Executors"
+        },
+        {
+          "id": "c",
+          "text": "Python -> REST API -> Spark SQL -> JDBC -> Executors"
+        },
+        {
+          "id": "d",
+          "text": "Python -> Spark Submit -> YARN -> Executors -> Python"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Spark Connect: (1) Lightweight Python client (без JVM, ~10 МБ) отправляет план запроса в protobuf через gRPC. (2) Spark Server (с JVM, Catalyst, executors) выполняет запрос. (3) Результат стримится обратно как Arrow RecordBatch через Flight. Нет JVM на клиенте, нет Py4J, нет версионной привязки.",
+      "studyHint": "Повторите урок 4: Spark Connect -- client-server architecture и Arrow Flight transport",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m11-exam-q5",
+      "type": "multiple-choice",
+      "question": "Pandas UDF обрабатывает batch строк через pandas Series вместо одной строки через Python function. Как Arrow участвует в этом процессе?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Arrow не связан с Pandas UDF"
+        },
+        {
+          "id": "b",
+          "text": "JVM сериализует batch строк в Arrow RecordBatch -> передаёт в Python -> PyArrow Table -> pandas Series. UDF обрабатывает Series целиком (vectorized numpy ops). Результат: pandas Series -> Arrow RecordBatch -> JVM. Arrow -- транспорт для batch'ей между JVM и Python"
+        },
+        {
+          "id": "c",
+          "text": "Arrow компилирует UDF в native code"
+        },
+        {
+          "id": "d",
+          "text": "Arrow кэширует результаты UDF"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Pandas UDF pipeline: JVM -> Arrow RecordBatch (columnar batch) -> Python PyArrow -> pandas Series. UDF получает Series и обрабатывает vectorized (numpy ops на C-extensions). Результат: Series -> Arrow RecordBatch -> JVM. Arrow -- ключевой компонент, обеспечивающий эффективную batch-передачу между JVM и Python.",
+      "studyHint": "Повторите урок 5: PyArrow и Spark -- Pandas UDF under the hood и Arrow serialization",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m11-exam-q6",
+      "type": "multiple-choice",
+      "question": "Почему zero-copy между pandas и PyArrow возможен для числовых колонок (int64, float64), но НЕ для строковых?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Pandas не поддерживает строки"
+        },
+        {
+          "id": "b",
+          "text": "Строковые данные слишком большие для zero-copy"
+        },
+        {
+          "id": "c",
+          "text": "Числовые колонки: Arrow fixed-width buffer (contiguous int64) идентичен numpy array layout -- zero-copy через __array__. Строковые: Arrow variable-width (offsets + data), pandas хранит Python str objects -- разная memory layout, нужна конвертация"
+        },
+        {
+          "id": "d",
+          "text": "Zero-copy работает для всех типов данных одинаково"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Числовые типы: Arrow int64 buffer = contiguous array of 8-byte values = numpy int64 array. Одинаковый memory layout -> zero-copy (просто передача указателя). Строковые типы: Arrow = offsets buffer + data buffer (UTF-8 bytes). Pandas = array of Python str objects (heap-allocated). Разный layout -> нужна конвертация, хотя Arrow StringArray -> pandas ArrowDtype может быть zero-copy.",
+      "studyHint": "Повторите урок 2: Zero-copy -- fixed-width vs variable-width buffers и совместимость с numpy/pandas",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m11-exam-q7",
+      "type": "multiple-choice",
+      "question": "Flight GetFlightInfo возвращает FlightInfo с несколькими endpoints. Зачем?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Для redundancy -- данные дублируются на каждом endpoint"
+        },
+        {
+          "id": "b",
+          "text": "Для failover -- если один endpoint недоступен, используется другой"
+        },
+        {
+          "id": "c",
+          "text": "Для load balancing -- запрос перенаправляется на наименее загруженный сервер"
+        },
+        {
+          "id": "d",
+          "text": "Для параллельного чтения: каждый endpoint хранит часть данных (partition). Клиент отправляет DoGet к каждому endpoint одновременно, получая RecordBatch streams параллельно -- horizontal scaling"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Multiple endpoints = data partitioning для параллельного чтения. Каждый endpoint содержит ticket для DoGet на свой subset данных. Клиент может отправить DoGet к 10 endpoints параллельно, получая 10 RecordBatch streams одновременно. Это linear scaling с числом серверов -- фундаментальное преимущество Flight над JDBC.",
+      "studyHint": "Повторите урок 3: Flight protocol -- GetFlightInfo, endpoints и parallel DoGet",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m11-exam-q8",
+      "type": "multiple-choice",
+      "question": "Spark Connect server обслуживает 10 клиентов одновременно. Один клиент запускает запрос с collect() на 50 ГБ. Чем Spark Connect защищает других клиентов?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Session isolation: каждый клиент имеет изолированную SparkSession. collect() на одной сессии не влияет на другие. Server может ограничить ресурсы per-session (memory quota, timeout)"
+        },
+        {
+          "id": "b",
+          "text": "Ничем -- один OOM убивает весь сервер"
+        },
+        {
+          "id": "c",
+          "text": "Spark Connect автоматически отклоняет запросы больше 1 ГБ"
+        },
+        {
+          "id": "d",
+          "text": "Каждый клиент запускает отдельный Spark-кластер"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Spark Connect server -- multi-tenant с session isolation. Каждый клиент получает изолированную SparkSession: конфигурации, temporary views, UDF не пересекаются. Server может ограничить ресурсы per-session. В отличие от традиционного PySpark (один driver = один JVM), Connect изолирует клиентов на уровне сессий.",
+      "studyHint": "Повторите урок 4: Spark Connect -- multi-tenancy и session isolation",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m11-exam-q9",
+      "type": "multiple-choice",
+      "question": "Аналитическая таблица с 20 колонками. Запрос SELECT col1, col2 FROM table WHERE col3 > 100. Какие Arrow-оптимизации применяются?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только сжатие данных"
+        },
+        {
+          "id": "b",
+          "text": "Column pruning (читаются только col1, col2, col3 -- 3 из 20 = 85% экономия I/O) + SIMD-фильтрация col3 > 100 на contiguous int64 buffer + cache-friendly sequential scan"
+        },
+        {
+          "id": "c",
+          "text": "Только column pruning"
+        },
+        {
+          "id": "d",
+          "text": "Arrow не оптимизирует SQL-запросы"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Три Arrow-оптимизации: (1) Column pruning: из 20 колонок читаются только 3 (col1, col2 для SELECT + col3 для WHERE) -- 85% I/O экономия. (2) SIMD: col3 как contiguous buffer, AVX2 обрабатывает 4 int64 за инструкцию для > 100 фильтра. (3) Cache locality: sequential scan col3 -- 8 значений int64 в одном cache line.",
+      "studyHint": "Повторите урок 1: Arrow columnar format -- column pruning, SIMD и cache locality",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m11-exam-q10",
+      "type": "multiple-choice",
+      "question": "Как Arrow связывает M06 (UDF) с M11 (Arrow)? Почему понимание Arrow важно для оптимизации PySpark UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Arrow не связан с UDF"
+        },
+        {
+          "id": "b",
+          "text": "Arrow заменяет UDF -- после Arrow UDF не нужны"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF (M06) использует Arrow для batch-передачи данных между JVM и Python. Без Arrow: row-by-row pickle (медленно). С Arrow: RecordBatch -> pandas Series -> vectorized ops. Понимание Arrow объясняет, ПОЧЕМУ Pandas UDF в 3-100x быстрее обычного Python UDF"
+        },
+        {
+          "id": "d",
+          "text": "Arrow ускоряет только SQL UDF, не Python UDF"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Связь M06 -> M11: в M06 показан Pandas UDF (vectorized) vs обычный UDF. В M11 объясняется ПОЧЕМУ: Arrow обеспечивает эффективную batch-передачу (RecordBatch) вместо per-row pickle. Понимание Arrow = понимание причины 3-100x ускорения. Без Arrow knowledge Pandas UDF выглядит как 'magic' -- Arrow делает его понятным.",
+      "studyHint": "Повторите урок 5: PyArrow и Spark -- Pandas UDF pipeline и роль Arrow в ускорении",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m11-exam-q11",
+      "type": "multiple-choice",
+      "question": "Почему Arrow формат описывается как 'спецификация' (specification), а не 'библиотека'?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Arrow -- коммерческая библиотека с закрытым кодом"
+        },
+        {
+          "id": "b",
+          "text": "Спецификация и библиотека -- синонимы для Arrow"
+        },
+        {
+          "id": "c",
+          "text": "Arrow -- только документация без исполняемого кода"
+        },
+        {
+          "id": "d",
+          "text": "Arrow определяет стандарт byte layout для каждого типа данных, который реализуется на разных языках (PyArrow для Python, arrow-rs для Rust, Arrow Java). Спецификация гарантирует, что данные в любой реализации имеют идентичный бинарный формат -- основа cross-language interop"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Arrow -- спецификация (не библиотека): определяет точный byte layout (int32 = 4 consecutive bytes, string = offsets + data buffer, validity bitmap для NULLs). Реализации: PyArrow (Python/C++), arrow-rs (Rust), Arrow Java. Все реализации производят идентичные байты -- это основа zero-copy между языками и движками.",
+      "studyHint": "Повторите урок 1: Arrow как спецификация и cross-language стандарт",
+      "bloomLevel": "conceptual"
+    }
+  ]
+}

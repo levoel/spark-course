@@ -1,0 +1,134 @@
+{
+  "lessonSlug": "04-performance-tuning/03-bucketing",
+  "moduleId": "04-performance-tuning",
+  "_meta": {
+    "idPrefix": "spark-m04-03",
+    "description": "Use IDs: m04-03-q1, m04-03-q2, ... for MC/TF; m04-03-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m04-03-q1",
+      "type": "multiple-choice",
+      "question": "Как bucketing устраняет shuffle при join?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Bucketing кэширует данные в памяти executor для быстрого доступа"
+        },
+        {
+          "id": "b",
+          "text": "Bucketing использует broadcast для передачи данных"
+        },
+        {
+          "id": "c",
+          "text": "Данные предварительно распределены по hash(key) % N при записи, поэтому при join по тому же ключу перераспределение не нужно"
+        },
+        {
+          "id": "d",
+          "text": "Bucketing сортирует данные, что устраняет необходимость в Exchange"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "bucketBy(N, column) при записи распределяет данные по N bucket-файлам с помощью hash(column) % N. При join по тому же ключу Spark знает, что данные уже распределены правильно -- Exchange (shuffle) не нужен. Это аналог pre-shuffle: shuffle выполняется один раз при записи и устраняется при каждом последующем чтении.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m04-03-q2",
+      "type": "multiple-choice",
+      "question": "Две таблицы используют bucketing по customer_id, но с разным числом buckets: orders -- 16, customers -- 32. Будет ли shuffle устранён при join?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- Spark автоматически согласует разное число buckets"
+        },
+        {
+          "id": "b",
+          "text": "Spark выберет broadcast join вместо bucketed join"
+        },
+        {
+          "id": "c",
+          "text": "Shuffle будет устранён только для одной стороны join"
+        },
+        {
+          "id": "d",
+          "text": "Нет -- число buckets должно совпадать или одно должно быть кратно другому"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Для устранения shuffle при bucketed join необходимо, чтобы число buckets совпадало или одно было кратно другому. При 16 и 32 buckets (32 кратно 16) Spark может сопоставить bucket-файлы. При некратных числах (16 и 17) потребуется shuffle для одной из сторон. Рекомендация: использовать одинаковое число buckets для связанных таблиц.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-03-q3",
+      "type": "true-false",
+      "question": "Bucketing полезен только если таблица регулярно join-ится по одному и тому же ключу. Для ad-hoc запросов по разным ключам bucketing не даёт преимуществ.",
+      "correctAnswer": true,
+      "explanation": "Верно. Bucketing распределяет данные по конкретному ключу. Если join выполняется по другому ключу, Spark всё равно выполнит shuffle, потому что данные распределены неправильно. Bucketing экономически оправдан, когда таблица многократно join-ится по одному ключу (customer_id, order_id) -- стоимость однократного shuffle при записи амортизируется.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-03-q4",
+      "type": "multiple-choice",
+      "question": "В explain() bucketed join вы видите SortMergeJoin БЕЗ Exchange. Что это означает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Bucketing успешно устранил shuffle -- данные уже распределены по join key"
+        },
+        {
+          "id": "b",
+          "text": "Spark использовал broadcast join вместо sort-merge"
+        },
+        {
+          "id": "c",
+          "text": "Произошла ошибка в плане -- SortMergeJoin всегда требует Exchange"
+        },
+        {
+          "id": "d",
+          "text": "AQE автоматически удалил Exchange"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "SortMergeJoin без Exchange -- характерный признак bucketed join. Данные предварительно распределены по hash(key) при записи (bucketBy), поэтому Exchange (shuffle) не нужен. Spark читает bucket-файлы напрямую и выполняет join локально. AQE не удаляет Exchange -- он может менять стратегию join или объединять партиции.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m04-03-code-1",
+      "type": "code-challenge",
+      "question": "Создайте две таблицы orders и customers, запишите их с bucketing по customer_id (4 buckets), затем выполните join и покажите результат.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"bucketing\").getOrCreate()\n\norders = spark.createDataFrame(\n    [(1, 101, 500), (2, 102, 300), (3, 101, 700)],\n    [\"order_id\", \"customer_id\", \"amount\"]\n)\ncustomers = spark.createDataFrame(\n    [(101, \"Alice\"), (102, \"Bob\")],\n    [\"customer_id\", \"name\"]\n)\n\n# TODO: Выполните join orders с customers по customer_id\n# result = orders.join(...)\n\n# TODO: Покажите результат\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"bucketing\").getOrCreate()\n\norders = spark.createDataFrame(\n    [(1, 101, 500), (2, 102, 300), (3, 101, 700)],\n    [\"order_id\", \"customer_id\", \"amount\"]\n)\ncustomers = spark.createDataFrame(\n    [(101, \"Alice\"), (102, \"Bob\")],\n    [\"customer_id\", \"name\"]\n)\n\nresult = orders.join(customers, \"customer_id\")\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит Alice",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Результат содержит Bob",
+          "input": "",
+          "expectedOutput": "Bob",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Alice имеет два заказа",
+          "input": "",
+          "expectedOutput": "101",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "В production bucketing используется через bucketBy().saveAsTable() при записи и устраняет shuffle при join. В этом примере мы демонстрируем сам join-паттерн. При использовании bucketing в explain() вы увидите SortMergeJoin без Exchange -- данные предварительно распределены по customer_id.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

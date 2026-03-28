@@ -1,0 +1,153 @@
+---
+title: "Apache Arrow: колоночный формат данных"
+description: "Почему колоночный формат критичен для аналитики, Arrow memory layout, IPC и cross-language совместимость"
+order: 1
+difficulty: "intermediate"
+estimatedTime: 14
+topics: ["Apache Arrow", "Columnar Format", "Row Format", "Memory Layout", "IPC", "Cross-Language"]
+---
+
+import { ArrowColumnarDiagram, RowVsColumnarDiagram } from '../../../components/diagrams/module11';
+
+# Apache Arrow: колоночный формат данных
+
+## Проблема: строчное хранение vs аналитика
+
+Большинство OLTP-баз данных (PostgreSQL, MySQL) хранят данные **по строкам**. Это логично для транзакционной нагрузки: INSERT, UPDATE, DELETE работают с целой строкой. Но для аналитических запросов строчное хранение -- катастрофа.
+
+Допустим, у вас таблица `employees` с 6 колонками и 10 миллионов строк. Аналитический запрос `SELECT AVG(salary) FROM employees` читает **только 1 колонку** из 6. Но при строчном хранении с диска/из памяти вычитываются **все 6 колонок** -- 83% прочитанных данных выбрасываются.
+
+<RowVsColumnarDiagram client:visible />
+
+## Apache Arrow: единый колоночный стандарт
+
+**Apache Arrow** -- это спецификация колоночного формата данных **в оперативной памяти** (in-memory). Ключевое отличие от Parquet: Parquet -- формат хранения на диске, Arrow -- формат для обработки в RAM.
+
+Arrow определяет точный **byte layout** для каждого типа данных. Это означает, что данные в формате Arrow в Python, Java, C++, Rust и Go занимают **одни и те же байты в памяти**. Никакой сериализации при передаче между языками -- просто передаём указатель на ту же память.
+
+### Почему колоночный формат лучше для аналитики
+
+**1. Column Pruning (отсечение колонок):**
+При `SELECT salary, age` читаются только 2 буфера из 6. При строчном хранении читаются все 6.
+
+**2. SIMD-векторизация:**
+Колоночные данные лежат в памяти последовательно (contiguous). Процессор может обработать 4-8 значений за одну SIMD-инструкцию (AVX2/AVX-512). Для строчных данных это невозможно -- значения разбросаны по памяти.
+
+**3. Компрессия:**
+Значения одного типа в одной колонке сжимаются значительно лучше. Run-Length Encoding для колонки `dept` с повторяющимися "IT", "HR" даёт 10-50x сжатие. Для строчного формата это невозможно.
+
+**4. Cache locality:**
+При обработке колонки `salary` все значения лежат рядом в RAM. CPU cache line (64 байт) загружает 8 значений int64 за раз. При строчном хранении каждое следующее значение salary находится через всю строку -- cache miss на каждом обращении.
+
+<ArrowColumnarDiagram client:visible />
+
+## Arrow Memory Layout
+
+Arrow определяет три типа буферов для каждой колонки:
+
+### Fixed-width буферы (числа, boolean)
+
+```
+Колонка age (int32), 4 значения: [28, 34, 41, NULL]
+
+Validity Bitmap: [1, 1, 1, 0]  → 4-й элемент NULL
+                  ↑  ↑  ↑  ↑
+                  28 34 41 null
+
+Data Buffer: [28 00 00 00 | 22 00 00 00 | 29 00 00 00 | 00 00 00 00]
+              ← 4 bytes →   ← 4 bytes →   ← 4 bytes →   ← padding →
+```
+
+Каждое значение занимает ровно 4 байта (int32). Доступ к i-му элементу -- O(1): `buffer[i * 4]`.
+
+### Variable-width буферы (строки)
+
+```
+Колонка name (utf8), 3 значения: ["Анна", "Борис", "Вера"]
+
+Offsets Buffer: [0, 8, 18, 26]  → где начинается каждая строка (UTF-8 байты)
+Data Buffer:    [Анна|Борис|Вера]  → все строки подряд, без разделителей
+
+Строка i: data[offsets[i] : offsets[i+1]]
+```
+
+Offsets buffer позволяет найти любую строку за O(1), а сами данные лежат компактно без gaps.
+
+### Validity Bitmap (обработка NULL)
+
+```
+Validity Bitmap для 8 значений: [1, 1, 0, 1, 1, 1, 0, 1]
+Один бит на значение. 0 = NULL, 1 = valid.
+В памяти: один байт = 0b10110111 = 8 значений
+```
+
+<Callout type="tip">
+**Arrow vs Parquet**
+
+Arrow и Parquet -- не конкуренты, а **дополнение** друг друга. Parquet -- колоночный формат **на диске** с компрессией (Snappy, Zstd). Arrow -- колоночный формат **в памяти** без компрессии, оптимизированный для вычислений. Типичный pipeline: читаем Parquet с диска, декодируем в Arrow в памяти, обрабатываем, записываем обратно в Parquet.
+</Callout>
+
+## Cross-Language: один формат, все языки
+
+Традиционно каждая система хранила данные в своём формате:
+
+```
+Без Arrow:
+Python (NumPy)  →  serialize  →  Java (JVM arrays)  →  serialize  →  C++ (std::vector)
+                   ~100ms           ~100ms                ~100ms         ~100ms
+Итого: 4 копии данных, 4 сериализации
+
+С Arrow:
+Python (PyArrow)  ─── Arrow Buffer (shared memory) ─── Java (Arrow) ─── C++ (Arrow)
+                        одна копия данных, zero-copy
+```
+
+Arrow IPC (Inter-Process Communication) позволяет передавать данные между процессами на **одной машине** через shared memory (mmap) или Unix domain sockets. Данные уже в нужном формате -- никакой конвертации.
+
+Именно поэтому **Pandas UDF в Spark работают в 3-100x быстрее** обычных Python UDF. Обычный Python UDF сериализует каждую строку через pickle (медленно). Pandas UDF передаёт целые batches через Arrow -- один zero-copy transfer вместо миллионов сериализаций. Подробнее об этом мы говорили в [модуле UDF Performance](/course/06-udf-performance/03-pandas-udfs-arrow).
+
+## Arrow IPC Format
+
+Arrow IPC определяет wire format для передачи Arrow-данных между процессами:
+
+```python
+import pyarrow as pa
+import pyarrow.ipc as ipc
+
+# Создаём таблицу
+table = pa.table({
+    'id': [1, 2, 3],
+    'name': ['Анна', 'Борис', 'Вера'],
+    'salary': [95000, 78000, 112000]
+})
+
+# Записываем в IPC формат (файл или поток)
+with pa.OSFile('/tmp/data.arrow', 'wb') as f:
+    writer = ipc.new_file(f, table.schema)
+    writer.write_table(table)
+    writer.close()
+
+# Читаем обратно -- zero deserialization
+with pa.OSFile('/tmp/data.arrow', 'rb') as f:
+    reader = ipc.open_file(f)
+    table_back = reader.read_all()
+    # table_back уже в Arrow format, ready to process
+```
+
+IPC поддерживает два режима:
+- **File format (IPC File)**: случайный доступ, метаданные в footer
+- **Stream format (IPC Stream)**: последовательный доступ, для real-time передачи
+
+<KnowledgeCheck
+  question="Почему Arrow позволяет передавать данные между Python и Java без сериализации?"
+  answer="Arrow определяет единый byte layout для каждого типа данных. Данные в PyArrow и Java Arrow занимают идентичные байты в памяти. При передаче через shared memory (mmap) оба процесса ссылаются на ту же физическую память -- никакой конвертации или копирования не нужно. Это zero-copy transfer: вместо serialize-copy-deserialize (3 шага) происходит передача указателя (1 шаг)."
+/>
+
+<KnowledgeCheck
+  question="Чем Arrow отличается от Parquet и почему они дополняют друг друга?"
+  answer="Parquet -- колоночный формат для хранения на диске с компрессией (Snappy, Zstd, LZ4). Arrow -- колоночный формат в оперативной памяти без компрессии, оптимизированный для вычислений и передачи между процессами. Parquet минимизирует размер хранения, Arrow минимизирует стоимость обработки. Типичный pipeline: чтение Parquet -> декодирование в Arrow -> обработка -> запись в Parquet."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **zero-copy transfer** -- механизм, который позволяет Arrow передавать гигабайты данных между процессами без единого копирования. Вы узнаете, как shared memory и memory-mapped files делают это возможным.

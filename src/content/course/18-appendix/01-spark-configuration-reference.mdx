@@ -1,0 +1,107 @@
+---
+title: "Справочник конфигурации Spark"
+description: "Ключевые параметры конфигурации Apache Spark по категориям с описаниями и значениями по умолчанию"
+order: 1
+difficulty: "intermediate"
+estimatedTime: 15
+topics: ["Конфигурация", "Memory", "Shuffle", "SQL", "Streaming", "AQE"]
+---
+
+# Справочник конфигурации Spark
+
+Основные параметры конфигурации Apache Spark, организованные по категориям. Используйте этот справочник при настройке production-кластеров.
+
+---
+
+## Memory
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `spark.executor.memory` | `1g` | Heap memory для каждого executor-а. Рекомендуется 4-8 GB для production |
+| `spark.executor.memoryOverhead` | `10%` от executor memory | Off-heap memory (JVM overhead, native библиотеки, PySpark). Для PySpark увеличьте до 20-30% |
+| `spark.memory.fraction` | `0.6` | Доля heap, выделенная для execution + storage (unified memory) |
+| `spark.memory.storageFraction` | `0.5` | Доля unified memory, зарезервированная для storage (cache). Execution может занять эту область |
+| `spark.driver.memory` | `1g` | Heap memory для driver-а. Увеличьте при `collect()` больших данных |
+| `spark.driver.maxResultSize` | `1g` | Максимальный размер результата action-ов (collect, take). `0` = без ограничений |
+| `spark.memory.offHeap.enabled` | `false` | Включить off-heap memory для Tungsten. Требует `spark.memory.offHeap.size` |
+| `spark.memory.offHeap.size` | `0` | Размер off-heap memory в байтах. Обычно 2-4 GB |
+
+---
+
+## Shuffle
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `spark.sql.shuffle.partitions` | `200` | Число shuffle-партиций для SQL/DataFrame операций. Настройте под объём данных |
+| `spark.shuffle.compress` | `true` | Сжатие shuffle-данных. Снижает I/O за счёт CPU |
+| `spark.shuffle.spill.compress` | `true` | Сжатие spill-данных при записи на диск |
+| `spark.reducer.maxSizeInFlight` | `48m` | Максимальный размер shuffle-буфера на reducer. Увеличьте для сетей с высокой пропускной способностью |
+| `spark.shuffle.file.buffer` | `32k` | Размер буфера записи shuffle-файлов. `64k`-`128k` для SSD |
+| `spark.shuffle.io.maxRetries` | `3` | Число повторных попыток при ошибке fetch shuffle-данных |
+| `spark.shuffle.io.retryWait` | `5s` | Задержка между retry при fetch shuffle |
+| `spark.shuffle.sort.bypassMergeThreshold` | `200` | Если число reducer-ов меньше этого порога, используется bypass merge sort |
+
+---
+
+## Spark SQL и Catalyst
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `spark.sql.autoBroadcastJoinThreshold` | `10MB` | Таблицы меньше этого размера автоматически broadcast-ятся. `-1` = отключить |
+| `spark.sql.broadcastTimeout` | `300s` | Таймаут для broadcast join. Увеличьте для больших таблиц |
+| `spark.sql.codegen.wholeStage` | `true` | Whole-stage codegen — генерация Java-кода для цепочки операторов |
+| `spark.sql.codegen.hugeMethodLimit` | `65535` | Максимальный размер метода в байткоде. При превышении codegen отключается |
+| `spark.sql.cbo.enabled` | `false` | Cost-Based Optimizer. Включите для сложных join-ов (требует `ANALYZE TABLE`) |
+| `spark.sql.cbo.joinReorder.enabled` | `false` | Автоматическая перестановка join-ов по стоимости |
+
+---
+
+## Adaptive Query Execution (AQE)
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `spark.sql.adaptive.enabled` | `true` (Spark 3.2+) | Включить AQE — динамическая оптимизация во время выполнения |
+| `spark.sql.adaptive.coalescePartitions.enabled` | `true` | Автоматическое объединение мелких shuffle-партиций |
+| `spark.sql.adaptive.coalescePartitions.minPartitionSize` | `1MB` | Минимальный размер partition после coalesce |
+| `spark.sql.adaptive.advisoryPartitionSizeInBytes` | `64MB` | Целевой размер партиции при coalesce |
+| `spark.sql.adaptive.skewJoin.enabled` | `true` | Автоматическое разбиение skew-партиций при join |
+| `spark.sql.adaptive.skewJoin.skewedPartitionFactor` | `5` | Партиция считается skewed, если в N раз больше медианы |
+| `spark.sql.adaptive.skewJoin.skewedPartitionThresholdInBytes` | `256MB` | Минимальный размер партиции для признания skew |
+| `spark.sql.adaptive.localShuffleReader.enabled` | `true` | Локальное чтение shuffle без network fetch при coalesce |
+
+---
+
+## Structured Streaming
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `spark.sql.streaming.checkpointLocation` | — | Директория для checkpoint-ов (обязательно для production) |
+| `spark.sql.streaming.minBatchesToRetain` | `100` | Число micro-batch-ей, сохраняемых в checkpoint |
+| `spark.sql.streaming.stateStore.providerClass` | `HDFSBackedStateStoreProvider` | Provider для state store. Для production рассмотрите RocksDB |
+| `spark.sql.streaming.forceDeleteTempCheckpointLocation` | `false` | Удалять temp checkpoint при остановке query |
+| `spark.sql.streaming.kafka.maxOffsetsPerTrigger` | — | Максимальное число offset-ов за trigger для Kafka source. Rate limiting |
+| `spark.sql.streaming.stateStore.rocksdb.compactOnCommit` | `false` | Компактификация RocksDB при каждом commit. Снижает размер state |
+
+---
+
+## Хранение и I/O
+
+| Параметр | По умолчанию | Описание |
+|----------|-------------|----------|
+| `spark.sql.parquet.compression.codec` | `snappy` | Codec сжатия Parquet: `snappy`, `gzip`, `lz4`, `zstd` |
+| `spark.sql.orc.compression.codec` | `snappy` | Codec сжатия ORC |
+| `spark.sql.files.maxPartitionBytes` | `128MB` | Максимальный размер partition при чтении файлов |
+| `spark.sql.files.openCostInBytes` | `4MB` | Оценочная стоимость открытия файла (для планирования partition-ов) |
+| `spark.sql.parquet.mergeSchema` | `false` | Объединять schema из всех Parquet-файлов при чтении |
+| `spark.hadoop.parquet.enable.summary-metadata` | `false` | Запись summary metadata. Отключите для ускорения записи |
+
+---
+
+## Использование справочника
+
+1. **Начните с defaults** — значения по умолчанию подходят для большинства сценариев
+2. **Профилируйте** — используйте Spark UI для выявления bottleneck-ов
+3. **Меняйте по одному** — изменяйте один параметр за раз и измеряйте эффект
+4. **Документируйте** — фиксируйте изменения конфигурации и их причины
+
+> **Совет:** Используйте `spark.conf.get("spark.sql.shuffle.partitions")` для проверки текущего значения параметра в runtime.

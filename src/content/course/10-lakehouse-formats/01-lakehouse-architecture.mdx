@@ -1,0 +1,171 @@
+---
+title: "Архитектура Lakehouse"
+description: "Эволюция от Data Warehouse к Data Lake и Lakehouse, медальонная архитектура, ACID на объектном хранилище"
+order: 1
+difficulty: "intermediate"
+estimatedTime: 14
+topics: ["Lakehouse", "Data Lake", "Data Warehouse", "Medallion Architecture", "Bronze", "Silver", "Gold"]
+---
+
+import { LakehouseLayersDiagram, LakehouseStackDiagram } from '../../../components/diagrams/module10';
+
+# Архитектура Lakehouse
+
+## Эволюция: от хранилища к озеру и обратно
+
+Традиционная архитектура данных прошла три поколения. Каждое решало проблемы предыдущего -- и создавало новые.
+
+### Data Warehouse (поколение 1)
+
+**Data Warehouse** -- это структурированное хранилище с жёсткой схемой, оптимизированное для аналитических запросов. Классические примеры: Teradata, Oracle DWH, Amazon Redshift.
+
+**Преимущества:** ACID-транзакции, SQL-доступ, строгая типизация, быстрые аналитические запросы.
+
+**Проблемы:** дорогое проприетарное хранилище, невозможность работать с неструктурированными данными (логи, JSON, изображения), жёсткая привязка к вендору, сложная масштабируемость.
+
+### Data Lake (поколение 2)
+
+**Data Lake** -- дешёвое объектное хранилище (S3, GCS, ADLS) для данных любого формата. "Складываем всё, разберёмся потом."
+
+**Преимущества:** дешёвое хранилище, любые форматы данных, горизонтальная масштабируемость, открытые форматы (Parquet, ORC, Avro).
+
+**Проблемы:** нет ACID-транзакций (concurrent writes ломают данные), нет контроля схемы (schema-on-read = хаос), нет time travel, "data swamp" -- данные есть, но найти и использовать их невозможно.
+
+```
+Data Lake проблема:
+Writer A:  read -> modify -> write ──┐
+Writer B:  read -> modify -> write ──┘──> CONFLICT! Потеря данных
+                                         Нет изоляции транзакций
+```
+
+### Lakehouse (поколение 3)
+
+**Lakehouse** = объектное хранилище (дешёвое, масштабируемое) + метаданный слой (ACID, схема, time travel). Это не новый продукт -- это **архитектурный паттерн**, реализуемый через lakehouse-форматы: Delta Lake, Apache Iceberg, Apache Hudi, Apache Paimon.
+
+<LakehouseStackDiagram client:visible />
+
+<Callout type="tip">
+**Что решает Lakehouse**
+
+Lakehouse добавляет metadata layer поверх дешёвого объектного хранилища. Этот слой обеспечивает: (1) ACID-транзакции -- безопасные concurrent writes, (2) Schema enforcement -- контроль типов при записи, (3) Time travel -- доступ к любой предыдущей версии данных, (4) Upsert/Merge -- обновление отдельных записей без перезаписи всего файла.
+</Callout>
+
+## Медальонная архитектура (Medallion Architecture)
+
+Стандартный паттерн организации данных в Lakehouse -- трёхуровневая медальонная архитектура: **Bronze -> Silver -> Gold**.
+
+<LakehouseLayersDiagram client:visible />
+
+### Bronze (сырые данные)
+
+Bronze-слой -- точная копия данных из источника. Никакой трансформации, никакой валидации. Append-only запись.
+
+```python
+# Bronze: загрузка сырых JSON-событий
+raw_events = (
+    spark.readStream
+    .format("kafka")
+    .option("subscribe", "user_events")
+    .load()
+)
+
+# Сохраняем как есть -- включая metadata Kafka
+raw_events.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/bronze") \
+    .start("/data/bronze/user_events")
+```
+
+**Гарантии Bronze:** полнота данных (ничего не потеряно), возможность повторной обработки (re-processing), append-only для аудита.
+
+### Silver (валидированные данные)
+
+Silver-слой -- очищенные, типизированные, дедуплицированные данные. Здесь применяется schema enforcement и бизнес-логика очистки.
+
+```python
+# Silver: валидация и очистка
+from pyspark.sql.functions import from_json, col, sha2, concat
+
+bronze = spark.readStream.format("delta").load("/data/bronze/user_events")
+
+silver = (
+    bronze
+    .select(from_json(col("value").cast("string"), schema).alias("data"))
+    .select("data.*")
+    # Валидация: отбрасываем записи без user_id
+    .filter(col("user_id").isNotNull())
+    # Дедупликация по бизнес-ключу
+    .dropDuplicates(["event_id"])
+    # Типизация
+    .withColumn("amount", col("amount").cast("double"))
+)
+
+silver.writeStream \
+    .format("delta") \
+    .option("checkpointLocation", "/checkpoints/silver") \
+    .start("/data/silver/user_events")
+```
+
+**Гарантии Silver:** валидная схема, уникальные записи, корректные типы.
+
+### Gold (бизнес-агрегаты)
+
+Gold-слой -- агрегированные метрики и бизнес-таблицы, готовые для дашбордов и аналитики. Часто включает joins с dimension-таблицами.
+
+```python
+# Gold: бизнес-агрегаты
+silver = spark.read.format("delta").load("/data/silver/user_events")
+customers = spark.read.format("delta").load("/data/silver/customers")
+
+# Join + агрегация
+gold_metrics = (
+    silver
+    .join(customers, "user_id")
+    .groupBy("region", "event_type")
+    .agg(
+        count("*").alias("event_count"),
+        sum("amount").alias("total_amount"),
+        avg("amount").alias("avg_amount")
+    )
+)
+
+gold_metrics.write \
+    .format("delta") \
+    .mode("overwrite") \
+    .save("/data/gold/regional_metrics")
+```
+
+**Гарантии Gold:** бизнес-метрики, enriched data (joins с dimensions), готовые для BI-инструментов.
+
+<Callout type="note">
+**Медальонная архитектура -- не догма**
+
+В реальных проектах количество слоёв может отличаться. Некоторые команды добавляют **Platinum** (ML features) или сокращают до двух слоёв (Raw + Curated). Ключевой принцип -- **разделение ответственности**: каждый слой имеет чёткие гарантии качества данных.
+</Callout>
+
+## Что решают Lakehouse-форматы
+
+Все четыре формата (Delta Lake, Apache Iceberg, Apache Hudi, Apache Paimon) решают одну фундаментальную проблему: **ACID-транзакции поверх объектного хранилища**. Но делают это по-разному:
+
+| Формат | Архитектура | Уникальная фича | Лучший сценарий |
+|--------|-------------|-----------------|-----------------|
+| **Delta Lake** | Transaction log | UniForm (читай Delta как Iceberg) | Databricks экосистема |
+| **Apache Iceberg** | Catalog + snapshots | Partition evolution без rewrite | Мульти-движковая среда |
+| **Apache Hudi** | Timeline + base files | Incremental queries, MOR | Upsert-heavy нагрузки |
+| **Apache Paimon** | LSM-tree | Changelog streaming CDC | Streaming-first архитектура |
+
+В следующих уроках мы подробно разберём каждый формат: архитектуру, ключевые возможности, практические примеры, anti-patterns и сценарии использования.
+
+<KnowledgeCheck
+  question="Какую фундаментальную проблему Data Lake решает архитектура Lakehouse?"
+  answer="Data Lake не обеспечивает ACID-транзакции: concurrent writes могут привести к потере данных, нет контроля схемы (schema-on-read приводит к 'data swamp'), нет time travel для отката к предыдущим версиям. Lakehouse добавляет metadata layer (Delta Lake, Iceberg, Hudi, Paimon) поверх объектного хранилища, который обеспечивает ACID, schema enforcement, time travel и upsert операции."
+/>
+
+<KnowledgeCheck
+  question="Объясните разницу между Bronze, Silver и Gold слоями в медальонной архитектуре."
+  answer="Bronze -- сырые данные из источника без трансформации (append-only, для аудита и re-processing). Silver -- валидированные, дедуплицированные, типизированные данные с schema enforcement. Gold -- агрегированные бизнес-метрики, enriched через joins с dimension-таблицами, готовые для BI-дашбордов. Каждый слой имеет чёткие гарантии качества данных."
+/>
+
+## Что дальше?
+
+В следующем уроке мы глубоко разберём **Delta Lake** -- самый популярный lakehouse-формат, разработанный Databricks. Вы узнаете, как работает transaction log, time travel и новые возможности Spark 4.0: UniForm и Coordinated Commits.

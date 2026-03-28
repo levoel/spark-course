@@ -1,0 +1,197 @@
+---
+title: "Основы нативного исполнения"
+description: "Ограничения JVM, Arrow columnar как общий субстрат, Velox и DataFusion как нативные движки ускорения Spark"
+order: 1
+difficulty: "intermediate"
+estimatedTime: 18
+topics: ["Native Execution", "JVM Limitations", "Arrow", "Velox", "DataFusion", "SIMD"]
+---
+
+import { NativeExecutionPipelineDiagram } from '../../../components/diagrams/module15';
+
+# Основы нативного исполнения
+
+## Почему нативное исполнение?
+
+Apache Spark исторически работает на **JVM** (Java Virtual Machine). Это дало Spark огромную экосистему библиотек, межплатформенность и garbage collection «из коробки». Но для data engineering workloads JVM имеет фундаментальные ограничения, которые становятся критичными на масштабе.
+
+### GC pauses
+
+Garbage Collector -- главный враг предсказуемой производительности. При длительных batch jobs JVM накапливает объекты в heap, и периодически запускается **stop-the-world GC pause**. На heap размером 32-64 GB паузы могут достигать **секунд** -- за это время все executor threads заморожены.
+
+Для диагностики GC-проблем включите расширенное логирование:
+
+```properties
+# Spark executor GC diagnostics
+spark.executor.extraJavaOptions=-verbose:gc -XX:+PrintGCDetails \
+  -XX:+PrintGCDateStamps -XX:+PrintGCTimeStamps \
+  -Xloggc:/tmp/spark-gc-%p.log
+spark.executor.memory=16g
+spark.executor.memoryOverhead=4g
+
+# G1GC — рекомендуется для Spark executor heap > 8 GB
+spark.executor.extraJavaOptions=-XX:+UseG1GC \
+  -XX:InitiatingHeapOccupancyPercent=35 \
+  -XX:G1HeapRegionSize=16m
+```
+
+Tungsten (М02) частично решил проблему через off-heap memory, но значительная часть Spark internals по-прежнему аллоцирует объекты на JVM heap: catalyst tree nodes, UDF вычисления, shuffle metadata.
+
+### Memory overhead
+
+Каждый Java-объект имеет **16-байтный заголовок** (mark word + class pointer). `Integer` в Java занимает 16 байт, хотя само значение -- 4 байта. Для массива строк overhead ещё больше: каждая `String` -- объект с указателем на `char[]`, который сам -- объект.
+
+В row-oriented layout Tungsten (UnsafeRow) Spark хранит данные компактнее, но при переходе к пользовательскому коду (UDF, custom aggregators) данные конвертируются обратно в Java-объекты -- и overhead возвращается.
+
+### Serialization cost
+
+Между стадиями (stages) данные **сериализуются** для shuffle. Java serialization медленна, Kryo быстрее, но всё равно требует преобразования объектов в байты и обратно. На shuffle-heavy workloads сериализация может занимать **15-30%** общего времени.
+
+### Отсутствие SIMD
+
+Современные CPU поддерживают **SIMD** (Single Instruction, Multiple Data) -- инструкции, обрабатывающие 4-8-16 значений за один такт (AVX-256, AVX-512). Нативный C++/Rust код использует SIMD напрямую. JVM JIT-компилятор теоретически умеет автовекторизацию, но на практике это работает **непредсказуемо** -- только для простейших циклов и только с определёнными паттернами доступа к памяти.
+
+Для колоночных операций (фильтрация, агрегация, проекция) SIMD даёт **2-8x ускорение** по сравнению с скалярным кодом. Нативные движки используют это напрямую.
+
+<KnowledgeCheck>
+**Вопрос:** Tungsten в Spark 2.x уже использовал off-heap memory и code generation. Почему этого недостаточно для достижения производительности нативного кода?
+
+**Ответ:** Tungsten решил часть проблемы (off-heap storage для данных, code generation для expressions), но: (1) shuffle сериализация остаётся на JVM; (2) UDF и custom код аллоцируют объекты на heap, вызывая GC; (3) code generation через Janino даёт JVM bytecode, а не нативный код с SIMD; (4) метаданные Catalyst plan nodes живут на heap. Нативные движки (Comet, Gluten) заменяют весь execution path: от чтения данных до агрегации -- нативным кодом с explicit SIMD.
+</KnowledgeCheck>
+
+## Arrow Columnar как общий субстрат
+
+Все нативные движки, ускоряющие Spark, используют **Apache Arrow** columnar format как общий язык между JVM и нативным кодом. Подробно мы разбирали Arrow в модуле М11 (Apache Arrow: колоночный формат данных). Здесь -- ключевые моменты для контекста нативного исполнения:
+
+- **Колоночный in-memory формат**: данные одного столбца хранятся непрерывно в памяти, что идеально для SIMD-обработки и cache locality
+- **Zero-copy transfer** между JVM и нативным кодом через Arrow FFI (Foreign Function Interface) / JNI -- данные не копируются, передаётся только указатель на память
+- **Lingua franca**: и Comet (Rust/DataFusion), и Gluten (C++/Velox) работают с Arrow-совместимыми колоночными batch-ами. Результаты возвращаются в JVM через Arrow, без десериализации
+
+Пример конфигурации off-heap для Arrow-based нативного исполнения:
+
+```properties
+# Off-heap memory обязательна для всех нативных движков
+spark.memory.offHeap.enabled=true
+spark.memory.offHeap.size=8g
+
+# Arrow-based columnar operations
+spark.sql.execution.arrow.pyspark.enabled=true
+spark.sql.execution.arrow.maxRecordsPerBatch=10000
+```
+
+Это означает, что нативные движки не заменяют Spark целиком -- они заменяют **execution engine** внутри Spark, получая данные в Arrow-формате и возвращая результаты в том же формате.
+
+## Meta Velox
+
+**Velox** -- C++ библиотека для векторизованной обработки данных, созданная в Meta (Facebook). Это не standalone query engine, а **переиспользуемая execution library**, которую можно встроить в любую систему.
+
+### Архитектура
+
+- **Arrow-compatible columnar memory**: данные хранятся в колоночных vectors (Flat, Dictionary, Constant, RLE-encoded)
+- **Lazy materialization**: промежуточные результаты не материализуются полностью -- вычисляются по требованию
+- **Vectorized batch processing**: операции применяются к целым batch-ам (1024-4096 строк), а не к отдельным строкам
+- **Типы**: scalar (INT, VARCHAR, TIMESTAMP), complex (STRUCT, MAP, ARRAY), nested
+
+### Операторы
+
+Velox реализует полный набор реляционных операторов: scans, writes, projections, filtering, grouping (aggregations), ordering, shuffle/exchange, hash/merge/nested loop joins, unnest. Каждый оператор оптимизирован под SIMD и cache-friendly memory access.
+
+### Использование
+
+Velox используется в **12+ системах внутри Meta**: Presto, Spark (через Gluten), PyTorch feature engineering, внутренние ETL-инструменты. Вне Meta его используют ByteDance, Intel, Microsoft и другие. Наследие Presto execution engine делает Velox зрелым для SQL-workloads.
+
+<KnowledgeCheck>
+**Вопрос:** Velox -- это отдельный query engine или библиотека? Чем это отличие важно?
+
+**Ответ:** Velox -- это **библиотека** (execution library), а не standalone query engine. Это значит, что Velox не имеет собственного SQL-парсера, оптимизатора или storage layer. Он предоставляет только execution: получает план в виде operator tree и выполняет его. Это позволяет встраивать Velox в разные системы (Presto, Spark, PyTorch), каждая из которых предоставляет свой парсер и оптимизатор. Для Spark это идеально: Catalyst по-прежнему оптимизирует запрос, а Velox (через Gluten) только выполняет готовый физический план.
+</KnowledgeCheck>
+
+## Apache DataFusion
+
+**Apache DataFusion** -- query engine на Rust, работающий нативно поверх Apache Arrow. В отличие от Velox, DataFusion -- **полноценный query engine** с собственным SQL-парсером, оптимизатором и execution engine. Подробнее о standalone DataFusion -- в модуле М14 урок 06 (Альтернативные движки и расширения Spark).
+
+Для контекста этого модуля ключевое:
+
+- **Arrow-native**: DataFusion работает напрямую с Arrow RecordBatch -- нет преобразований между форматами
+- **Rust**: безопасность памяти без GC, предсказуемая производительность, SIMD через Rust SIMD intrinsics
+- **Версия 45.0+**: активно развивающийся Apache TLP (Top-Level Project) с растущей экосистемой
+- **Relevance to Spark**: Apache DataFusion Comet использует DataFusion как backend для нативного исполнения Spark-запросов. Это центральная тема урока L02
+
+## Spark Plugin API: как нативные движки интегрируются
+
+Оба нативных движка (Comet и Gluten) интегрируются с Spark через один и тот же механизм -- **Spark Plugin API**, введённый в Spark 3.0.
+
+### Интерфейс SparkPlugin
+
+```java
+public interface SparkPlugin {
+    DriverPlugin driverPlugin();
+    ExecutorPlugin executorPlugin();
+}
+```
+
+`driverPlugin()` работает на driver: регистрирует правила оптимизации, перехватывает физический план. `executorPlugin()` работает на executor: инициализирует нативные библиотеки, управляет памятью.
+
+### Механизм перехвата
+
+Плагин подключается через конфигурацию `spark.plugins`:
+
+```properties
+# Comet
+spark.plugins=org.apache.spark.CometPlugin
+
+# Gluten
+spark.plugins=org.apache.gluten.GlutenPlugin
+```
+
+Полный пример `spark-submit` с нативным движком:
+
+```bash
+# Comet — single-JAR deployment (Spark 3.4/3.5)
+spark-submit \
+  --jars comet-spark-spark3.5_2.12-0.12.0.jar \
+  --conf spark.plugins=org.apache.spark.CometPlugin \
+  --conf spark.comet.enabled=true \
+  --conf spark.comet.exec.enabled=true \
+  --conf spark.comet.scan.enabled=true \
+  --conf spark.memory.offHeap.enabled=true \
+  --conf spark.memory.offHeap.size=8g \
+  your_etl_app.py
+
+# Gluten + Velox — native columnar execution (Spark 3.5)
+spark-submit \
+  --jars gluten-velox-bundle-spark3.5_2.12-1.4.0.jar \
+  --conf spark.plugins=io.glutenproject.GlutenPlugin \
+  --conf spark.gluten.enabled=true \
+  --conf spark.shuffle.manager=org.apache.spark.shuffle.columnar.ColumnarShuffleManager \
+  --conf spark.memory.offHeap.enabled=true \
+  --conf spark.memory.offHeap.size=12g \
+  your_etl_app.py
+```
+
+После подключения плагин **перехватывает физический план** после Catalyst-оптимизации. Catalyst по-прежнему делает всю логическую и физическую оптимизацию (predicate pushdown, join reordering, column pruning). Плагин работает на последнем этапе -- заменяет **конкретные физические операторы** нативными эквивалентами.
+
+### Fallback: ключевая концепция
+
+Не все операторы поддерживаются нативно. Если оператор, выражение или тип данных не поддержан -- он остаётся на **JVM execution**. Это называется **fallback**. Между нативным и JVM-кодом данные конвертируются через ColumnarToRow (C2R) и RowToColumnar (R2C) -- и эта конвертация имеет overhead.
+
+Поэтому нативные движки стараются заменить **максимально длинные цепочки** операторов, чтобы минимизировать количество C2R/R2C переходов. Если в середине цепочки один оператор не поддержан -- вся цепочка может быть невыгодна для нативного исполнения.
+
+<KnowledgeCheck>
+**Вопрос:** Почему частичная замена операторов (когда нативный движок заменяет только часть плана) может быть **медленнее**, чем полная JVM-выполнение?
+
+**Ответ:** Каждый переход между нативным и JVM кодом требует конвертации данных: ColumnarToRow (C2R) на входе JVM-оператора и RowToColumnar (R2C) на выходе. Эти конвертации копируют данные и имеют O(n) overhead. Если в плане 10 операторов, и 5 из них нативные, но чередуются с JVM-операторами, получится 4-5 C2R/R2C переходов. Суммарный overhead конвертаций может превысить выигрыш от нативного исполнения. Поэтому Comet группирует consecutive операторы в `CometNativeExec`, а Gluten валидирует план целиком при планировании.
+</KnowledgeCheck>
+
+## Визуализация: Native Execution Pipeline
+
+Интерактивная диаграмма ниже показывает, как Comet и Gluten перехватывают физический план Spark и направляют поддерживаемые операторы в нативное исполнение. Переключайте режимы, чтобы увидеть разницу в архитектуре.
+
+<NativeExecutionPipelineDiagram client:load />
+
+Обратите внимание на ключевые отличия:
+- **Comet** использует Protocol Buffer для сериализации плана и DataFusion (Rust) для исполнения
+- **Gluten** использует Substrait (стандартизированный формат) и Velox (C++) или ClickHouse как backend
+- Оба движка имеют **JVM fallback** для неподдерживаемых операторов, но с разным overhead
+
+В следующих уроках мы детально разберём каждый из этих движков: архитектуру, конфигурацию, бенчмарки и production adoption.

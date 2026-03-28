@@ -1,0 +1,118 @@
+{
+  "lessonSlug": "10-lakehouse-formats/03-apache-iceberg",
+  "moduleId": "10-lakehouse-formats",
+  "_meta": {
+    "idPrefix": "spark-m10-03",
+    "description": "Use IDs: m10-03-q1, m10-03-q2, ... (4 questions on Apache Iceberg)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-03-q1",
+      "type": "multiple-choice",
+      "question": "В чём ключевое архитектурное отличие Iceberg от Delta Lake?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Iceberg хранит данные в CSV, а Delta -- в Parquet"
+        },
+        {
+          "id": "b",
+          "text": "Delta Lake быстрее Iceberg для всех типов запросов"
+        },
+        {
+          "id": "c",
+          "text": "Iceberg не поддерживает ACID-транзакции"
+        },
+        {
+          "id": "d",
+          "text": "Iceberg использует catalog-first подход (трёхуровневая metadata: Catalog -> Metadata File -> Manifest List -> Manifest Files -> Data Files), в то время как Delta использует transaction log в директории данных"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Iceberg -- catalog-first: метаданные управляются внешним каталогом (Hive Metastore, REST, Glue, Nessie), который хранит указатель на текущий snapshot. Это позволяет избежать file listing и обеспечивает быстрое чтение таблиц с тысячами партиций. Delta использует _delta_log/ в директории таблицы.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: Apache Iceberg -- catalog-first подход и трёхуровневая metadata"
+    },
+    {
+      "id": "spark-m10-03-q2",
+      "type": "multiple-choice",
+      "question": "Partition evolution -- уникальная фича Iceberg. Что она позволяет?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Изменять схему партиционирования (например, с day на hour) без rewrite существующих данных -- старые данные остаются в старых партициях, новые пишутся по новой схеме"
+        },
+        {
+          "id": "b",
+          "text": "Автоматически увеличивать число партиций при росте данных"
+        },
+        {
+          "id": "c",
+          "text": "Удалять пустые партиции автоматически"
+        },
+        {
+          "id": "d",
+          "text": "Создавать партиции по нескольким колонкам одновременно"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Partition evolution позволяет изменить partition spec без перезаписи данных. Например, таблица партиционирована по month(ts). При росте данных нужна hourly партиция. В Iceberg: ALTER TABLE SET PARTITION SPEC (hour(ts)) -- новые данные пишутся по hour, старые остаются по month. Query planner учитывает оба spec. В Delta/Hudi для этого нужен полный rewrite.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: Apache Iceberg -- partition evolution без rewrite данных"
+    },
+    {
+      "id": "spark-m10-03-q3",
+      "type": "multiple-choice",
+      "question": "Iceberg использует hidden partitioning. Что это означает для пользователя, пишущего запрос?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Партиции скрыты и не могут быть использованы для оптимизации"
+        },
+        {
+          "id": "b",
+          "text": "Пользователь пишет обычный WHERE ts > '2024-01-15', а Iceberg автоматически применяет partition pruning через трансформации (year, month, day, hour) без указания partition-колонки в запросе"
+        },
+        {
+          "id": "c",
+          "text": "Партиции создаются динамически при каждом запросе"
+        },
+        {
+          "id": "d",
+          "text": "Hidden partitioning работает только для строковых колонок"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "В Hive-style партиционировании пользователь должен знать структуру партиций и фильтровать по partition-колонке. В Iceberg hidden partitioning пользователь фильтрует по исходной колонке (ts), а Iceberg автоматически применяет partition pruning через трансформации. Это устраняет ошибки пользователей (забытый partition filter).",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 3: Apache Iceberg -- hidden partitioning и автоматический partition pruning"
+    },
+    {
+      "id": "spark-m10-03-q4",
+      "type": "multiple-choice",
+      "question": "Какое преимущество даёт Iceberg для мультидвижковых сред (Spark + Trino + Flink)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Iceberg автоматически конвертирует данные в формат каждого движка"
+        },
+        {
+          "id": "b",
+          "text": "Iceberg создаёт копию данных для каждого движка"
+        },
+        {
+          "id": "c",
+          "text": "Iceberg -- engine-agnostic формат с самой широкой поддержкой движков: одну таблицу могут читать и писать Spark, Trino, Flink, Snowflake, Dremio без конвертации"
+        },
+        {
+          "id": "d",
+          "text": "Iceberg работает только со Spark, но быстрее других форматов"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Iceberg спроектирован как engine-agnostic: формат метаданных и data files открыт и стандартизирован. Spark, Trino, Flink, Snowflake, Dremio, Presto могут читать и писать одну и ту же Iceberg-таблицу. Это самая широкая поддержка движков среди lakehouse-форматов -- ключевое конкурентное преимущество.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: Apache Iceberg -- engine-agnostic формат для мультидвижковых сред"
+    }
+  ]
+}

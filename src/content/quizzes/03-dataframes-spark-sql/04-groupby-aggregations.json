@@ -1,0 +1,152 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/04-groupby-aggregations",
+  "moduleId": "03-dataframes-spark-sql",
+  "_meta": {
+    "idPrefix": "spark-m03-04",
+    "description": "Use IDs: m03-04-q1, m03-04-q2, ... for MC/TF; m03-04-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-04-q1",
+      "type": "multiple-choice",
+      "question": "Какой метод позволяет вычислить несколько агрегатов (count, avg, max) за один проход данных через shuffle?",
+      "options": [
+        {
+          "id": "a",
+          "text": "groupBy().count(), затем отдельно groupBy().avg() -- каждый вызов оптимизируется Catalyst"
+        },
+        {
+          "id": "b",
+          "text": "groupBy().apply() с пользовательской функцией агрегации"
+        },
+        {
+          "id": "c",
+          "text": "groupBy().agg(count('*'), avg('salary'), max('salary')) -- все агрегаты вычисляются за один shuffle"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически объединяет несколько groupBy в один shuffle"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Метод agg() позволяет передать несколько агрегатных функций, которые вычисляются за один groupBy + shuffle. Два отдельных вызова groupBy().count() и groupBy().avg() создают два независимых shuffle -- вдвое больше сетевого трафика и I/O. Catalyst не может автоматически объединить разные groupBy-выражения.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-04-q2",
+      "type": "multiple-choice",
+      "question": "Чем countDistinct() отличается от count() при агрегации?",
+      "options": [
+        {
+          "id": "a",
+          "text": "countDistinct() и count() идентичны -- оба считают количество ненулевых значений"
+        },
+        {
+          "id": "b",
+          "text": "count() быстрее, потому что не требует хранения уникальных значений в памяти"
+        },
+        {
+          "id": "c",
+          "text": "countDistinct() работает только с числовыми колонками"
+        },
+        {
+          "id": "d",
+          "text": "countDistinct() считает количество уникальных значений в группе (аналог COUNT(DISTINCT col) в SQL), count() считает все строки включая дубликаты"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "count('col') считает все ненулевые значения колонки в группе (включая дубликаты). countDistinct('col') считает только уникальные ненулевые значения (аналог COUNT(DISTINCT col) в SQL). countDistinct требует больше памяти, т.к. для каждой группы нужно хранить множество уникальных значений. Для приблизительного подсчёта уникальных значений можно использовать approx_count_distinct().",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-04-q3",
+      "type": "multiple-choice",
+      "question": "DataFrame sales содержит данные: (\"Alice\", \"Q1\", 100), (\"Alice\", \"Q2\", 150), (\"Bob\", \"Q1\", 200). Что вернёт sales.groupBy('name').pivot('quarter').sum('amount')?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Две строки (Alice, Bob) с колонками name, Q1, Q2 -- значения: Alice(100, 150), Bob(200, NULL)"
+        },
+        {
+          "id": "b",
+          "text": "Три строки с колонками name, quarter, sum(amount)"
+        },
+        {
+          "id": "c",
+          "text": "Одну строку с суммой всех amount по кварталам"
+        },
+        {
+          "id": "d",
+          "text": "Ошибку, потому что pivot() не поддерживает строковые значения"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "pivot() преобразует уникальные значения колонки (Q1, Q2) в отдельные столбцы результата. Для каждой группы (Alice, Bob) вычисляется sum(amount) по каждому кварталу. Alice: Q1=100, Q2=150. Bob: Q1=200, Q2=NULL (нет данных за Q2). Результат -- кросс-табуляция, удобная для отчётов. Для оптимизации рекомендуется передавать список значений явно: pivot('quarter', ['Q1', 'Q2']).",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-04-q4",
+      "type": "multiple-choice",
+      "question": "Почему collect_list() опасен для high-cardinality групп?",
+      "options": [
+        {
+          "id": "a",
+          "text": "collect_list() медленнее count() из-за сортировки"
+        },
+        {
+          "id": "b",
+          "text": "collect_list() собирает ВСЕ значения группы в массив в памяти одного executor; для группы с миллионами значений это вызовет OutOfMemoryError"
+        },
+        {
+          "id": "c",
+          "text": "collect_list() не поддерживает строковые типы"
+        },
+        {
+          "id": "d",
+          "text": "collect_list() требует дополнительного shuffle по сравнению с count()"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "collect_list() и collect_set() собирают все значения группы в один массив в памяти executor, обрабатывающего эту группу. Если у пользователя 10 миллионов событий, массив из 10M элементов может не поместиться в память. Безопасные альтернативы: count() для подсчёта, countDistinct() для уникальных значений, approx_count_distinct() для приблизительного подсчёта. collect_list подходит только для групп с десятками-сотнями значений.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-04-code-1",
+      "type": "code-challenge",
+      "question": "Вычислите по каждому отделу: количество сотрудников, среднюю зарплату и максимальную зарплату. Используйте groupBy().agg().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import count, avg, max\n\nspark = SparkSession.builder.appName(\"groupby-demo\").getOrCreate()\n\ndf = spark.createDataFrame([\n    (\"Alice\", \"Engineering\", 75000),\n    (\"Bob\", \"Marketing\", 55000),\n    (\"Carol\", \"Engineering\", 80000),\n    (\"Dave\", \"Marketing\", 60000),\n    (\"Eve\", \"Engineering\", 70000),\n], [\"name\", \"department\", \"salary\"])\n\n# TODO: groupBy по department с agg: count, avg salary, max salary\n# result = df.groupBy(...).agg(...)\n\n# TODO: Вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import count, avg, max\n\nspark = SparkSession.builder.appName(\"groupby-demo\").getOrCreate()\n\ndf = spark.createDataFrame([\n    (\"Alice\", \"Engineering\", 75000),\n    (\"Bob\", \"Marketing\", 55000),\n    (\"Carol\", \"Engineering\", 80000),\n    (\"Dave\", \"Marketing\", 60000),\n    (\"Eve\", \"Engineering\", 70000),\n], [\"name\", \"department\", \"salary\"])\n\nresult = df.groupBy(\"department\").agg(\n    count(\"*\").alias(\"employee_count\"),\n    avg(\"salary\").alias(\"avg_salary\"),\n    max(\"salary\").alias(\"max_salary\")\n)\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Engineering присутствует",
+          "input": "",
+          "expectedOutput": "Engineering",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Marketing присутствует",
+          "input": "",
+          "expectedOutput": "Marketing",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Содержит число 3 (count Engineering)",
+          "input": "",
+          "expectedOutput": "3",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "groupBy('department').agg() вычисляет все агрегаты за один shuffle. Engineering: 3 сотрудника, средняя зарплата 75000, максимальная 80000. Marketing: 2 сотрудника, средняя 57500, максимальная 60000. alias() задаёт понятные имена колонок вместо автоматических (count(1), avg(salary)).",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

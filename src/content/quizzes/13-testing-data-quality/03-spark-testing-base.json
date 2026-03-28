@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "13-testing-data-quality/03-spark-testing-base",
+  "moduleId": "13-testing-data-quality",
+  "_meta": {
+    "idPrefix": "spark-m13-03",
+    "description": "Use IDs: m13-03-q1, m13-03-q2, ... (4 questions on DataFrameSuiteBase, SharedSparkContext)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-03-q1",
+      "type": "multiple-choice",
+      "question": "Что предоставляет библиотека spark-testing-base от Holden Karau?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Замену PySpark для тестов"
+        },
+        {
+          "id": "b",
+          "text": "Базовые классы и utilities: SharedSparkContext (pre-configured SparkContext), DataFrameSuiteBase (DataFrame assertions), RDD comparisons с float tolerance"
+        },
+        {
+          "id": "c",
+          "text": "Только Scala utilities -- Python не поддерживается"
+        },
+        {
+          "id": "d",
+          "text": "Mock-объект для SparkSession"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "spark-testing-base предоставляет: SharedSparkContext (базовый класс с готовым SparkContext), DataFrameSuiteBase (assertion utilities для DataFrame), StreamingSuiteBase (тестирование DStream -- legacy), RDD comparisons с tolerance для float. Доступна для Python (pip install spark-testing-base) и Scala.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: spark-testing-base -- основные компоненты библиотеки"
+    },
+    {
+      "id": "spark-m13-03-q2",
+      "type": "multiple-choice",
+      "question": "Когда стоит использовать spark-testing-base вместо нативного pytest + conftest.py подхода?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Всегда -- spark-testing-base лучше во всём"
+        },
+        {
+          "id": "b",
+          "text": "Только для RDD-проектов"
+        },
+        {
+          "id": "c",
+          "text": "Для legacy Scala-проектов с ScalaTest. Для новых Python-проектов pytest + conftest.py + assertDataFrameEqual (PySpark 3.5+) предпочтительнее"
+        },
+        {
+          "id": "d",
+          "text": "Никогда -- библиотека устарела"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "spark-testing-base создана до PySpark 3.5 и assertDataFrameEqual. Для Scala-проектов с ScalaTest -- DataFrameSuiteBase удобен. Для новых Python-проектов нативный подход (pytest + conftest.py + assertDataFrameEqual) проще и не требует дополнительной зависимости. spark-testing-base актуальна для legacy и Scala.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: spark-testing-base -- сравнение с нативным pytest-подходом"
+    },
+    {
+      "id": "spark-m13-03-q3",
+      "type": "multiple-choice",
+      "question": "SharedSparkContext в spark-testing-base предоставляет pre-configured SparkContext. Какой аналог этого в нативном pytest-подходе?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Аналога нет -- pytest не может создать SparkContext"
+        },
+        {
+          "id": "b",
+          "text": "Глобальная переменная spark в модуле"
+        },
+        {
+          "id": "c",
+          "text": "setUp() метод в unittest.TestCase"
+        },
+        {
+          "id": "d",
+          "text": "@pytest.fixture(scope='session') в conftest.py, возвращающий SparkSession.builder.master('local[2]').getOrCreate()"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "SharedSparkContext создаёт один SparkContext для всех тестов в suite. Аналог в pytest -- session-scoped fixture: @pytest.fixture(scope='session') def spark(): возвращает SparkSession с local[2] и оптимизированными настройками (shuffle.partitions=2, ui.enabled=false). Оба подхода решают одну задачу -- share JVM между тестами.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 3: spark-testing-base -- SharedSparkContext vs pytest fixture"
+    },
+    {
+      "id": "spark-m13-03-q4",
+      "type": "true-false",
+      "question": "DataFrameSuiteBase из spark-testing-base поддерживает сравнение DataFrame с tolerance для float-значений, чего нет в assertDataFrameEqual PySpark 3.5+.",
+      "correctAnswer": false,
+      "explanation": "False. assertDataFrameEqual в PySpark 3.5+ также поддерживает параметр rtol (relative tolerance) для сравнения float-значений. Оба инструмента предоставляют tolerance-based сравнение. Основное отличие spark-testing-base -- исторический RDD comparisons API, который менее актуален с переходом на DataFrame.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: spark-testing-base -- возможности DataFrameSuiteBase и сравнение с assertDataFrameEqual"
+    }
+  ]
+}

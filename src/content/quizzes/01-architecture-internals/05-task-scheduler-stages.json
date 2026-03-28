@@ -1,0 +1,96 @@
+{
+  "lessonSlug": "01-architecture-internals/05-task-scheduler-stages",
+  "moduleId": "01-architecture-internals",
+  "_meta": {
+    "idPrefix": "spark-m01-05",
+    "description": "Use IDs: m01-05-q1, m01-05-q2, ... for MC/TF; m01-05-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m01-05-q1",
+      "type": "multiple-choice",
+      "question": "В кластере работают 3 long-running Spark-приложения. Приложение A -- интерактивные аналитические запросы, приложения B и C -- batch ETL. Какой планировщик (FIFO vs FAIR) лучше подойдёт и почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "FIFO -- он проще в настройке и гарантирует порядок выполнения"
+        },
+        {
+          "id": "b",
+          "text": "Не имеет значения -- оба планировщика распределяют ресурсы одинаково"
+        },
+        {
+          "id": "c",
+          "text": "FIFO для batch-заданий, FAIR для интерактивных -- каждому приложению свой планировщик"
+        },
+        {
+          "id": "d",
+          "text": "FAIR -- он распределяет ресурсы между пулами, позволяя интерактивным запросам приложения A не ждать завершения batch-заданий B и C"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "FAIR Scheduler распределяет ресурсы между пулами по принципу round-robin: каждый пул получает справедливую долю ресурсов. Это позволяет интерактивным запросам (короткие jobs) выполняться параллельно с batch ETL, не ожидая его завершения. FIFO (по умолчанию) выполняет jobs строго в порядке поступления -- первый job занимает все ресурсы, пока не завершится.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-05-q2",
+      "type": "multiple-choice",
+      "question": "Spark-задача обрабатывает данные, расположенные на HDFS-ноде A. Task Scheduler может назначить её на executor на ноде A (PROCESS_LOCAL) или на свободный executor на ноде B (ANY). Параметр spark.locality.wait = 3s. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Task Scheduler подождёт до 3 секунд, пока executor на ноде A освободится; если не дождётся -- назначит на ноду B с уровнем ANY"
+        },
+        {
+          "id": "b",
+          "text": "Task сразу назначится на ноду B, потому что executor там свободен"
+        },
+        {
+          "id": "c",
+          "text": "Task Scheduler всегда выбирает ближайший executor, независимо от spark.locality.wait"
+        },
+        {
+          "id": "d",
+          "text": "Spark скопирует данные с ноды A на ноду B для достижения PROCESS_LOCAL"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "spark.locality.wait (по умолчанию 3 секунды) определяет, сколько Task Scheduler ждёт предпочтительного уровня локальности перед деградацией. Уровни локальности от лучшего к худшему: PROCESS_LOCAL (данные в том же executor) > NODE_LOCAL (на той же ноде) > RACK_LOCAL (в той же стойке) > ANY (любая нода). На каждом уровне Scheduler ждёт spark.locality.wait перед переходом к следующему.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-05-q3",
+      "type": "multiple-choice",
+      "question": "В production-кластере включена speculative execution (spark.speculation=true). Task 5 из Stage 2 выполняется на executor A уже 10 минут, тогда как median для stage -- 2 минуты. Что предпримет Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark завершит Task 5 на executor A и пометит её как failed"
+        },
+        {
+          "id": "b",
+          "text": "Spark запустит дубликат Task 5 на другом executor; результат первого завершившегося будет принят, а второй -- отменён"
+        },
+        {
+          "id": "c",
+          "text": "Spark увеличит memory executor A, предполагая нехватку ресурсов"
+        },
+        {
+          "id": "d",
+          "text": "Spark перезапустит Stage 2 целиком"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Speculative execution запускает дубликат медленной задачи на другом executor. Если straggler task вызвана проблемами конкретной ноды (перегруженный диск, GC), дубликат на здоровой ноде завершится быстрее. Spark принимает результат первого завершившегося экземпляра и убивает второй. Это не влияет на корректность -- идемпотентность задач гарантируется.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-05-q4",
+      "type": "true-false",
+      "question": "Увеличение spark.locality.wait до 30 секунд всегда улучшает производительность, потому что задачи чаще выполняются с оптимальной локальностью данных.",
+      "correctAnswer": false,
+      "explanation": "Увеличение spark.locality.wait может СНИЗИТЬ производительность. Если данные сосредоточены на нескольких нодах, executor'ы на других нодах простаивают, ожидая задачи с высокой локальностью. В итоге общее время выполнения увеличивается из-за неравномерной загрузки кластера. Оптимальное значение зависит от распределения данных и нагрузки: для равномерно распределённых данных 0-1 секунда часто лучше, чем 30.",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

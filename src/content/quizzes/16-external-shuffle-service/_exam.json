@@ -1,0 +1,282 @@
+{
+  "lessonSlug": "16-external-shuffle-service/_exam",
+  "moduleId": "16-external-shuffle-service",
+  "examTitle": "Экзамен: External Shuffle Service",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m16-exam",
+    "description": "Use IDs: m16-exam-q1, m16-exam-q2, ... (10 cross-cutting questions spanning L01-L03: shuffle fundamentals, Celeborn, Uniffle, comparison)"
+  },
+  "questions": [
+    {
+      "id": "spark-m16-exam-q1",
+      "type": "multiple-choice",
+      "question": "Data engineer управляет 500-node кластером с shuffle-heavy ETL (терабайты shuffle ежедневно) на spot instances. Текущая проблема: частые recomputation из-за потери spot instances. ESS включён, push-based shuffle включён. Какое решение оптимально?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Развернуть remote shuffle service (Celeborn или Uniffle) -- shuffle-данные хранятся на отдельном кластере с репликацией, потеря spot instance не вызывает recomputation"
+        },
+        {
+          "id": "b",
+          "text": "Перейти на on-demand instances вместо spot -- исключить потерю executor"
+        },
+        {
+          "id": "c",
+          "text": "Увеличить количество shuffle partitions для снижения размера каждого partition"
+        },
+        {
+          "id": "d",
+          "text": "Включить spark.speculation=true для дублирования медленных tasks"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "ESS и push-based shuffle не решают проблему потери node -- данные на локальных дисках. Remote shuffle service (Celeborn/Uniffle) хранит shuffle-данные на отдельном кластере с репликацией. Потеря spot instance не приводит к потере shuffle-данных -- нет recomputation. On-demand instances решат проблему, но значительно дороже.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L01: три фундаментальных ограничения, ESS не решает recomputation при потере node; L01: remote shuffle services"
+    },
+    {
+      "id": "spark-m16-exam-q2",
+      "type": "multiple-choice",
+      "question": "В production Celeborn deployment Revive mechanism срабатывает повторно для одних и тех же Worker-ов каждые 5-10 минут. Какова наиболее вероятная причина и как диагностировать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Сетевая задержка между Spark executor и Celeborn Workers -- увеличить timeout push"
+        },
+        {
+          "id": "b",
+          "text": "Worker-ы имеют failing диски: disk health checks выявляют проблемы, но данные продолжают аллоцироваться на эти Worker-ы. Проверить disk health метрики Worker-ов и изолировать failing nodes"
+        },
+        {
+          "id": "c",
+          "text": "LifecycleManager перегружен метаданными -- увеличить Driver memory"
+        },
+        {
+          "id": "d",
+          "text": "Master Raft consensus нестабилен -- перезапустить Master кластер"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Повторяющийся Revive для одних и тех же Worker-ов указывает на hardware проблемы. Celeborn имеет disk health checks, но если диски деградируют (не полностью мёртвые), данные могут продолжать аллоцироваться. Диагностика: проверить disk health метрики Worker-ов, latency записи, error rates. Решение: изолировать Worker-ы с failing дисками, заменить hardware.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L02: Revive mechanism и disk health checks -- периодический мониторинг дисков, изоляция failing дисков"
+    },
+    {
+      "id": "spark-m16-exam-q3",
+      "type": "multiple-choice",
+      "question": "Компания мигрирует с YARN на Kubernetes. Текущий стек: Spark 3.5, MapReduce legacy jobs, нет HDFS (всё в S3). Какой remote shuffle service рекомендовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Uniffle -- лучше интегрируется с Kubernetes через Coordinator heartbeat модель"
+        },
+        {
+          "id": "b",
+          "text": "Встроенный ESS -- на Kubernetes достаточно push-based shuffle"
+        },
+        {
+          "id": "c",
+          "text": "Celeborn -- поддерживает Spark 3.5 и MapReduce, хранение на SSD/HDD Workers (без зависимости от HDFS). На K8s shuffle-серверы деплоятся как StatefulSet, Master как Deployment с Raft HA"
+        },
+        {
+          "id": "d",
+          "text": "Оба подходят одинаково -- нет существенной разницы для K8s"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Celeborn: поддерживает Spark 3.5 + MapReduce (оба движка). Хранение на SSD/HDD Workers -- не зависит от HDFS (компания на S3). Uniffle оптимизирован для HDFS-centric сред (3-tier MEMORY_LOCALFILE_HDFS), при отсутствии HDFS теряет ключевое преимущество durability tier. На K8s Celeborn Workers как StatefulSet с persistent volumes.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L02: Celeborn SSD/HDD + HDFS optional; L03: Uniffle 3-tier оптимален для HDFS-centric; L03: Decision Framework"
+    },
+    {
+      "id": "spark-m16-exam-q4",
+      "type": "multiple-choice",
+      "question": "Два remote shuffle service предлагают разные storage подходы: Celeborn (SSD/HDD + optional HDFS) и Uniffle (3-tier MEMORY_LOCALFILE_HDFS). Для latency-sensitive streaming workload с sub-second requirements -- какой подход лучше?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оба одинаково подходят -- storage подход не влияет на latency"
+        },
+        {
+          "id": "b",
+          "text": "Celeborn с SSD Workers -- NVMe SSD обеспечивает предсказуемую low-latency запись и чтение. Для streaming критична предсказуемость, а не пиковая скорость memory tier"
+        },
+        {
+          "id": "c",
+          "text": "Встроенный push-based shuffle -- для streaming достаточно"
+        },
+        {
+          "id": "d",
+          "text": "Uniffle MEMORY_LOCALFILE_HDFS -- 3-tier обеспечивает memory caching для hot данных, минимизируя latency"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Для latency-sensitive workloads Uniffle memory tier даёт минимальную latency: данные буферизуются в RAM Shuffle Server перед flush на диск. Celeborn SSD-based подход предсказуем, но disk I/O всегда медленнее memory. Однако для streaming Celeborn также работает (async push, merge). Ключевой фактор: memory tier Uniffle минимизирует latency за счёт буферизации в RAM.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L03: Uniffle 3-tier -- memory для hot данных; L02: Celeborn SSD storage; L03: сравнительная таблица"
+    },
+    {
+      "id": "spark-m16-exam-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer настроил Celeborn с fallback.policy=AUTO. Логи показывают, что 60% shuffle операций fallback на встроенный shuffle. Что это означает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Celeborn кластер перегружен или имеет недостаточно ресурсов. 60% fallback означает, что Master не может назначить slots для большинства shuffle. Нужно: масштабировать Worker-ы, проверить disk capacity, проанализировать Master метрики"
+        },
+        {
+          "id": "b",
+          "text": "Это нормальное поведение AUTO policy -- Celeborn оптимизирует только крупные shuffle"
+        },
+        {
+          "id": "c",
+          "text": "Неправильная конфигурация spark.celeborn.master.endpoints -- проверить адреса"
+        },
+        {
+          "id": "d",
+          "text": "AUTO policy несовместима с текущей версией Spark"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "60% fallback -- аномалия. AUTO policy fallback на встроенный shuffle только при недоступности или перегрузке Celeborn. Высокий fallback rate указывает на: (1) недостаточно Worker-ов для нагрузки; (2) disk capacity исчерпана; (3) Master перегружен slot allocation. Диагностика: Master dashboard, Worker disk usage, slot allocation метрики. Решение: масштабировать Workers.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L02: fallback.policy=AUTO -- fallback при недоступности/перегрузке; Callout про AUTO как production рекомендацию"
+    },
+    {
+      "id": "spark-m16-exam-q6",
+      "type": "multiple-choice",
+      "question": "Data engineer включил push-based shuffle (spark.shuffle.push.enabled=true) и ESS на кластере. Executor crash всё ещё вызывает recomputation upstream stages. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Push-based shuffle несовместим с ESS -- конфликт конфигурации"
+        },
+        {
+          "id": "b",
+          "text": "Push-based shuffle push-ит данные на ESS nodes и merge-ит в файлы, но данные остаются на локальных дисках node. При потере executor ESS обслуживает данные (lifecycle coupling решён), но при потере node (crash машины) -- данные теряются. Нужен remote shuffle service"
+        },
+        {
+          "id": "c",
+          "text": "Конфигурация push-based shuffle неверна -- нужно увеличить spark.shuffle.push.maxBlockSizeToPush"
+        },
+        {
+          "id": "d",
+          "text": "Push-based shuffle ещё экспериментальный и не работает надёжно"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Push-based shuffle + ESS решает lifecycle coupling и оптимизирует I/O через merge. Но данные по-прежнему на локальных дисках node. При потере executor -- ESS обслуживает данные (ok). При потере node (crash машины, spot reclaim) -- все данные на этой node теряются, включая ESS merged файлы. Remote shuffle service хранит данные на отдельном кластере с репликацией.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите L01: ESS решает lifecycle coupling; push-based shuffle оптимизирует I/O; оба не решают recomputation при потере node"
+    },
+    {
+      "id": "spark-m16-exam-q7",
+      "type": "multiple-choice",
+      "question": "Команда имеет существующую HDFS инфраструктуру (100 nodes, 2PB), Spark 3.4, и не планирует обновление до Spark 4.x. Какая архитектура remote shuffle оптимальна?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Celeborn с HDFS storage backend -- универсальный выбор"
+        },
+        {
+          "id": "b",
+          "text": "Встроенный ESS -- HDFS и так обеспечивает durability"
+        },
+        {
+          "id": "c",
+          "text": "Uniffle с MEMORY_LOCALFILE_HDFS -- 3-tier storage нативно использует существующую HDFS для durability. Spark 3.4 поддерживается Uniffle. HDFS-centric среда -- основной use case Uniffle"
+        },
+        {
+          "id": "d",
+          "text": "Оба одинаково подходят -- HDFS доступен обоим"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Uniffle оптимален: 3-tier MEMORY_LOCALFILE_HDFS переиспользует существующую HDFS инфраструктуру для durability tier. Spark 3.4 в диапазоне поддержки (2.3--3.5). Hadoop-centric среда -- ключевой use case Uniffle. Celeborn также поддерживает HDFS, но его архитектура оптимизирована для SSD-first storage.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите L03: Decision Framework -- Hadoop-centric + HDFS + Spark 3.x = Uniffle"
+    },
+    {
+      "id": "spark-m16-exam-q8",
+      "type": "multiple-choice",
+      "question": "Сравнивая координацию: Celeborn LifecycleManager на Driver vs Uniffle client library в Driver. В чём архитектурное различие?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Celeborn не имеет клиентской части на Driver -- всё управляется Master"
+        },
+        {
+          "id": "b",
+          "text": "Нет различия -- оба используют одинаковый подход"
+        },
+        {
+          "id": "c",
+          "text": "Uniffle LifecycleManager работает на Coordinator, а Celeborn -- на Worker"
+        },
+        {
+          "id": "d",
+          "text": "Celeborn LifecycleManager -- выделенный компонент на Driver, управляющий per-application metadata (PartitionLocation маппинг, commit координация, Revive). Uniffle client library запрашивает назначение у Coordinator, но Coordinator хранит assignment state"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Celeborn LifecycleManager -- выделенный компонент на Driver: хранит PartitionLocation маппинг, координирует commit, обрабатывает Revive. Master остаётся stateless относительно applications. В Uniffle: client library на Driver запрашивает assignment у Coordinator, который выбирает Shuffle Servers на основе heartbeat метрик. Coordinator знает о текущих assignments.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите L02: LifecycleManager -- per-application metadata на Driver; L03: Coordinator heartbeat-based assignment"
+    },
+    {
+      "id": "spark-m16-exam-q9",
+      "type": "multiple-choice",
+      "question": "Кластер с 80% shuffle-heavy jobs испытывает disk I/O bottleneck на compute nodes. Dynamic allocation включён, но executor-ы держатся дольше, чем нужно. Какой путь решения наиболее эффективен?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Развернуть remote shuffle service: (1) shuffle-данные на отдельном кластере -- disk I/O compute nodes разгружается; (2) executor-ы освобождаются сразу после push -- dynamic allocation эффективнее; (3) shuffle-серверы оптимизированы для I/O (SSD, memory caching)"
+        },
+        {
+          "id": "b",
+          "text": "Увеличить количество дисков на compute nodes"
+        },
+        {
+          "id": "c",
+          "text": "Уменьшить spark.sql.shuffle.partitions для снижения количества shuffle файлов"
+        },
+        {
+          "id": "d",
+          "text": "Отключить dynamic allocation -- executor-ы не будут освобождаться и reallocate"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Remote shuffle service решает все три проблемы: (1) shuffle I/O перемещается на выделенные shuffle-серверы с SSD/memory -- compute nodes разгружаются; (2) executor освобождается сразу после push данных -- dynamic allocation работает эффективно; (3) shuffle-серверы оптимизированы для storage/I/O. Добавление дисков -- painkiller, не решение архитектурной проблемы.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L01: disaggregated shuffle -- elastic scaling, independent lifecycle, I/O оптимизация на shuffle-серверах"
+    },
+    {
+      "id": "spark-m16-exam-q10",
+      "type": "multiple-choice",
+      "question": "Команда использует Apache Gluten (M15) для ускорения execution и рассматривает добавление Celeborn для shuffle. Когда эта комбинация оправдана, а когда избыточна?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Всегда оправдана -- Gluten + Celeborn дают максимальное ускорение"
+        },
+        {
+          "id": "b",
+          "text": "Оправдана на large-scale кластерах с shuffle-heavy workloads: Gluten ускоряет execution (нативный C++), Celeborn ускоряет shuffle (remote service). Избыточна на small кластерах с moderate shuffle -- overhead развёртывания Celeborn кластера не окупится при малых объёмах shuffle"
+        },
+        {
+          "id": "c",
+          "text": "Никогда не оправдана -- Gluten ColumnarShuffleManager несовместим с Celeborn"
+        },
+        {
+          "id": "d",
+          "text": "Оправдана только на Databricks с Photon"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Gluten + Celeborn = full native stack: Gluten устраняет JVM overhead (execution), Celeborn устраняет shuffle bottleneck (I/O). Комбинация оправдана на large-scale с shuffle-heavy workloads, где оба bottleneck значимы. На small кластерах с moderate shuffle одного Gluten достаточно -- overhead развёртывания отдельного Celeborn кластера не окупится. ColumnarShuffleManager Gluten совместим с Celeborn.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L02: Celeborn + Gluten integration; L03: Decision Framework -- when built-in ESS is sufficient"
+    }
+  ]
+}

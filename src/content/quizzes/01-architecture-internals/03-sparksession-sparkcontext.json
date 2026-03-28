@@ -1,0 +1,96 @@
+{
+  "lessonSlug": "01-architecture-internals/03-sparksession-sparkcontext",
+  "moduleId": "01-architecture-internals",
+  "_meta": {
+    "idPrefix": "spark-m01-03",
+    "description": "Use IDs: m01-03-q1, m01-03-q2, ... for MC/TF; m01-03-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m01-03-q1",
+      "type": "multiple-choice",
+      "question": "Что произойдёт при вызове SparkSession.builder.getOrCreate(), если SparkSession уже существует в текущем JVM-процессе?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Создастся новый SparkSession с новым SparkContext"
+        },
+        {
+          "id": "b",
+          "text": "Вернётся существующий SparkSession без создания нового, конфигурации из builder будут проигнорированы"
+        },
+        {
+          "id": "c",
+          "text": "Возникнет исключение: нельзя создать два SparkSession"
+        },
+        {
+          "id": "d",
+          "text": "Старый SparkSession будет уничтожен и заменён новым"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Метод getOrCreate() реализует паттерн Singleton: если SparkSession уже существует, он возвращает существующий экземпляр. Важный нюанс: конфигурации, заданные через builder (например, config('spark.sql.shuffle.partitions', '100')), будут проигнорированы для уже существующей сессии. Это частый источник ошибок в notebooks, где ячейки выполняются многократно.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-03-q2",
+      "type": "multiple-choice",
+      "question": "Какова роль SparkContext внутри SparkSession?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SparkContext -- это устаревший API, который SparkSession полностью заменил"
+        },
+        {
+          "id": "b",
+          "text": "SparkContext отвечает только за чтение данных из HDFS"
+        },
+        {
+          "id": "c",
+          "text": "SparkContext управляет соединением с кластером, запускает задания и создаёт RDD; SparkSession оборачивает его, добавляя DataFrame/SQL API"
+        },
+        {
+          "id": "d",
+          "text": "SparkContext и SparkSession -- это два разных названия для одного и того же объекта"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "SparkSession, появившийся в Spark 2.0, не заменяет SparkContext, а оборачивает его. SparkContext -- это низкоуровневое соединение с кластером: он общается с Cluster Manager, создаёт RDD, запускает jobs. SparkSession добавляет поверх этого высокоуровневые API: DataFrame, Dataset, SQL, Catalog. Доступ к SparkContext внутри SparkSession: spark.sparkContext.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m01-03-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer задаёт spark.sql.shuffle.partitions=100 в SparkConf, 200 в spark-defaults.conf и 50 в runtime через spark.conf.set(). Какое значение будет использовано?",
+      "options": [
+        {
+          "id": "a",
+          "text": "100 -- SparkConf имеет наивысший приоритет"
+        },
+        {
+          "id": "b",
+          "text": "200 -- spark-defaults.conf имеет наивысший приоритет"
+        },
+        {
+          "id": "c",
+          "text": "Spark выберет наибольшее значение из трёх (200)"
+        },
+        {
+          "id": "d",
+          "text": "50 -- runtime spark.conf.set() имеет наивысший приоритет для SQL-параметров"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Приоритет конфигурации Spark (от низшего к высшему): spark-defaults.conf -> SparkConf в коде -> spark.conf.set() в runtime. Параметр spark.sql.shuffle.partitions поддерживает runtime-изменение (в отличие от некоторых core-параметров, которые фиксируются при создании SparkContext), поэтому последний вызов spark.conf.set() перезапишет предыдущие значения.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-03-q4",
+      "type": "true-false",
+      "question": "В Spark 3.x+ SQLContext и HiveContext заменены единым SparkSession, который включает все их функции.",
+      "correctAnswer": true,
+      "explanation": "Начиная со Spark 2.0, SparkSession стал единой точкой входа, объединив функциональность SQLContext (SQL-запросы, DataFrame API), HiveContext (поддержка Hive metastore, UDF) и StreamingContext (структурированные потоки). SQLContext и HiveContext сохранены для обратной совместимости, но помечены как deprecated.",
+      "bloomLevel": "conceptual"
+    }
+  ]
+}

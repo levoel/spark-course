@@ -1,0 +1,267 @@
+---
+title: "Apache Uniffle и сравнение решений"
+description: "Архитектура Uniffle (Coordinator/Shuffle Server), 3-tier storage, конфигурация Spark, и сравнительный анализ Celeborn vs Uniffle vs встроенного ESS"
+order: 3
+difficulty: "advanced"
+estimatedTime: 22
+topics: ["Uniffle", "Remote Shuffle", "Coordinator", "Shuffle Server", "HDFS", "Celeborn", "Comparison"]
+---
+
+import { UniffleClusterDiagram } from '../../../components/diagrams/module16';
+
+# Apache Uniffle и сравнение решений
+
+## Что такое Uniffle
+
+**Apache Uniffle** -- remote shuffle service, изначально разработанный в **Tencent**. Uniffle **graduated** как Apache Top-Level Project (TLP) в **феврале 2025** года. Последняя стабильная версия -- **0.9.1**.
+
+Uniffle решает те же фундаментальные проблемы shuffle, что и Celeborn (L02), но с архитектурными отличиями: другая модель координации, **3-tier storage** (Memory + Local + HDFS), и отличающаяся стратегия организации данных.
+
+## Архитектура
+
+Uniffle имеет более простую серверную архитектуру: **Coordinator** для координации и **Shuffle Server** для хранения данных. Клиентская часть встроена в Spark Driver и Executor через client library.
+
+<UniffleClusterDiagram client:visible />
+
+### Coordinator cluster
+
+Coordinator -- координатор кластера Uniffle. В отличие от Celeborn Master (Raft consensus), Coordinator работает через **heartbeat-based** модель:
+
+- Shuffle Servers регулярно отправляют **heartbeat** с текущей нагрузкой (CPU, memory, disk usage)
+- Coordinator назначает **подходящие Shuffle Servers** для нового shuffle, балансируя нагрузку на основе heartbeat-данных
+- HA обеспечивается кластером Coordinator-ов
+
+Конфигурация Coordinator:
+
+```properties
+# coordinator.conf — конфигурация Uniffle Coordinator
+rss.coordinator.quorum=coord-1:19999,coord-2:19999,coord-3:19999
+rss.coordinator.server.heartbeat.timeout=30000
+
+# Стратегия назначения Shuffle Servers
+rss.coordinator.assignment.strategy=PARTITION_BALANCE
+rss.coordinator.app.expired=60000
+
+# Мониторинг
+rss.coordinator.metrics.reporter.class=\
+  org.apache.uniffle.common.metrics.PrometheusMetricsReporter
+```
+
+### Shuffle Servers
+
+Shuffle Server -- основной рабочий компонент Uniffle:
+
+- Принимает shuffle-данные от map tasks
+- **Merge** данные для одной partition
+- Записывает **index файл** (метаданные блоков) и **data файл** (содержимое)
+- Поддерживает **3-tier storage**: Memory -> Local Disk -> HDFS
+
+Конфигурация Shuffle Server:
+
+```properties
+# server.conf — конфигурация Uniffle Shuffle Server
+rss.coordinator.quorum=coord-1:19999,coord-2:19999,coord-3:19999
+rss.storage.type=MEMORY_LOCALFILE_HDFS
+rss.storage.basePath=/data/rss/shuffle
+
+# Memory management — watermark thresholds для spill
+rss.server.buffer.capacity=16g
+rss.server.memory.shuffle.highWaterMark.percentage=75.0
+rss.server.memory.shuffle.lowWaterMark.percentage=25.0
+
+# Flush configuration
+rss.server.flush.threadPool.size=10
+rss.server.heartbeat.interval=10000
+
+# HDFS fallback storage
+rss.server.hdfs.base.path=hdfs:///rss/shuffle-data
+```
+
+Каждый Shuffle Server отчитывается Coordinator-у о своём состоянии через heartbeat, что позволяет Coordinator балансировать нагрузку и исключать unhealthy servers.
+
+<KnowledgeCheck
+  question="В чём ключевое архитектурное отличие координации в Uniffle от Celeborn?"
+  answer="Celeborn Master использует Raft consensus для HA и slot allocation -- Master явно назначает partition-locations на конкретные Worker-ы. Uniffle Coordinator использует heartbeat-based модель: Shuffle Servers отправляют heartbeat с текущей нагрузкой, и Coordinator выбирает подходящие servers на основе актуальных метрик. Оба подхода обеспечивают HA и load balancing, но через разные механизмы."
+/>
+
+## Data Flow
+
+Uniffle реализует 5-шаговый data flow:
+
+1. **Query Coordinator**: Spark Driver запрашивает у Coordinator назначение Shuffle Servers для нового shuffle. Coordinator выбирает servers на основе heartbeat-данных (нагрузка, доступное место)
+2. **Buffer and push**: Map tasks буферизуют KV-данные локально. Когда буфер заполняется, данные flush-атся в очередь и отправляются на назначенные Shuffle Servers
+3. **Cache and write**: Shuffle Server кэширует данные в **memory**, затем записывает на **local disk** и/или **HDFS** (в зависимости от storage type). Создаются **index файл** (метаданные каждого блока) и **data файл** (содержимое)
+4. **Organize by partition**: Data файл содержит блоки для конкретной partition. Index файл хранит смещения и размеры каждого блока -- это позволяет эффективно читать отдельные блоки
+5. **Read phase**: Reduce tasks запрашивают данные у Shuffle Server, remote storage (HDFS), или обоих -- в зависимости от конфигурации
+
+## Storage Backends
+
+Уникальная особенность Uniffle -- поддержка **нескольких уровней хранения** (tiered storage):
+
+| Storage Type | Описание | Сценарий использования |
+|-------------|----------|----------------------|
+| `MEMORY_LOCALFILE` | Memory + Local Disk | Development, тестирование |
+| `MEMORY_HDFS` | Memory + HDFS | Distributed persistence без локальных дисков |
+| `MEMORY_LOCALFILE_HDFS` | Memory + Local + HDFS | **Production рекомендация** (3-tier) |
+
+### 3-tier storage (рекомендация)
+
+**MEMORY_LOCALFILE_HDFS** -- рекомендованная конфигурация для production:
+
+1. Данные сначала буферизуются в **memory** Shuffle Server -- максимально быстрый доступ
+2. При заполнении memory данные flush-атся на **local disk** (SSD/HDD) -- быстрый random access
+3. Данные реплицируются в **HDFS** -- distributed durability, выживание при потере Shuffle Server
+
+Этот подход даёт лучший баланс производительности и надёжности: hot данные в memory, warm на local disk, cold в HDFS.
+
+## Конфигурация Spark
+
+### spark-submit
+
+```bash
+spark-submit \
+  --conf spark.shuffle.manager=org.apache.spark.shuffle.RssShuffleManager \
+  --conf spark.rss.coordinator.quorum=coord-1:19999,coord-2:19999 \
+  --conf spark.rss.storage.type=MEMORY_LOCALFILE_HDFS \
+  --conf spark.rss.writer.buffer.size=3m \
+  --conf spark.rss.client.read.buffer.size=14m \
+  --conf spark.rss.client.send.size.limit=16m \
+  --conf spark.rss.writer.buffer.spill.size=128m \
+  --conf spark.rss.data.replica.write=1 \
+  --conf spark.rss.data.replica.read=1 \
+  --jars rss-client-spark3-shaded.jar \
+  your_app.py
+```
+
+### Ключевые параметры
+
+| Параметр | Значение | Описание |
+|----------|----------|----------|
+| `spark.shuffle.manager` | `RssShuffleManager` | Замена стандартного shuffle manager |
+| `spark.rss.coordinator.quorum` | `host:port,...` | Адреса Coordinator кластера |
+| `spark.rss.storage.type` | `MEMORY_LOCALFILE_HDFS` | Production: 3-tier storage |
+| `spark.rss.writer.buffer.size` | `3m` | Размер буфера записи |
+| `spark.rss.client.read.buffer.size` | `14m` | Размер буфера чтения |
+| `spark.rss.client.send.size.limit` | `16m` | Максимальный размер одной отправки |
+| `spark.rss.writer.buffer.spill.size` | `128m` | Порог spill из memory на диск |
+| `spark.rss.data.replica.write` | `1` | Количество реплик при записи |
+| `spark.rss.data.replica.read` | `1` | Количество реплик при чтении |
+
+<Callout type="tip">
+**DelegationRssShuffleManager** -- адаптивный shuffle manager Uniffle. Вместо `RssShuffleManager` можно использовать `org.apache.spark.shuffle.DelegationRssShuffleManager`, который автоматически переключается между Uniffle и встроенным shuffle в зависимости от доступности Coordinator. Аналог `fallback.policy=AUTO` в Celeborn.
+</Callout>
+
+### Адаптивное подключение и Dynamic Allocation
+
+```properties
+# DelegationRssShuffleManager — автоматический fallback
+spark.shuffle.manager=org.apache.spark.shuffle.DelegationRssShuffleManager
+spark.rss.access.id=my_spark_app
+spark.rss.access.timeout.ms=10000
+
+# Dynamic Allocation с Uniffle (Spark 3.5+)
+spark.shuffle.service.enabled=false
+spark.dynamicAllocation.enabled=true
+spark.shuffle.sort.io.plugin.class=\
+  org.apache.spark.shuffle.RssShuffleDataIo
+```
+
+### Client Quorum (Fault Tolerance)
+
+```properties
+# Quorum-based replication — блоки отправляются на N серверов
+spark.rss.data.replica.write=2
+spark.rss.data.replica.read=2
+spark.rss.data.replica.skip.enabled=true
+
+# Reader может получить данные с любого из N серверов,
+# обеспечивая resilience при потере отдельного Shuffle Server
+```
+
+<KnowledgeCheck
+  question="Какую storage стратегию рекомендуют для production deployment Uniffle?"
+  answer="MEMORY_LOCALFILE_HDFS -- 3-tier storage. Данные буферизуются в памяти (максимальная скорость), записываются на локальный диск для быстрого доступа, и реплицируются в HDFS для durability. Это обеспечивает баланс производительности и надёжности: при потере Shuffle Server данные доступны в HDFS."
+/>
+
+## Поддержка версий
+
+Uniffle поддерживает Spark **2.3.x, 2.4.x, 3.0.x--3.5.x**. Также поддерживается Hadoop MapReduce 2/3.
+
+<Callout type="tip">
+**Spark 4.0 и Uniffle.** На момент написания официальная документация Uniffle перечисляет поддержку через Spark 3.5. Celeborn, в отличие от Uniffle, **явно поддерживает Spark 4.0 и 4.1**. Если вы планируете миграцию на Spark 4.x, это важный фактор при выборе remote shuffle service.
+</Callout>
+
+## Production adoption
+
+| Компания | Контекст |
+|----------|----------|
+| **Tencent** | Создатель Uniffle, EB-scale deployment |
+| **iQiyi** | Video streaming analytics |
+| **Didi** | Ride-hailing data processing |
+| **SF Express** | Logistics analytics |
+| **VIPShop** | E-commerce |
+| **Bilibili** | Video platform (использует и Celeborn, и Uniffle) |
+
+## Сравнительный анализ
+
+### Celeborn vs Uniffle vs Built-in ESS
+
+| Dimension | Celeborn | Uniffle | Built-in ESS |
+|-----------|----------|---------|--------------|
+| **Origin** | Alibaba (open-source 2021) | Tencent | Apache Spark |
+| **Apache Status** | TLP (апрель 2024) | TLP (февраль 2025) | Part of Spark |
+| **Latest Version** | 0.6.2 (декабрь 2025) | 0.9.1 | Spark version |
+| **Architecture** | Master/Worker + LifecycleManager | Coordinator/Shuffle Server | Per-node daemon |
+| **HA** | Raft-based Master HA | Coordinator cluster | Single point |
+| **Shuffle Model** | Push-based (async DataPusher) | Push-based | Pull-based (push с 3.2) |
+| **Storage** | Local disk (SSD/HDD) + HDFS | Memory + Local + HDFS (3-tier) | Local executor disk |
+| **Data Organization** | PartitionLocation with slots | Index + Data files per partition | Shuffle files on executor |
+| **Compression** | LZ4, ZSTD, none | Configurable | Spark default |
+| **Fault Tolerance** | Revive mechanism, replication | Replica write/read, multi-storage | Recomputation |
+| **Spark Versions** | 2.4--4.1 | 2.3--3.5 | All |
+| **Other Engines** | Flink 1.16--2.2, MR, Gluten | MR | N/A |
+| **Memory Consumption** | Lower (per comparison tests) | Higher | Executor memory |
+
+### Decision Framework
+
+**Когда использовать Built-in ESS:**
+- Small-to-medium кластеры (до 50 executor-ов)
+- Moderate shuffle volumes (гигабайты, не терабайты)
+- Нет бюджета на отдельный shuffle-кластер
+- Workload допускает occasional recomputation
+
+**Когда использовать Apache Celeborn:**
+- Large-scale кластеры с shuffle-heavy workloads
+- Требуется поддержка **Spark 4.0/4.1**
+- Mixed workload: **Spark + Flink** на одном shuffle-кластере
+- Интеграция с **Apache Gluten** для full native stack (М15/L03)
+- Нужен mature community и широкий набор production adopters
+
+**Когда использовать Apache Uniffle:**
+- **Hadoop-centric** environment с существующей HDFS инфраструктурой
+- **3-tier storage** критически важна (memory -> local -> HDFS)
+- Spark 2.3--3.5 (не требуется Spark 4.x)
+- Tencent ecosystem / community
+
+<KnowledgeCheck
+  question="Для кластера, работающего со Spark 4.0 и Apache Flink, и планирующего интеграцию с Apache Gluten -- какой remote shuffle service лучше подходит?"
+  answer="Apache Celeborn. Причины: (1) явная поддержка Spark 4.0 и 4.1 (Uniffle документирует поддержку до 3.5); (2) поддержка Flink 1.16--2.2 (Uniffle не поддерживает Flink); (3) совместимость с Apache Gluten для full native execution stack. Celeborn -- единственный из двух, покрывающий все три требования."
+/>
+
+## Cross-references
+
+Этот модуль (М16) связан с другими модулями курса:
+
+- **М04/L01** ([Оптимизация shuffle](/courses/spark-course/04-performance-tuning/01-shuffle-optimization)) -- основы shuffle, Exchange в physical plan, `spark.sql.shuffle.partitions`. M16 продолжает тему, разбирая ограничения встроенного shuffle
+- **М14/L06** ([Альтернативные движки и расширения Spark](/courses/spark-course/14-advanced-topics/06-alternative-engines)) -- awareness-level обзор ESS и push-based shuffle. М16 даёт полный deep-dive
+- **М15/L03** ([Apache Gluten](/courses/spark-course/15-alternative-execution-engines/03-gluten)) -- Celeborn integration с Gluten для full native stack (Velox/ClickHouse + remote shuffle)
+
+## Итоги модуля
+
+Модуль М16 «External Shuffle Service» охватил:
+
+1. **L01:** Фундаментальные ограничения встроенного shuffle (lifecycle coupling, disk I/O, recomputation), ESS и push-based shuffle, зачем нужны remote shuffle сервисы
+2. **L02:** Apache Celeborn -- Master/Worker/LifecycleManager архитектура, push-based flow, Revive fault tolerance, конфигурация, Spark 2.4--4.1 + Flink
+3. **L03:** Apache Uniffle -- Coordinator/Shuffle Server, 3-tier storage, конфигурация, и сравнительный анализ Celeborn vs Uniffle vs ESS
+
+**Ключевой вывод:** remote shuffle services -- critical infrastructure для large-scale Spark deployments. Выбор между Celeborn и Uniffle зависит от вашего stack (Spark version, Flink, Gluten), существующей инфраструктуры (HDFS), и масштаба. Для новых проектов на Spark 4.x с Flink и Gluten -- Celeborn. Для Hadoop-centric сред с 3-tier storage требованиями -- Uniffle.

@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "08-monitoring-observability/04-grafana-dashboards",
+  "moduleId": "08-monitoring-observability",
+  "_meta": {
+    "idPrefix": "spark-m08-04",
+    "description": "Use IDs: m08-04-q1, m08-04-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m08-04-q1",
+      "type": "multiple-choice",
+      "question": "Зачем нужен Grafana, если Prometheus уже собирает метрики?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Grafana заменяет Prometheus для хранения метрик"
+        },
+        {
+          "id": "b",
+          "text": "Prometheus хранит time series, но анализировать сырые PromQL -- как читать access logs глазами. Grafana визуализирует метрики в panels, графики и алерты для быстрого обнаружения проблем"
+        },
+        {
+          "id": "c",
+          "text": "Grafana ускоряет сбор метрик"
+        },
+        {
+          "id": "d",
+          "text": "Prometheus не поддерживает визуализацию"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Prometheus -- хранилище и query engine (PromQL). Grafana -- визуализация: time-series графики, gauge panels, heat maps, table panels. Production Spark dashboard: JVM heap, GC time, active tasks, shuffle bytes -- всё на одном экране. Алерты: автоматические уведомления при GC > 10%, executor down, job failed.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-04-q2",
+      "type": "multiple-choice",
+      "question": "Какие ключевые панели должен содержать production Spark Grafana dashboard?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только CPU и Memory"
+        },
+        {
+          "id": "b",
+          "text": "Только Shuffle метрики"
+        },
+        {
+          "id": "c",
+          "text": "JVM Heap Usage, GC Time/Count, Active/Completed Tasks, Shuffle Read/Write, Executor Count, Job Duration -- для комплексной диагностики"
+        },
+        {
+          "id": "d",
+          "text": "Spark UI достаточно -- Grafana не нужен"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Минимальный production dashboard: (1) JVM Heap Used/Committed -- memory pressure; (2) GC Time rate -- GC storm detection; (3) Active/Completed Tasks -- throughput и parallelism; (4) Shuffle Read/Write -- network overhead; (5) Executor Count -- cluster health; (6) Job Duration -- SLA tracking. 6-8 panels покрывают 90% production issues.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m08-04-q3",
+      "type": "multiple-choice",
+      "question": "Grafana dashboard provisioning -- что это и зачем?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Ручное создание dashboard через UI"
+        },
+        {
+          "id": "b",
+          "text": "Автоматическое обновление dashboard каждые 5 минут"
+        },
+        {
+          "id": "c",
+          "text": "Экспорт dashboard в PDF"
+        },
+        {
+          "id": "d",
+          "text": "Автоматическое развёртывание dashboards из JSON-файлов при старте Grafana: Infrastructure as Code для dashboards, воспроизводимость, version control в Git"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Dashboard provisioning: JSON-файл описывает все panels, queries (PromQL), thresholds. При старте Grafana загружает dashboard автоматически. Преимущества: (1) Infrastructure as Code -- dashboard в Git; (2) воспроизводимость -- одинаковый dashboard на dev/staging/prod; (3) version control -- rollback при необходимости.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m08-04-q4",
+      "type": "true-false",
+      "question": "Grafana может отправлять алерты (email, Slack, PagerDuty) при превышении пороговых значений метрик.",
+      "correctAnswer": true,
+      "explanation": "Верно. Grafana Alerting: (1) определяете условие (PromQL expression > threshold); (2) выбираете notification channel (email, Slack, PagerDuty, webhook); (3) Grafana периодически проверяет условие и отправляет алерт. Пример: jvm_gc_seconds_total rate > 0.1 -> Slack alert 'GC storm detected on executor X'.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m08-04-q5",
+      "type": "multiple-choice",
+      "question": "PromQL запрос для dashboard: rate(jvm_gc_collection_seconds_total[5m]). Что он показывает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Скорость роста GC time за последние 5 минут (секунд GC в секунду) -- если > 0.1, executor тратит > 10% времени на GC"
+        },
+        {
+          "id": "b",
+          "text": "Общее время GC за всё время работы приложения"
+        },
+        {
+          "id": "c",
+          "text": "Количество GC циклов за 5 минут"
+        },
+        {
+          "id": "d",
+          "text": "Средний размер heap за 5 минут"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "rate(counter[5m]) вычисляет per-second rate of increase over 5-minute window. Для GC: rate = 0.1 означает 0.1 секунды GC на каждую секунду работы = 10% времени на GC. Threshold alert: rate > 0.1 -> GC storm warning. Это ключевая метрика для обнаружения memory pressure на executors.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m08-04-code-1",
+      "type": "code-challenge",
+      "question": "Подготовьте данные для Grafana dashboard: из сырых событий (event_type, timestamp, duration_ms) создайте 5-минутные агрегации (time_bucket, event_count, avg_duration, max_duration). Рассчитайте bucket как timestamp, округлённый вниз до 300 секунд.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, avg, max as _max, round as _round, lit\n\nspark = SparkSession.builder.appName(\"grafana_buckets\").getOrCreate()\n\n# Сырые события за 15 минут (timestamps 0-900)\nevents = spark.createDataFrame([\n    (\"query\", 30, 150),  (\"query\", 60, 200),  (\"query\", 120, 180),\n    (\"query\", 250, 350),  (\"shuffle\", 280, 500),\n    (\"query\", 310, 120),  (\"shuffle\", 350, 450),  (\"query\", 400, 200),\n    (\"query\", 500, 160),  (\"shuffle\", 550, 600),\n    (\"query\", 610, 140),  (\"query\", 700, 190),  (\"shuffle\", 750, 550),\n    (\"query\", 800, 170),  (\"query\", 850, 210),\n], [\"event_type\", \"timestamp\", \"duration_ms\"])\n\nBUCKET_SIZE = 300  # 5 минут в секундах\n\n# TODO: Добавьте колонку time_bucket = (timestamp / BUCKET_SIZE).cast(\"int\") * BUCKET_SIZE\n# bucketed = events.withColumn(\"time_bucket\",\n#     (col(\"timestamp\") / BUCKET_SIZE).cast(\"int\") * BUCKET_SIZE\n# )\n\n# TODO: Агрегируйте по time_bucket: count, avg duration, max duration\n# dashboard_data = bucketed.groupBy(\"time_bucket\").agg(\n#     count(\"*\").alias(\"event_count\"),\n#     _round(avg(\"duration_ms\"), 0).alias(\"avg_duration\"),\n#     _max(\"duration_ms\").alias(\"max_duration\")\n# )\n\n# TODO: Покажите данные отсортированными по time_bucket\n# dashboard_data.orderBy(\"time_bucket\").show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, avg, max as _max, round as _round, lit\n\nspark = SparkSession.builder.appName(\"grafana_buckets\").getOrCreate()\n\nevents = spark.createDataFrame([\n    (\"query\", 30, 150),  (\"query\", 60, 200),  (\"query\", 120, 180),\n    (\"query\", 250, 350),  (\"shuffle\", 280, 500),\n    (\"query\", 310, 120),  (\"shuffle\", 350, 450),  (\"query\", 400, 200),\n    (\"query\", 500, 160),  (\"shuffle\", 550, 600),\n    (\"query\", 610, 140),  (\"query\", 700, 190),  (\"shuffle\", 750, 550),\n    (\"query\", 800, 170),  (\"query\", 850, 210),\n], [\"event_type\", \"timestamp\", \"duration_ms\"])\n\nBUCKET_SIZE = 300\n\nbucketed = events.withColumn(\"time_bucket\",\n    (col(\"timestamp\") / BUCKET_SIZE).cast(\"int\") * BUCKET_SIZE\n)\n\ndashboard_data = bucketed.groupBy(\"time_bucket\").agg(\n    count(\"*\").alias(\"event_count\"),\n    _round(avg(\"duration_ms\"), 0).alias(\"avg_duration\"),\n    _max(\"duration_ms\").alias(\"max_duration\")\n)\n\ndashboard_data.orderBy(\"time_bucket\").show()\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Bucket 0 содержит 5 событий (timestamps 0-299)",
+          "input": "",
+          "expectedOutput": "5",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит avg_duration",
+          "input": "",
+          "expectedOutput": "avg_duration",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Три временных bucket'а (0, 300, 600)",
+          "input": "",
+          "expectedOutput": "600",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Grafana визуализирует time-series данные в панелях с настраиваемым разрешением (1m, 5m, 15m, 1h). Для Spark-метрик типовая агрегация — 5-минутные bucket'ы с count, avg, max. Формула bucket: floor(timestamp / interval) * interval — универсальный паттерн для time-bucketing. В production Grafana запрашивает эти агрегации из Prometheus/InfluxDB, но паттерн подготовки данных одинаков: raw events → time-bucketed aggregations → dashboard panels.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

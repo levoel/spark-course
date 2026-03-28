@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "06-udf-performance/05-benchmark-comparison",
+  "moduleId": "06-udf-performance",
+  "_meta": {
+    "idPrefix": "spark-m06-05",
+    "description": "Use IDs: m06-05-q1, m06-05-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m06-05-q1",
+      "type": "multiple-choice",
+      "question": "Benchmark: upper() на 100M строк. Built-in: 8 сек, Scala UDF: 16 сек, Pandas UDF: 40 сек, Python UDF: 13 мин. Почему для сложных операций (regex) разрыв сокращается?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Для сложных операций доля полезной работы (~100us) растёт относительно overhead (~5us); overhead перестаёт доминировать в общем времени"
+        },
+        {
+          "id": "b",
+          "text": "Сложные операции оптимизируются Python лучше"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF ускоряет сложные операции через vectorization"
+        },
+        {
+          "id": "d",
+          "text": "Catalyst оптимизирует UDF для сложных операций"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Для simple upper(): overhead 5us, work 5ns -> overhead = 99.9%. Для complex regex: overhead 5us, work 100us -> overhead = 5%. Чем сложнее UDF, тем меньше relative impact сериализации. Python UDF для regex: ~30x (вместо 100x). Но built-in всегда быстрее, потому что нулевой overhead.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-05-q2",
+      "type": "multiple-choice",
+      "question": "Компания обрабатывает 500M строк ежедневно. Для кастомной метрики нужна pandas-библиотека. Какой тип Pandas UDF оптимален?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Scalar (Series -> Series) -- для элементных операций"
+        },
+        {
+          "id": "b",
+          "text": "Зависит: Scalar для элементных операций, Grouped Map для агрегаций по группам, Iterator для ML"
+        },
+        {
+          "id": "c",
+          "text": "Grouped Map (applyInPandas) -- для обработки каждой группы как pandas DataFrame"
+        },
+        {
+          "id": "d",
+          "text": "Обычный Python UDF с pandas import"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Выбор типа зависит от задачи: Scalar (Series -> Series) -- элементные операции (transform каждой строки). Grouped Map (applyInPandas) -- когда нужна вся группа как DataFrame (кастомные агрегации). Iterator -- ML-инференс (загрузка модели один раз). Обычный Python UDF с pandas import -- худший вариант: per-row overhead + pandas создаётся для каждой строки.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-05-q3",
+      "type": "true-false",
+      "question": "Чек-лист перед созданием UDF: (1) проверить 300+ встроенных функций, (2) попробовать when/otherwise, (3) рассмотреть higher-order functions, (4) рассмотреть SQL expression, (5) если неизбежен -- Scala > Pandas > Python UDF.",
+      "correctAnswer": true,
+      "explanation": "Верно. Этот чек-лист из 5 шагов помогает избежать ненужных UDF. 90% задач решаются шагами 1-4 (встроенные функции, when/otherwise, higher-order functions, SQL CASE WHEN). Шаг 5 -- иерархия UDF: Scala UDF (~2x) > Pandas UDF (~5x) > Python UDF (~100x). Python UDF -- ПОСЛЕДНИЙ вариант.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-05-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer создал Python UDF: @udf def add_tax(price): return price * 1.2. Какова проблема и решение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "UDF не возвращает правильный тип"
+        },
+        {
+          "id": "b",
+          "text": "Нужно использовать Pandas UDF для умножения"
+        },
+        {
+          "id": "c",
+          "text": "Простое умножение -- встроенная операция: col('price') * 1.2. Python UDF добавляет ~100x overhead для операции, которая нативно поддерживается JVM с CodeGen"
+        },
+        {
+          "id": "d",
+          "text": "UDF правильный -- арифметика не поддерживается встроенными функциями"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "col('price') * 1.2 -- арифметическая операция, нативно поддерживаемая Spark. Она участвует в Whole-Stage CodeGen и выполняется на JVM без сериализации. Python UDF для простого умножения создаёт ~100x overhead: pickle -> socket -> Python -> multiply -> pickle -> socket. На 1 миллиарде строк: 5 секунд vs 8 минут.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-05-q5",
+      "type": "multiple-choice",
+      "question": "Матрица решений: валидация ИНН (российский налоговый идентификатор). Какой подход оптимален?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python UDF -- проще написать валидацию на Python"
+        },
+        {
+          "id": "b",
+          "text": "Built-in функции: комбинация length, regexp, substr для проверки формата и контрольной суммы"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF -- батчевая обработка"
+        },
+        {
+          "id": "d",
+          "text": "Scala UDF -- сложная кастомная валидация с контрольной суммой, без Python-зависимостей, JVM-native (~2x vs ~100x)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Валидация ИНН включает проверку длины (10 или 12 цифр) и контрольной суммы -- сложная логика, не выражаемая простой комбинацией built-in. Python-библиотеки не нужны. Scala UDF: JVM-native execution (~2x overhead), type safety, no serialization. Python UDF дал бы ~100x overhead для чисто вычислительной задачи.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-05-code-1",
+      "type": "code-challenge",
+      "question": "Постройте полный пайплайн очистки данных без единого UDF: trim пробелов, lower для имён, замена пустых email через coalesce, классификация статуса через when, заполнение null в amount через fillna. Покажите очищенный результат.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, trim, lower, when, lit, coalesce\n\nspark = SparkSession.builder.appName(\"zero_udf_pipeline\").getOrCreate()\n\nraw_data = spark.createDataFrame([\n    (1, \"  Alice  \", \"alice@mail.com\", \"active\", 1500),\n    (2, \" BOB \", None, \"inactive\", None),\n    (3, \"Carol  \", \"\", \"ACTIVE\", 2000),\n    (4, \"  david\", \"david@mail.com\", None, 800),\n    (5, \" EVE  \", \"eve@mail.com\", \"Active\", None),\n], [\"id\", \"name\", \"email\", \"status\", \"amount\"])\n\n# TODO: Шаг 1 — trim + lower для name\n# step1 = raw_data.withColumn(\"name\", lower(trim(col(\"name\"))))\n\n# TODO: Шаг 2 — coalesce для email: если null или пустая строка → \"no-email@placeholder.com\"\n# step2 = step1.withColumn(\"email\", when(... , lit(\"no-email@placeholder.com\")).otherwise(col(\"email\")))\n\n# TODO: Шаг 3 — Нормализация status: lower + when для маппинга\n# \"active\"/\"ACTIVE\"/\"Active\" → \"active\", null → \"unknown\", остальные без изменений\n# step3 = step2.withColumn(\"status\", when(...).when(...).otherwise(...))\n\n# TODO: Шаг 4 — fillna для amount (значение 0)\n# result = step3.fillna({\"amount\": 0})\n\n# result.show(truncate=False)\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, trim, lower, when, lit, coalesce\n\nspark = SparkSession.builder.appName(\"zero_udf_pipeline\").getOrCreate()\n\nraw_data = spark.createDataFrame([\n    (1, \"  Alice  \", \"alice@mail.com\", \"active\", 1500),\n    (2, \" BOB \", None, \"inactive\", None),\n    (3, \"Carol  \", \"\", \"ACTIVE\", 2000),\n    (4, \"  david\", \"david@mail.com\", None, 800),\n    (5, \" EVE  \", \"eve@mail.com\", \"Active\", None),\n], [\"id\", \"name\", \"email\", \"status\", \"amount\"])\n\nstep1 = raw_data.withColumn(\"name\", lower(trim(col(\"name\"))))\n\nstep2 = step1.withColumn(\n    \"email\",\n    when((col(\"email\").isNull()) | (col(\"email\") == \"\"),\n         lit(\"no-email@placeholder.com\")\n    ).otherwise(col(\"email\"))\n)\n\nstep3 = step2.withColumn(\n    \"status\",\n    when(lower(col(\"status\")).isin(\"active\"), lit(\"active\"))\n    .when(col(\"status\").isNull(), lit(\"unknown\"))\n    .otherwise(lower(col(\"status\")))\n)\n\nresult = step3.fillna({\"amount\": 0})\n\nresult.show(truncate=False)\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Bob имеет placeholder email",
+          "input": "",
+          "expectedOutput": "no-email@placeholder.com",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Все имена в нижнем регистре (alice)",
+          "input": "",
+          "expectedOutput": "alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "David status = unknown (был null)",
+          "input": "",
+          "expectedOutput": "unknown",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Этот пайплайн из 5 шагов — типичная ETL-очистка данных, которую часто пишут через UDF. Но каждый шаг использует только встроенные функции: trim, lower, when, coalesce, fillna. Catalyst объединяет все 5 шагов в единый оптимизированный план (Project node), выполняя все трансформации за один проход по данным без сериализации. С UDF каждый withColumn создавал бы отдельный сериализационный барьер. Benchmark: для 10М строк zero-UDF пайплайн обычно в 20-50x быстрее эквивалента с Python UDF.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

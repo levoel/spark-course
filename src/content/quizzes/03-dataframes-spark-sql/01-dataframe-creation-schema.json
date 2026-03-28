@@ -1,0 +1,134 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/01-dataframe-creation-schema",
+  "moduleId": "03-dataframes-spark-sql",
+  "_meta": {
+    "idPrefix": "spark-m03-01",
+    "description": "Use IDs: m03-01-q1, m03-01-q2, ... for MC/TF; m03-01-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-01-q1",
+      "type": "multiple-choice",
+      "question": "Почему в production-пайплайнах рекомендуется использовать явную схему StructType вместо inferSchema=True?",
+      "options": [
+        {
+          "id": "a",
+          "text": "inferSchema=True вызывает двойное чтение файла, может привести к schema drift и нестабильности типов между запусками"
+        },
+        {
+          "id": "b",
+          "text": "inferSchema=True работает только с CSV, но не с Parquet"
+        },
+        {
+          "id": "c",
+          "text": "StructType позволяет Spark сжимать данные эффективнее"
+        },
+        {
+          "id": "d",
+          "text": "inferSchema=True не поддерживается в Spark 4.0"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "inferSchema=True заставляет Spark прочитать данные дважды: один раз для определения типов, второй -- для загрузки. Кроме того, типы могут меняться между запусками (например, столбец с \"123\" будет IntegerType, а с \"123.45\" -- DoubleType), что создаёт schema drift. Явная StructType гарантирует стабильные типы и отсутствие лишнего I/O.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-01-q2",
+      "type": "true-false",
+      "question": "Если вы определите 5 трансформаций (filter, select, withColumn, withColumnRenamed, drop) подряд, но не вызовете ни одного action, Spark не выполнит ни одного вычисления.",
+      "correctAnswer": true,
+      "explanation": "Это ключевое свойство Spark -- lazy evaluation. Трансформации (filter, select, withColumn и др.) только строят логический план (DAG). Вычисления запускаются исключительно при вызове action (show, collect, count, write). Благодаря этому Catalyst optimizer видит весь план целиком и может его оптимизировать.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-01-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer создаёт DataFrame из CSV-файла с 200 колонками. Далее ему нужны только 3 колонки. Какой подход наиболее эффективен для columnar-форматов (Parquet)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "df.drop() для удаления 197 ненужных колонок"
+        },
+        {
+          "id": "b",
+          "text": "df.select('col1', 'col2', 'col3') -- Catalyst применит column pruning, прочитав с диска только 3 колонки"
+        },
+        {
+          "id": "c",
+          "text": "df.filter() для фильтрации строк, затем select"
+        },
+        {
+          "id": "d",
+          "text": "Разницы нет -- Spark всегда читает все колонки"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "При работе с columnar-форматами (Parquet, ORC) Catalyst optimizer применяет column pruning -- физически читает с диска только те колонки, которые указаны в select(). Для таблицы с 200 колонками это означает чтение ~1.5% данных вместо 100%. Использование select('*') или drop() отдельных колонок менее эффективно для оптимизатора.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-01-q4",
+      "type": "multiple-choice",
+      "question": "Чем DataFrame API отличается от RDD API в контексте оптимизации?",
+      "options": [
+        {
+          "id": "a",
+          "text": "DataFrame и RDD идентичны -- разница только в синтаксисе"
+        },
+        {
+          "id": "b",
+          "text": "RDD API быстрее, потому что работает напрямую с JVM без overhead оптимизации"
+        },
+        {
+          "id": "c",
+          "text": "DataFrame проходит через Catalyst optimizer, который может переставлять операции, применять predicate pushdown и column pruning; RDD API -- чёрный ящик для оптимизатора"
+        },
+        {
+          "id": "d",
+          "text": "DataFrame API не поддерживает пользовательские функции, в отличие от RDD"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "DataFrame API построен поверх RDD, но предоставляет структурированную информацию (схему, типы колонок), которую Catalyst optimizer использует для оптимизации. Catalyst может объединять фильтры, переносить фильтрацию до join (predicate pushdown), убирать ненужные колонки (column pruning), выбирать оптимальную стратегию join. RDD API не предоставляет эту информацию оптимизатору.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-01-code-1",
+      "type": "code-challenge",
+      "question": "Создайте DataFrame с явной схемой StructType. Данные: [(1, \"Alice\", 75000), (2, \"Bob\", 55000), (3, \"Carol\", 80000)]. Схема: id (IntegerType, not null), name (StringType, nullable), salary (IntegerType, not null). Вызовите printSchema() и show().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.types import StructType, StructField, IntegerType, StringType\n\nspark = SparkSession.builder.appName(\"schema-demo\").getOrCreate()\n\ndata = [(1, \"Alice\", 75000), (2, \"Bob\", 55000), (3, \"Carol\", 80000)]\n\n# TODO: Определите схему через StructType\n# schema = StructType([...])\n\n# TODO: Создайте DataFrame с явной схемой\n# df = spark.createDataFrame(data, schema)\n\n# TODO: Вызовите printSchema() и show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.types import StructType, StructField, IntegerType, StringType\n\nspark = SparkSession.builder.appName(\"schema-demo\").getOrCreate()\n\ndata = [(1, \"Alice\", 75000), (2, \"Bob\", 55000), (3, \"Carol\", 80000)]\n\nschema = StructType([\n    StructField(\"id\", IntegerType(), nullable=False),\n    StructField(\"name\", StringType(), nullable=True),\n    StructField(\"salary\", IntegerType(), nullable=False),\n])\n\ndf = spark.createDataFrame(data, schema)\n\ndf.printSchema()\ndf.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит Alice",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Результат содержит Bob",
+          "input": "",
+          "expectedOutput": "Bob",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Схема содержит StructType",
+          "input": "",
+          "expectedOutput": "integer",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "StructType определяет схему DataFrame явно, гарантируя стабильные типы без inferSchema. StructField принимает три аргумента: имя колонки, тип данных и nullable (допускает ли NULL). printSchema() выводит дерево схемы, show() -- данные в формате ASCII-таблицы. Оба являются actions, запускающими выполнение DAG.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

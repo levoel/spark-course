@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "06-udf-performance/04-scala-udfs",
+  "moduleId": "06-udf-performance",
+  "_meta": {
+    "idPrefix": "spark-m06-04",
+    "description": "Use IDs: m06-04-q1, m06-04-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m06-04-q1",
+      "type": "multiple-choice",
+      "question": "Почему Scala UDF в ~2x медленнее встроенных функций, но без 100x overhead Python UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Scala UDF выполняется нативно на JVM (без сериализации, без socket), но не участвует в Catalyst optimization и Whole-Stage CodeGen -- overhead от boxing/unboxing типов"
+        },
+        {
+          "id": "b",
+          "text": "Scala UDF компилируется в более быстрый байткод"
+        },
+        {
+          "id": "c",
+          "text": "Scala UDF использует C-библиотеки для ускорения"
+        },
+        {
+          "id": "d",
+          "text": "Scala UDF кэшируется Catalyst для повторного использования"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Scala UDF -- JVM-нативный: нет сериализации, нет socket, нет отдельного процесса. Overhead ~2x вместо ~100x. Но Scala UDF -- чёрный ящик для Catalyst (нет predicate pushdown через UDF) и не участвует в Whole-Stage CodeGen (каждый вызов -- отдельная JVM-функция с boxing/unboxing Spark типов в Scala типы).",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-04-q2",
+      "type": "multiple-choice",
+      "question": "В каких сценариях Scala UDF предпочтительнее Pandas UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Когда нужна NumPy-обработка"
+        },
+        {
+          "id": "b",
+          "text": "Сложная бизнес-логика без Python-зависимостей или интеграция с Java-библиотекой -- JVM-native без overhead сериализации"
+        },
+        {
+          "id": "c",
+          "text": "ML-инференс с PyTorch моделями"
+        },
+        {
+          "id": "d",
+          "text": "Scala UDF всегда предпочтительнее Pandas UDF"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Scala UDF оптимален для: (1) кастомной бизнес-логики без Python-зависимостей (валидация ИНН, ОГРН); (2) интеграция с Java/Scala библиотеками (прямой JVM-доступ); (3) type-safe операции, где Scala compiler ловит ошибки. Pandas UDF лучше, когда нужна Python-библиотека (pandas, numpy, scikit-learn).",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-04-q3",
+      "type": "true-false",
+      "question": "Scala UDF, как и встроенные функции, прозрачен для Catalyst optimizer и участвует в predicate pushdown.",
+      "correctAnswer": false,
+      "explanation": "Неверно. Scala UDF, как и Python UDF, является чёрным ящиком для Catalyst. Catalyst не может: (1) заглянуть внутрь UDF для predicate pushdown; (2) объединить UDF с другими операциями в CodeGen; (3) определить, от каких столбцов зависит результат (column pruning). Единственное преимущество Scala UDF -- JVM-native execution без сериализации.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-04-q4",
+      "type": "multiple-choice",
+      "question": "Иерархия производительности UDF в Spark от быстрого к медленному:",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python UDF -> Pandas UDF -> Scala UDF -> Built-in"
+        },
+        {
+          "id": "b",
+          "text": "Built-in = Scala UDF -> Pandas UDF -> Python UDF"
+        },
+        {
+          "id": "c",
+          "text": "Built-in (1x) -> Scala UDF (~2x) -> Pandas UDF (~5x) -> Python UDF (~100x)"
+        },
+        {
+          "id": "d",
+          "text": "Все UDF одинаковы по скорости"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Иерархия: Built-in (Catalyst + CodeGen + JVM) -- 1x baseline. Scala UDF (~2x) -- JVM, но нет CodeGen. Pandas UDF (~5x) -- Arrow batch transfer. Python UDF (~100x) -- per-row pickle сериализация. Каждый уровень добавляет слой абстракции и overhead.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-04-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer из Python-команды говорит: 'Мы не знаем Scala, поэтому всегда используем Python UDF'. Что порекомендовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Изучить Scala для написания UDF"
+        },
+        {
+          "id": "b",
+          "text": "Перейти на Scala-код полностью"
+        },
+        {
+          "id": "c",
+          "text": "Python UDF приемлемы для production"
+        },
+        {
+          "id": "d",
+          "text": "Встроенные функции вызываются одинаково из PySpark и Scala -- знание Scala не нужно. 90% задач решаются built-in. Для оставшихся: Pandas UDF вместо Python UDF (5x вместо 100x overhead)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "'Мы Python-команда' -- не повод использовать Python UDF. Встроенные функции (upper, when, split, datediff) вызываются из PySpark точно так же, как из Scala. Разница не в языке вызова, а в месте выполнения: built-in на JVM, Python UDF в Python-процессе. Pandas UDF -- компромисс: Python-библиотеки с ~5x overhead вместо ~100x.",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

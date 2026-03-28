@@ -1,0 +1,138 @@
+{
+  "lessonSlug": "11-arrow-module/04-spark-connect-arrow",
+  "moduleId": "11-arrow-module",
+  "_meta": {
+    "idPrefix": "spark-m11-04",
+    "description": "Use IDs: m11-04-q1, m11-04-q2, ... (4 questions on Spark Connect and Arrow)"
+  },
+  "questions": [
+    {
+      "id": "spark-m11-04-q1",
+      "type": "multiple-choice",
+      "question": "До Spark Connect каждый PySpark-скрипт запускал JVM на машине пользователя. Какие проблемы это создавало?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Медленный запуск скрипта из-за JVM warm-up"
+        },
+        {
+          "id": "b",
+          "text": "Только проблема с IDE-интеграцией"
+        },
+        {
+          "id": "c",
+          "text": "Невозможность использовать Python-библиотеки"
+        },
+        {
+          "id": "d",
+          "text": "JVM на ноутбуке (4-8 ГБ RAM), версионная привязка PySpark к кластеру, Py4J bottleneck на каждом DataFrame API вызове, OOM driver убивает кластер"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Тяжёлый клиент (JVM на каждом клиенте): 4-8 ГБ RAM только для driver, версия PySpark = версия кластера, Py4J socket между Python и JVM на каждый вызов, OOM driver'а может нарушить работу кластера. Spark Connect решает все: лёгкий Python-клиент -> Arrow Flight -> Spark Server.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 4: Spark Connect и Arrow -- проблемы тяжёлого JVM-клиента"
+    },
+    {
+      "id": "spark-m11-04-q2",
+      "type": "multiple-choice",
+      "question": "Spark Connect использует Arrow Flight для обмена данными. Какую роль играет Arrow Flight в архитектуре Connect?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Arrow Flight -- транспортный слой: клиент отправляет план запроса (protobuf), сервер выполняет и возвращает результат как Arrow RecordBatch stream через gRPC -- лёгкий клиент без JVM"
+        },
+        {
+          "id": "b",
+          "text": "Arrow Flight заменяет SQL-парсер в Spark"
+        },
+        {
+          "id": "c",
+          "text": "Arrow Flight кэширует результаты запросов"
+        },
+        {
+          "id": "d",
+          "text": "Arrow Flight не используется в Spark Connect"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Spark Connect архитектура: Client (Python, ~10 МБ) -> Arrow Flight (gRPC) -> Spark Server (JVM + executors). Клиент отправляет план запроса в protobuf формате. Сервер выполняет на кластере и стримит результат как Arrow RecordBatch. Нет JVM на клиенте, нет Py4J, нет версионной привязки.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Spark Connect и Arrow -- роль Arrow Flight как транспортного слоя"
+    },
+    {
+      "id": "spark-m11-04-q3",
+      "type": "multiple-choice",
+      "question": "Spark Connect обеспечивает 'lightweight client'. Что это означает для deployment?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Клиент работает только в Databricks"
+        },
+        {
+          "id": "b",
+          "text": "Python-клиент (~10 МБ, pip install pyspark[connect]) без JVM: работает в Jupyter, VS Code, CI/CD, мобильных устройствах. Нет зависимости от версии кластера -- клиент общается через стабильный gRPC API"
+        },
+        {
+          "id": "c",
+          "text": "Клиент не поддерживает DataFrame API"
+        },
+        {
+          "id": "d",
+          "text": "Клиент требует Docker для запуска"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Lightweight client: pip install pyspark[connect] устанавливает ~10 МБ Python-пакет (без JVM). Клиент использует тот же DataFrame API, но вместо Py4J вызовов отправляет protobuf-планы через gRPC. Работает в любой среде с Python: Jupyter, VS Code, CI/CD. Версия клиента не привязана к версии кластера.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Spark Connect и Arrow -- lightweight client без JVM"
+    },
+    {
+      "id": "spark-m11-04-q4",
+      "type": "true-false",
+      "question": "Spark Connect позволяет нескольким клиентам использовать один Spark-кластер одновременно, изолируя их сессии.",
+      "correctAnswer": true,
+      "explanation": "Spark Connect server -- multi-tenant: несколько клиентов подключаются к одному серверу через gRPC, каждый получает изолированную SparkSession. В отличие от традиционного PySpark (один driver = один кластер), Connect позволяет shared server с изоляцией. OOM одного клиента не убивает сервер -- изоляция через session boundaries.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 4: Spark Connect и Arrow -- multi-tenant изоляция сессий"
+    },
+    {
+      "id": "spark-m11-04-code-1",
+      "type": "code-challenge",
+      "question": "Симуляция schema validation и type coercion: создайте DataFrame с 'грязными' данными (строки вместо чисел), затем постройте pipeline валидации — проверьте типы, приведите строковые значения к числовым через cast, отфильтруйте невалидные строки (null после cast). Это демонстрирует, что делает Arrow на границе сериализации.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when\n\nspark = SparkSession.builder.appName(\"schema-validation\").getOrCreate()\n\n# Данные с разными типами в 'value' колонке\nraw_data = spark.createDataFrame([\n    (1, \"sensor_a\", \"42.5\"),\n    (2, \"sensor_b\", \"not_a_number\"),\n    (3, \"sensor_a\", \"38.1\"),\n    (4, \"sensor_c\", \"55.0\"),\n    (5, \"sensor_b\", \"null_value\"),\n    (6, \"sensor_c\", \"61.2\"),\n], [\"id\", \"sensor\", \"value_str\"])\n\n# TODO: Приведите value_str к double через cast\n# coerced = raw_data.withColumn(\"value\", col(\"value_str\").cast(\"double\"))\n\n# TODO: Добавьте колонку is_valid (true если value не null)\n# validated = coerced.withColumn(\"is_valid\", col(\"value\").isNotNull())\n\n# TODO: Отфильтруйте только валидные строки\n# valid_only = validated.filter(...)\n\n# TODO: Выведите validated (все строки с флагом) и valid_only\nprint(\"=== ALL WITH VALIDATION ===\")\n# validated.show()\nprint(\"=== VALID ONLY ===\")\n# valid_only.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when\n\nspark = SparkSession.builder.appName(\"schema-validation\").getOrCreate()\n\nraw_data = spark.createDataFrame([\n    (1, \"sensor_a\", \"42.5\"),\n    (2, \"sensor_b\", \"not_a_number\"),\n    (3, \"sensor_a\", \"38.1\"),\n    (4, \"sensor_c\", \"55.0\"),\n    (5, \"sensor_b\", \"null_value\"),\n    (6, \"sensor_c\", \"61.2\"),\n], [\"id\", \"sensor\", \"value_str\"])\n\ncoerced = raw_data.withColumn(\"value\", col(\"value_str\").cast(\"double\"))\n\nvalidated = coerced.withColumn(\"is_valid\", col(\"value\").isNotNull())\n\nvalid_only = validated.filter(col(\"is_valid\") == True)\n\nprint(\"=== ALL WITH VALIDATION ===\")\nvalidated.show()\nprint(\"=== VALID ONLY ===\")\nvalid_only.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "sensor_a с value 42.5 валиден",
+          "input": "",
+          "expectedOutput": "42.5",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "not_a_number помечен как невалидный",
+          "input": "",
+          "expectedOutput": "is_valid",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "4 валидных записи в результате",
+          "input": "",
+          "expectedOutput": "VALID ONLY",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Arrow на границе JVM↔Python обеспечивает строгую типизацию: каждая колонка имеет фиксированный тип. При несовпадении типов Arrow выполняет coercion (приведение) или отбрасывает невалидные значения. В нашей симуляции cast('double') приводит строки к числам: '42.5'→42.5 (OK), 'not_a_number'→null (невалиден), '38.1'→38.1 (OK). Из 6 строк 4 прошли валидацию — 2 отброшены как несовместимые с целевой схемой.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

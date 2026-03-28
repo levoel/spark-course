@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "10-lakehouse-formats/07-sdp-introduction",
+  "moduleId": "10-lakehouse-formats",
+  "_meta": {
+    "idPrefix": "spark-m10-07",
+    "description": "Use IDs: m10-07-q1, m10-07-q2, ... (4 questions on SDP)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-07-q1",
+      "type": "multiple-choice",
+      "question": "Что такое Spark Declarative Pipelines (SDP) и какой декоратор создаёт таблицу, которая полностью пересчитывается при каждом запуске?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SDP -- SQL-движок; @dp.table создаёт таблицу с полным пересчётом"
+        },
+        {
+          "id": "b",
+          "text": "SDP -- декларативный ETL-фреймворк в Spark 4.1+; @dp.materialized_view создаёт таблицу с полным пересчётом, @dp.table -- с инкрементальной обработкой"
+        },
+        {
+          "id": "c",
+          "text": "SDP -- open-source версия Databricks DLT для Spark 4.1+; @dp.table создаёт append-only таблицу, @dp.materialized_view -- полный пересчёт"
+        },
+        {
+          "id": "d",
+          "text": "SDP -- инструмент для миграции между lakehouse-форматами"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "SDP (открытая версия Databricks DLT) доступна в Spark 4.1+. @dp.table -- append-only streaming table с инкрементальной обработкой. @dp.materialized_view -- таблица, которая полностью пересчитывается при каждом запуске pipeline. Разработчик описывает таблицы и зависимости декларативно, а Spark управляет порядком выполнения.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 7: Введение в SDP -- декораторы @dp.table и @dp.materialized_view"
+    },
+    {
+      "id": "spark-m10-07-q2",
+      "type": "multiple-choice",
+      "question": "Какой import используется для SDP в Spark 4.1? (Это частая ловушка!)",
+      "options": [
+        {
+          "id": "a",
+          "text": "import dlt"
+        },
+        {
+          "id": "b",
+          "text": "from databricks import dlt"
+        },
+        {
+          "id": "c",
+          "text": "from pyspark.sql import dlt"
+        },
+        {
+          "id": "d",
+          "text": "from pyspark import pipelines as dp"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "В Spark 4.1 SDP импортируется как from pyspark import pipelines as dp (НЕ import dlt). Это открытый API, не Databricks-специфичный. Ошибка import dlt работает только в Databricks-окружении (Delta Live Tables), а не в open-source Spark.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 7: Введение в SDP -- правильный import для Spark 4.1"
+    },
+    {
+      "id": "spark-m10-07-q3",
+      "type": "multiple-choice",
+      "question": "Какое преимущество декларативного подхода SDP перед императивным readStream -> transform -> writeStream?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SDP автоматически определяет порядок выполнения через dependency resolution, управляет инкрементальной обработкой и применяет data quality expectations -- разработчик описывает ЧТО, а не КАК"
+        },
+        {
+          "id": "b",
+          "text": "Декларативный подход быстрее по throughput"
+        },
+        {
+          "id": "c",
+          "text": "SDP не требует SparkSession"
+        },
+        {
+          "id": "d",
+          "text": "SDP работает только с Delta Lake, что упрощает конфигурацию"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Императивный подход требует явного управления: порядок запуска, checkpoint management, error handling, incremental logic. SDP: разработчик декларирует таблицы (ЧТО хочет получить) и зависимости, а Spark автоматически определяет порядок (dependency graph), управляет инкрементальностью и применяет expectations (data quality rules).",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 7: Введение в SDP -- декларативный vs императивный подход"
+    },
+    {
+      "id": "spark-m10-07-q4",
+      "type": "true-false",
+      "question": "SDP доступна в Spark 4.0 и выше.",
+      "correctAnswer": false,
+      "explanation": "SDP (Spark Declarative Pipelines) доступна только начиная со Spark 4.1 (декабрь 2025). Код SDP не будет работать на Spark 4.0 и ниже. Это важное ограничение для production-систем, которые ещё не обновились до 4.1.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 7: Введение в SDP -- требование Spark 4.1+"
+    }
+  ]
+}

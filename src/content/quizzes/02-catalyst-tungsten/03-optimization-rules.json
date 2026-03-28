@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "02-catalyst-tungsten/03-optimization-rules",
+  "moduleId": "02-catalyst-tungsten",
+  "_meta": {
+    "idPrefix": "spark-m02-03",
+    "description": "Use IDs: m02-03-q1, m02-03-q2, ... for MC/TF; m02-03-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m02-03-q1",
+      "type": "multiple-choice",
+      "question": "Дан запрос:\n\nSELECT name, dept_name\nFROM employees e\nJOIN departments d ON e.dept_id = d.dept_id\nWHERE e.age > 30\n\nКакую оптимизацию применит Predicate Pushdown?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Перенесёт условие age > 30 после JOIN для обработки меньшего объёма данных"
+        },
+        {
+          "id": "b",
+          "text": "Перенесёт фильтр на таблицу departments, потому что она меньше"
+        },
+        {
+          "id": "c",
+          "text": "Удалит фильтр age > 30, если он не влияет на результат JOIN"
+        },
+        {
+          "id": "d",
+          "text": "Перенесёт фильтр age > 30 ДО JOIN, чтобы сначала отфильтровать employees и joinить только подходящие строки"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Predicate Pushdown перемещает фильтры как можно ближе к источнику данных. Фильтр age > 30 относится к таблице employees, поэтому он сдвигается до JOIN-операции. Если из 10 миллионов строк employees только 3 миллиона удовлетворяют условию, JOIN обработает в 3 раза меньше данных. Для Parquet-источников pushdown идёт ещё глубже: целые row groups пропускаются через min/max statistics.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-03-q2",
+      "type": "multiple-choice",
+      "question": "Запрос SELECT name FROM employees WHERE price > 100 * 1.2 использует три правила оптимизации Catalyst. Какие?",
+      "options": [
+        {
+          "id": "a",
+          "text": "PushDownPredicate, ColumnPruning, ConstantFolding"
+        },
+        {
+          "id": "b",
+          "text": "BooleanSimplification, JoinReorder, PushDownPredicate"
+        },
+        {
+          "id": "c",
+          "text": "ConstantFolding, JoinReorder, ColumnPruning"
+        },
+        {
+          "id": "d",
+          "text": "PushDownPredicate, BooleanSimplification, ConstantFolding"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Три правила: (1) ConstantFolding -- выражение 100 * 1.2 вычисляется в 120.0 на этапе планирования, а не для каждой строки; (2) ColumnPruning -- из таблицы employees читаются только колонки name и price (не все); (3) PushDownPredicate -- фильтр price > 120.0 сдвигается к источнику данных. JoinReorder и BooleanSimplification здесь не применимы: нет JOIN и нет сложных логических выражений.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-03-q3",
+      "type": "multiple-choice",
+      "question": "Когда Cost-Based Optimization (CBO) помогает больше, чем Rule-Based Optimization (RBO)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "CBO всегда лучше RBO -- он заменяет RBO в Spark 3.x"
+        },
+        {
+          "id": "b",
+          "text": "CBO помогает при выборе порядка JOIN-операций для нескольких таблиц, когда статистики (размер, число строк, кардинальность) доступны через ANALYZE TABLE"
+        },
+        {
+          "id": "c",
+          "text": "CBO помогает только для Hive-таблиц"
+        },
+        {
+          "id": "d",
+          "text": "CBO полезен для простых фильтров, но не для JOIN"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "CBO принимает решения на основе статистик: размер таблиц, количество строк, распределение значений (кардинальность). Главный use case -- порядок JOIN: если A (1 ТБ) JOIN B (10 МБ) JOIN C (100 ГБ), CBO определит, что B нужно broadcast-joinить первым. Без ANALYZE TABLE статистики недоступны, и CBO не работает. RBO применяется всегда и не зависит от статистик.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-03-q4",
+      "type": "multiple-choice",
+      "question": "Почему ColumnPruning особенно эффективен для колоночных форматов (Parquet, ORC), но менее заметен для CSV?",
+      "options": [
+        {
+          "id": "a",
+          "text": "CSV не поддерживает ColumnPruning"
+        },
+        {
+          "id": "b",
+          "text": "ColumnPruning работает одинаково для всех форматов"
+        },
+        {
+          "id": "c",
+          "text": "Parquet и ORC хранят данные по колонкам -- ColumnPruning позволяет физически не читать ненужные колонки с диска; CSV хранит строки целиком, поэтому все колонки читаются в любом случае"
+        },
+        {
+          "id": "d",
+          "text": "Parquet автоматически применяет ColumnPruning без Catalyst"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "В колоночных форматах (Parquet, ORC) данные хранятся по колонкам в отдельных блоках. Если запросу нужны только 3 из 50 колонок, Spark физически прочитает только 3 блока -- экономия до 94% I/O. В CSV все колонки хранятся вместе в каждой строке, поэтому нужно прочитать всю строку, даже если нужна одна колонка. ColumnPruning в Catalyst всё равно отбросит ненужные колонки после парсинга CSV, но экономия I/O минимальна.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-03-q5",
+      "type": "true-false",
+      "question": "Optimizer может изменить семантику запроса (результат выполнения), если это значительно улучшает производительность.",
+      "correctAnswer": false,
+      "explanation": "Фундаментальное правило Catalyst Optimizer: оптимизация НИКОГДА не меняет семантику запроса. Результат оптимизированного плана всегда идентичен результату неоптимизированного. Predicate pushdown, column pruning, constant folding -- все эти правила сохраняют семантику. Если оптимизация могла бы изменить результат (например, при наличии side effects), Catalyst не применяет её.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m02-03-code-1",
+      "type": "code-challenge",
+      "question": "Проверьте Predicate Pushdown: напишите два варианта одного запроса. Вариант 1: filter ПЕРЕД join. Вариант 2: filter ПОСЛЕ join. Оба должны дать одинаковый результат, потому что Catalyst автоматически сдвигает предикаты к источнику данных. Вызовите show() на обоих результатах и collect() для сравнения.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"predicate-pushdown\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(1, \"Alice\", 120000, 10), (2, \"Bob\", 85000, 20),\n     (3, \"Carol\", 150000, 10), (4, \"Dave\", 95000, 20)],\n    [\"id\", \"name\", \"salary\", \"dept_id\"]\n)\n\ndepartments = spark.createDataFrame(\n    [(10, \"Engineering\"), (20, \"Marketing\")],\n    [\"dept_id\", \"dept_name\"]\n)\n\n# Вариант 1: filter ПЕРЕД join\n# TODO: Отфильтруйте salary > 100000, затем join с departments\n# filtered_first = employees.filter(...)\n# result1 = filtered_first.join(...).select(\"name\", \"dept_name\", \"salary\")\n\n# Вариант 2: filter ПОСЛЕ join\n# TODO: Сначала join, затем filter salary > 100000\n# joined_first = employees.join(...)\n# result2 = joined_first.filter(...).select(\"name\", \"dept_name\", \"salary\")\n\nprint(\"=== Вариант 1: filter перед join ===\")\n# result1.show()\n\nprint(\"=== Вариант 2: filter после join ===\")\n# result2.show()\n\n# Проверка: оба результата одинаковы\n# print(f\"Результаты идентичны: {result1.collect() == result2.collect()}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"predicate-pushdown\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(1, \"Alice\", 120000, 10), (2, \"Bob\", 85000, 20),\n     (3, \"Carol\", 150000, 10), (4, \"Dave\", 95000, 20)],\n    [\"id\", \"name\", \"salary\", \"dept_id\"]\n)\n\ndepartments = spark.createDataFrame(\n    [(10, \"Engineering\"), (20, \"Marketing\")],\n    [\"dept_id\", \"dept_name\"]\n)\n\nfiltered_first = employees.filter(employees[\"salary\"] > 100000)\nresult1 = filtered_first.join(departments, \"dept_id\").select(\"name\", \"dept_name\", \"salary\")\n\njoined_first = employees.join(departments, \"dept_id\")\nresult2 = joined_first.filter(joined_first[\"salary\"] > 100000).select(\"name\", \"dept_name\", \"salary\")\n\nprint(\"=== Вариант 1: filter перед join ===\")\nresult1.show()\n\nprint(\"=== Вариант 2: filter после join ===\")\nresult2.show()\n\nprint(f\"Результаты идентичны: {result1.collect() == result2.collect()}\")",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Оба варианта содержат Alice",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Результаты идентичны",
+          "input": "",
+          "expectedOutput": "идентичны: True",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Код содержит filter",
+          "input": "",
+          "expectedOutput": "filter",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Predicate Pushdown -- ключевое правило Catalyst Optimizer. Независимо от того, где вы написали filter (до или после JOIN), Catalyst автоматически сдвигает предикат salary > 100000 к таблице employees (до JOIN). Это сокращает объём данных, проходящих через shuffle при JOIN. Оба варианта дают идентичный результат и одинаковый оптимизированный Physical Plan. Для Parquet pushdown идёт ещё глубже: row groups пропускаются через min/max statistics.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

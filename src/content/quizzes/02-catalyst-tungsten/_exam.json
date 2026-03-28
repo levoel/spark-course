@@ -1,0 +1,363 @@
+{
+  "lessonSlug": "02-catalyst-tungsten/_exam",
+  "moduleId": "02-catalyst-tungsten",
+  "examTitle": "Экзамен: Catalyst и Tungsten",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m02-exam",
+    "description": "Use IDs: m02-exam-q1, m02-exam-q2, ... (12-15 analytical questions)"
+  },
+  "questions": [
+    {
+      "id": "spark-m02-exam-q1",
+      "type": "multiple-choice",
+      "question": "Data engineer вызывает explain(True) для запроса:\n\nSELECT e.name FROM employees e JOIN departments d ON e.dept_id = d.dept_id WHERE e.age > 30\n\nВ Optimized Logical Plan фильтр age > 30 стоит ДО JOIN, а в Parsed Plan -- ПОСЛЕ. Какое правило Catalyst это сделало и почему это критически важно?",
+      "options": [
+        {
+          "id": "a",
+          "text": "ConstantFolding вычислил фильтр заранее"
+        },
+        {
+          "id": "b",
+          "text": "SparkPlanner выбрал порядок операций для минимизации stages"
+        },
+        {
+          "id": "c",
+          "text": "Analyzer определил, что фильтр относится к employees и переместил его"
+        },
+        {
+          "id": "d",
+          "text": "PushDownPredicate переместил фильтр до JOIN, чтобы уменьшить объём данных, участвующих в дорогой shuffle-операции join; для таблицы employees с 10М строк и 30% подходящих это снижает объём shuffle с 10М до 3М строк"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "PushDownPredicate -- одно из самых импактных правил Catalyst Optimizer. В Parsed Plan фильтр стоит там, где написал пользователь (после JOIN). Optimizer распознаёт, что age > 30 относится только к employees, и перемещает фильтр до JOIN. Это критично: JOIN -- wide dependency (shuffle), и уменьшение объёма данных до shuffle экономит сетевой I/O, CPU и memory. Для Parquet pushdown идёт ещё глубже -- в PushedFilters на уровне FileScan.",
+      "studyHint": "Повторите урок 3: Правила оптимизации -- PushDownPredicate и его impact на JOIN",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-exam-q2",
+      "type": "multiple-choice",
+      "question": "В Physical Plan запроса вы видите:\n\n*(2) HashAggregate\n+- Exchange hashpartitioning\n   +- *(1) HashAggregate\n      +- *(1) FileScan parquet\n\nЧто означают *(1) и *(2), и почему между ними стоит Exchange без звёздочки?",
+      "options": [
+        {
+          "id": "a",
+          "text": "*(1) и *(2) -- два Whole-Stage CodeGen pipeline; Exchange (shuffle) разрывает CodeGen, потому что данные материализуются на диск и передаются по сети между executors"
+        },
+        {
+          "id": "b",
+          "text": "*(1) и *(2) -- номера executors; Exchange -- передача данных между ними"
+        },
+        {
+          "id": "c",
+          "text": "*(1) -- pre-aggregate, *(2) -- final aggregate; Exchange -- broadcast маленькой таблицы"
+        },
+        {
+          "id": "d",
+          "text": "Числа обозначают приоритет выполнения; Exchange выполняется последним"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Звёздочка (*) и число в скобках -- индикатор Whole-Stage CodeGen pipeline. *(1) объединяет FileScan + partial HashAggregate в один сгенерированный Java-метод (pre-shuffle aggregation). Exchange (shuffle) материализует данные: запись на диск, передача по сети, чтение на других executors. Это физический барьер для CodeGen. *(2) -- отдельный pipeline для final HashAggregate на post-shuffle данных. Exchange стоит без *, потому что shuffle не поддерживает CodeGen fusion.",
+      "studyHint": "Повторите урок 6: Whole-Stage CodeGen -- shuffle boundary и explain() нотация",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-exam-q3",
+      "type": "multiple-choice",
+      "question": "Запрос joinит таблицу orders (500 ГБ) с таблицей products (15 МБ). spark.sql.autoBroadcastJoinThreshold=10MB. В explain() вы видите SortMergeJoin вместо ожидаемого BroadcastHashJoin. Какие два способа заставить Spark использовать BroadcastHashJoin?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить executor memory и уменьшить число партиций"
+        },
+        {
+          "id": "b",
+          "text": "(1) Увеличить порог: spark.conf.set('spark.sql.autoBroadcastJoinThreshold', 20*1024*1024); (2) Использовать hint: orders.join(broadcast(products), 'product_id')"
+        },
+        {
+          "id": "c",
+          "text": "Перезапустить SparkSession с новой конфигурацией и пересоздать DataFrame"
+        },
+        {
+          "id": "d",
+          "text": "Преобразовать products в RDD и использовать join на RDD level"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Products (15 МБ) > порог (10 МБ), поэтому SparkPlanner выбрал SortMergeJoin. Два решения: (1) увеличить spark.sql.autoBroadcastJoinThreshold до значения > 15 МБ -- это runtime-параметр, изменяемый через spark.conf.set(); (2) использовать broadcast() hint, который принудительно переключает на BroadcastHashJoin независимо от порога. Hint имеет приоритет над автоматическим выбором SparkPlanner.",
+      "studyHint": "Повторите урок 4: Физический план -- BroadcastHashJoin vs SortMergeJoin и autoBroadcastJoinThreshold",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-exam-q4",
+      "type": "multiple-choice",
+      "question": "Production-кластер обрабатывает 5 ТБ данных. После включения off-heap памяти (spark.memory.offHeap.enabled=true, size=4g) GC паузы снизились с 30 секунд до 2 секунд. Почему off-heap так сильно повлиял на GC?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Off-heap увеличил общий объём доступной памяти"
+        },
+        {
+          "id": "b",
+          "text": "Off-heap использует более быструю RAM"
+        },
+        {
+          "id": "c",
+          "text": "Off-heap хранит UnsafeRow данные вне JVM heap через sun.misc.Unsafe; GC не отслеживает off-heap объекты, поэтому сканирует значительно меньший heap, что сокращает GC паузы пропорционально объёму вынесенных данных"
+        },
+        {
+          "id": "d",
+          "text": "Off-heap автоматически дефрагментирует память"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "JVM GC (особенно Full GC) сканирует весь heap для определения живых объектов. При 8 ГБ heap, заполненном UnsafeRow данными, GC сканирует миллиарды байтов. С off-heap: данные Spark выделяются через Unsafe.allocateMemory() вне heap. GC видит значительно меньший heap (UDF объекты, метаданные), что пропорционально сокращает время сканирования. 4 ГБ off-heap = на 4 ГБ меньше для GC. Это объясняет снижение пауз с 30 до 2 секунд.",
+      "studyHint": "Повторите урок 5: Tungsten Memory -- off-heap vs on-heap и sun.misc.Unsafe",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-exam-q5",
+      "type": "multiple-choice",
+      "question": "Дан сложный запрос с тремя JOIN и агрегацией. Data engineer запускает explain(True) и видит 4 секции. В Optimized Logical Plan фильтры стоят до JOIN, ненужные колонки убраны, константы свёрнуты. Но Physical Plan показывает SortMergeJoin для таблицы размером 5 МБ. Какая стадия Catalyst \"ошиблась\" и почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Optimizer не применил predicate pushdown"
+        },
+        {
+          "id": "b",
+          "text": "Analyzer неправильно определил типы колонок"
+        },
+        {
+          "id": "c",
+          "text": "Whole-Stage CodeGen помешал выбору BroadcastHashJoin"
+        },
+        {
+          "id": "d",
+          "text": "SparkPlanner не имеет точной статистики о размере таблицы (ANALYZE TABLE не выполнялся) и не может определить, что таблица 5 МБ подходит для broadcast; нужно либо собрать статистики, либо использовать broadcast() hint"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Optimizer и SparkPlanner работают с разной информацией. Optimizer применил все rule-based оптимизации корректно. SparkPlanner выбирает join-стратегию на основе оценки размера таблиц. Без ANALYZE TABLE SparkPlanner может не знать реальный размер (5 МБ) и завысить оценку. Если оценка > autoBroadcastJoinThreshold (10 МБ), SparkPlanner выберет SortMergeJoin. Решения: ANALYZE TABLE для сбора статистик или broadcast() hint для явного указания стратегии.",
+      "studyHint": "Повторите урок 3: CBO и ANALYZE TABLE, и урок 4: Join-стратегии SparkPlanner",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-exam-q6",
+      "type": "multiple-choice",
+      "question": "Проследите путь запроса SELECT name FROM employees WHERE age > 30 через все стадии Catalyst и укажите, что происходит на каждой стадии:",
+      "options": [
+        {
+          "id": "a",
+          "text": "Parser: SQL -> Unresolved Plan (UnresolvedRelation, UnresolvedAttribute). Analyzer: разрешение через Catalog (employees существует, age:Int, name:String). Optimizer: ColumnPruning (только name,age), PushDownPredicate. SparkPlanner: FileScan parquet + FilterExec + ProjectExec. CodeGen: fusion в один метод"
+        },
+        {
+          "id": "b",
+          "text": "Parser: SQL -> AST. Analyzer: проверка синтаксиса. Optimizer: выбор join-стратегии. Planner: генерация байткода"
+        },
+        {
+          "id": "c",
+          "text": "Parser: SQL -> Physical Plan. Optimizer: применение правил. Analyzer: проверка результатов. Planner: выбор executor"
+        },
+        {
+          "id": "d",
+          "text": "Все стадии работают параллельно для ускорения обработки"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Полный путь: (1) Parser: текст SQL -> дерево с UnresolvedRelation('employees'), UnresolvedAttribute('age'), UnresolvedAttribute('name'); (2) Analyzer: обращение к Catalog, разрешение employees -> default.employees(id:Int, name:String, age:Int, dept_id:Int); (3) Optimizer: ColumnPruning убирает id и dept_id из scan; PushDownPredicate сдвигает age > 30 к FileScan; ConstantFolding (нет констант для свёртки); (4) SparkPlanner: FileScan parquet [name,age] PushedFilters:[GreaterThan(age,30)] -> FilterExec -> ProjectExec; (5) CodeGen: *(1) объединяет Scan+Filter+Project в один метод.",
+      "studyHint": "Повторите урок 1: Catalyst Overview -- полный конвейер, и урок 2: Logical Plan Analysis",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-exam-q7",
+      "type": "multiple-choice",
+      "question": "В выводе explain() вы видите:\n\nFileScan parquet [name, dept_id]\n  PushedFilters: [IsNotNull(age), GreaterThan(age,30)]\n  ReadSchema: struct<name:string, dept_id:int>\n\nВопрос: колонка age используется в фильтре, но отсутствует в ReadSchema. Как это возможно?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Это ошибка в explain() -- age должна быть в ReadSchema"
+        },
+        {
+          "id": "b",
+          "text": "PushedFilters применяются на уровне Parquet reader через min/max statistics в footer, не требуя чтения самой колонки; после фильтрации age больше не нужна, поэтому ColumnPruning убирает её из ReadSchema"
+        },
+        {
+          "id": "c",
+          "text": "age хранится в отдельном Parquet-файле и читается другим оператором"
+        },
+        {
+          "id": "d",
+          "text": "Spark кэширует значения age из предыдущих запросов"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Глубокий pushdown в Parquet: (1) PushedFilters проверяют min/max statistics в footer row groups -- если max(age) <= 30, весь row group пропускается без чтения; (2) Для row groups, прошедших statistics check, age фильтруется при декодировании; (3) ReadSchema определяет, какие колонки нужны ПОСЛЕ фильтрации -- age не в SELECT и не в JOIN, поэтому ColumnPruning убирает её. Это комбинация PushDownPredicate + ColumnPruning, работающих на уровне Physical Plan.",
+      "studyHint": "Повторите урок 3: ColumnPruning + PushDownPredicate и урок 4: Physical Plan чтение",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-exam-q8",
+      "type": "multiple-choice",
+      "question": "Whole-Stage CodeGen показывает ускорение 10x для scan+filter+project pipeline. Но для pipeline с UDF (User Defined Function) ускорение минимально. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "UDF не поддерживаются в Spark SQL"
+        },
+        {
+          "id": "b",
+          "text": "UDF автоматически отключает Whole-Stage CodeGen для всего запроса"
+        },
+        {
+          "id": "c",
+          "text": "UDF -- это черные ящики для CodeGen: Catalyst не может сгенерировать inline-код для произвольной Python/Scala функции, поэтому вызов UDF остаётся виртуальным вызовом, прерывающим CodeGen pipeline"
+        },
+        {
+          "id": "d",
+          "text": "UDF работают в off-heap памяти, несовместимой с CodeGen"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Whole-Stage CodeGen генерирует Java-код для встроенных операторов Spark (Filter, Project, HashAggregate). UDF -- произвольная пользовательская функция, которую CodeGen не может инлайнить. Вызов UDF остаётся виртуальным вызовом внутри сгенерированного кода, что: (1) прерывает tight loop; (2) может вызвать boxing/unboxing; (3) для Python UDF добавляет overhead сериализации JVM <-> Python. Рекомендация: используйте встроенные SQL-функции вместо UDF, где возможно.",
+      "studyHint": "Повторите урок 6: Whole-Stage CodeGen -- ограничения и UDF impact",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-exam-q9",
+      "type": "multiple-choice",
+      "question": "Data engineer сравнивает два эквивалентных запроса: один через SQL, другой через DataFrame API. В обоих случаях explain(True) показывает идентичный Optimized Logical Plan и Physical Plan. Какая архитектурная особенность Catalyst обеспечивает это?",
+      "options": [
+        {
+          "id": "a",
+          "text": "DataFrame API внутренне конвертируется в SQL перед выполнением"
+        },
+        {
+          "id": "b",
+          "text": "Optimizer определяет, что запросы эквивалентны, и объединяет их"
+        },
+        {
+          "id": "c",
+          "text": "Spark кэширует планы и переиспользует их для похожих запросов"
+        },
+        {
+          "id": "d",
+          "text": "SQL и DataFrame API -- два синтаксических frontend, которые генерируют одинаковый Unresolved Logical Plan; начиная с Analyzer, весь путь через Catalyst идентичен"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Это фундаментальное архитектурное решение Catalyst: SQL и DataFrame API -- два frontend, которые конвертируются в единое внутреннее представление (Logical Plan). df.filter(df.age > 30).select('name') и spark.sql('SELECT name FROM t WHERE age > 30') создают структурно идентичный Unresolved Logical Plan. Далее Analyzer, Optimizer и SparkPlanner работают одинаково. Это гарантирует: один набор оптимизаций для всех API.",
+      "studyHint": "Повторите урок 1: Catalyst Overview -- DataFrame API и SQL один путь",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m02-exam-q10",
+      "type": "multiple-choice",
+      "question": "Кластер с 200 executors, spark.executor.memory=16g (on-heap). Запрос обрабатывает 10 ТБ с множеством shuffle-операций. Executors регулярно теряют heartbeat из-за GC пауз. Data engineer рассматривает два решения: (A) включить off-heap 8g, (B) увеличить on-heap до 24g. Какое решение эффективнее и почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A -- off-heap вынесет данные из JVM heap, уменьшив объём для GC сканирования; увеличение on-heap (вариант B) может УХУДШИТЬ ситуацию, потому что GC будет сканировать больший heap, увеличивая длительность Full GC пауз"
+        },
+        {
+          "id": "b",
+          "text": "B -- больше on-heap памяти всегда лучше"
+        },
+        {
+          "id": "c",
+          "text": "Оба решения эквивалентны -- разница только в адресации памяти"
+        },
+        {
+          "id": "d",
+          "text": "Ни одно не поможет -- проблема в количестве executors"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Контринтуитивно: увеличение on-heap с 16g до 24g может увеличить GC паузы. Full GC сканирует весь heap -- 24 ГБ сканируется на 50% дольше, чем 16 ГБ. Off-heap (вариант A): 8 ГБ данных выносятся из JVM heap. GC продолжает сканировать только 16 ГБ on-heap, но теперь значительная часть данных (shuffle buffers, cached data) находится в off-heap и невидима для GC. Общая доступная память: 16g + 8g = 24g (как вариант B), но GC нагрузка радикально ниже.",
+      "studyHint": "Повторите урок 5: Tungsten Memory -- off-heap vs on-heap tradeoffs и GC impact",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-exam-q11",
+      "type": "multiple-choice",
+      "question": "В explain() запроса с тремя таблицами вы видите BroadcastHashJoin для маленькой таблицы и SortMergeJoin для двух больших. Какой из этих join создаёт shuffle и почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оба создают shuffle -- любой join требует перемещения данных"
+        },
+        {
+          "id": "b",
+          "text": "BroadcastHashJoin НЕ создаёт shuffle -- маленькая таблица broadcast на все executors, большая обрабатывается локально; SortMergeJoin СОЗДАЁТ shuffle -- обе таблицы перехешируются по join key и сортируются"
+        },
+        {
+          "id": "c",
+          "text": "Ни один не создаёт shuffle -- Spark оптимизирует все join без перемещения данных"
+        },
+        {
+          "id": "d",
+          "text": "SortMergeJoin не создаёт shuffle, если таблицы уже отсортированы"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "BroadcastHashJoin: driver собирает маленькую таблицу и отправляет (broadcast) на все executors. Каждый executor строит hash-таблицу и joinит со своей партицией большой таблицы локально -- NO SHUFFLE для большой таблицы. SortMergeJoin: обе таблицы перехешируются по join key (Exchange hashpartitioning) и сортируются. Это два shuffle + два sort. Поэтому BroadcastHashJoin предпочтительнее, когда одна таблица помещается в broadcast.",
+      "studyHint": "Повторите урок 4: Физический план -- BroadcastHashJoin (no shuffle) vs SortMergeJoin (shuffle)",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-exam-q12",
+      "type": "multiple-choice",
+      "question": "Data engineer замечает, что UnsafeRow для строки ('Alice', 30, 100) занимает ~37 байт, тогда как эквивалентный Java-объект Row с тремя полями -- ~120 байт. Какие компоненты Java Object Model создают этот 3x overhead?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Java-объекты хранятся в сжатом формате, который медленнее разворачивается"
+        },
+        {
+          "id": "b",
+          "text": "Java выравнивает объекты по 64 байта для cache line alignment"
+        },
+        {
+          "id": "c",
+          "text": "Object header (16 байт на каждый объект), pointer reference (8 байт), boxing Integer/Long (16 байт вместо 4/8), String object header + char array + pointer -- всё это отсутствует в UnsafeRow, где данные хранятся как непрерывный бинарный блок"
+        },
+        {
+          "id": "d",
+          "text": "JVM хранит дополнительные метаданные для GC tracing и reflection"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Java Object Model overhead для Row('Alice', 30, 100): Row object header (16B) + array pointer (8B) + String object: header (16B) + char[] header (16B) + 'Alice' data (10B, UTF-16) + Integer(30): header (16B) + int (4B) + Integer(100): header (16B) + int (4B) + alignment padding ~14B = ~120B total. UnsafeRow: null bitmap (8B) + 3 fixed-length slots (24B) + 'Alice' UTF-8 (5B) = 37B. Разница в 3x обусловлена object headers, boxing и pointer indirection.",
+      "studyHint": "Повторите урок 5: Tungsten Memory -- UnsafeRow byte layout и сравнение с Java Object Model",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-exam-q13",
+      "type": "multiple-choice",
+      "question": "Запрос:\n\nSELECT d.dept_name, COUNT(*) as cnt\nFROM employees e\nJOIN departments d ON e.dept_id = d.dept_id\nWHERE e.age > 30\nGROUP BY d.dept_name\nORDER BY cnt DESC\n\nСколько Whole-Stage CodeGen pipelines (*) создаст Spark и где будут разрывы?",
+      "options": [
+        {
+          "id": "a",
+          "text": "1 pipeline -- все операции объединяются в один метод"
+        },
+        {
+          "id": "b",
+          "text": "6 pipeline: по одному на каждый оператор"
+        },
+        {
+          "id": "c",
+          "text": "2 pipeline: *(1) до shuffle, *(2) после shuffle"
+        },
+        {
+          "id": "d",
+          "text": "4 pipeline: *(1) scan+filter employees, *(2) scan departments, Exchange для JOIN shuffle, *(3) join+partial aggregate, Exchange для groupBy shuffle, *(4) final aggregate+sort"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "CodeGen создаёт pipeline между shuffle boundaries (Exchange). В этом запросе: *(1) FileScan employees + Filter(age>30) -- до первого shuffle; *(2) FileScan departments -- до первого shuffle (параллельно с *(1)); Exchange hashpartitioning для JOIN shuffle; *(3) SortMergeJoin + partial HashAggregate -- между двумя shuffle; Exchange hashpartitioning для groupBy shuffle; *(4) final HashAggregate + Sort -- после последнего shuffle. Каждый Exchange разрывает pipeline, создавая новый *(N).",
+      "studyHint": "Повторите урок 6: Whole-Stage CodeGen -- shuffle boundaries и нумерация pipeline в explain()",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

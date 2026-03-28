@@ -1,0 +1,142 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/02-transformations-select-filter",
+  "moduleId": "03-dataframes-spark-sql",
+  "_meta": {
+    "idPrefix": "spark-m03-02",
+    "description": "Use IDs: m03-02-q1, m03-02-q2, ... for MC/TF; m03-02-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-02-q1",
+      "type": "multiple-choice",
+      "question": "Какой вариант правильно описывает разницу между select() и selectExpr() в PySpark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "selectExpr() устарел в Spark 3.0 и не рекомендуется к использованию"
+        },
+        {
+          "id": "b",
+          "text": "selectExpr() быстрее, потому что использует нативный SQL-движок"
+        },
+        {
+          "id": "c",
+          "text": "select() поддерживает только строковые имена колонок, без выражений"
+        },
+        {
+          "id": "d",
+          "text": "select() принимает Column-объекты или строки-имена колонок; selectExpr() принимает SQL-выражения в виде строк, что позволяет использовать вычисления вроде 'salary * 0.13 AS tax'"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "select() принимает Column-объекты (col('name'), df.salary * 0.13) или строковые имена колонок. selectExpr() принимает строковые SQL-выражения ('salary * 0.13 AS tax', 'UPPER(name) AS name_upper'), что удобно для сложных вычислений в SQL-синтаксисе. Оба проходят через Catalyst optimizer и генерируют одинаковый физический план.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-02-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer написал: df.filter(col('salary') > 50000 and col('department') == 'Engineering'). Код вызывает ошибку. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оператор and в Python работает со скалярными значениями, а Column-объекты -- не булевы значения; нужно использовать оператор & со скобками: (col('salary') > 50000) & (col('department') == 'Engineering')"
+        },
+        {
+          "id": "b",
+          "text": "filter() не поддерживает составные условия"
+        },
+        {
+          "id": "c",
+          "text": "Правильный метод -- where(), а не filter()"
+        },
+        {
+          "id": "d",
+          "text": "Нужно использовать col('department').equals('Engineering') вместо =="
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "В Python and -- оператор для скалярных bool-значений. Column-объекты PySpark -- это выражения, а не булевы значения. Попытка использовать and вызовет ValueError: 'The truth value of a Column is ambiguous'. Оператор & перегружен в классе Column для создания логических выражений. Обязательны скобки вокруг каждого условия, т.к. приоритет & выше, чем == или >.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-02-q3",
+      "type": "multiple-choice",
+      "question": "Почему цепочка из 10 вызовов withColumn() для добавления новых колонок считается анти-паттерном?",
+      "options": [
+        {
+          "id": "a",
+          "text": "withColumn() вызывает shuffle при каждом вызове"
+        },
+        {
+          "id": "b",
+          "text": "Каждый withColumn() создаёт новый DataFrame с копированием метаданных всех колонок, что при десятках вызовов создаёт глубокий логический план и замедляет анализ Catalyst"
+        },
+        {
+          "id": "c",
+          "text": "withColumn() не поддерживает более 5 вызовов в цепочке"
+        },
+        {
+          "id": "d",
+          "text": "withColumn() записывает промежуточные результаты на диск"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Каждый вызов withColumn() создаёт новый DataFrame-объект с полной копией метаданных схемы. При 10+ вызовах это создаёт глубокий логический план, замедляющий анализ Catalyst. Альтернатива -- один select() со всеми вычисленными колонками: df.select('*', (col('salary') * 0.13).alias('tax'), ...). Catalyst optimizer может обработать обе формы, но select предпочтительнее при множестве колонок.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-02-q4",
+      "type": "true-false",
+      "question": "Методы filter() и where() в PySpark полностью идентичны -- where() существует для разработчиков, привыкших к SQL-синтаксису.",
+      "correctAnswer": true,
+      "explanation": "filter() и where() -- это один и тот же метод с разными именами (alias). where() добавлен для удобства разработчиков с SQL-опытом, которые привыкли к WHERE-клаузе. Оба принимают Column-выражения или строковые SQL-условия, оба генерируют идентичный физический план через Catalyst optimizer.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-02-code-1",
+      "type": "code-challenge",
+      "question": "Отфильтруйте сотрудников с зарплатой > 50000 и добавьте колонку tax_rate со значением salary * 0.13. Выведите только колонки name, salary, tax_rate через show().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col\n\nspark = SparkSession.builder.appName(\"transform-demo\").getOrCreate()\n\ndf = spark.createDataFrame([\n    (\"Alice\", \"Engineering\", 75000),\n    (\"Bob\", \"Marketing\", 45000),\n    (\"Carol\", \"Engineering\", 80000),\n    (\"Dave\", \"Marketing\", 55000),\n], [\"name\", \"department\", \"salary\"])\n\n# TODO: Отфильтруйте salary > 50000\n# filtered = df.filter(...)\n\n# TODO: Добавьте колонку tax_rate = salary * 0.13\n# with_tax = filtered.withColumn(...)\n\n# TODO: Выберите name, salary, tax_rate и вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col\n\nspark = SparkSession.builder.appName(\"transform-demo\").getOrCreate()\n\ndf = spark.createDataFrame([\n    (\"Alice\", \"Engineering\", 75000),\n    (\"Bob\", \"Marketing\", 45000),\n    (\"Carol\", \"Engineering\", 80000),\n    (\"Dave\", \"Marketing\", 55000),\n], [\"name\", \"department\", \"salary\"])\n\nfiltered = df.filter(col(\"salary\") > 50000)\n\nwith_tax = filtered.withColumn(\"tax_rate\", col(\"salary\") * 0.13)\n\nwith_tax.select(\"name\", \"salary\", \"tax_rate\").show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Alice в результате (salary 75000 > 50000)",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Carol в результате (salary 80000 > 50000)",
+          "input": "",
+          "expectedOutput": "Carol",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Bob отфильтрован (salary 45000)",
+          "input": "",
+          "expectedOutput": "Bob",
+          "matchMode": "not_contains",
+          "hidden": true
+        },
+        {
+          "id": "tc4",
+          "description": "Колонка tax_rate присутствует",
+          "input": "",
+          "expectedOutput": "tax_rate",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Цепочка filter -> withColumn -> select демонстрирует типичный ETL-паттерн: сначала фильтруем строки (уменьшая объём данных для последующих операций), затем добавляем вычисляемую колонку, и наконец выбираем только нужные колонки. Все три операции -- narrow трансформации, выполняющиеся без shuffle. Catalyst optimizer может переставить их для оптимальности.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

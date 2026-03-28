@@ -1,0 +1,152 @@
+{
+  "lessonSlug": "01-architecture-internals/07-memory-management",
+  "moduleId": "01-architecture-internals",
+  "_meta": {
+    "idPrefix": "spark-m01-07",
+    "description": "Use IDs: m01-07-q1, m01-07-q2, ... for MC/TF; m01-07-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m01-07-q1",
+      "type": "multiple-choice",
+      "question": "Executor с spark.executor.memory=4g и spark.memory.fraction=0.6. Сколько памяти выделено для Spark Memory (storage + execution)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "2400 МБ -- 60% от 4 ГБ"
+        },
+        {
+          "id": "b",
+          "text": "1638 МБ -- 40% от 4 ГБ"
+        },
+        {
+          "id": "c",
+          "text": "2278 МБ -- 60% от (4096 - 300 МБ reserved)"
+        },
+        {
+          "id": "d",
+          "text": "3796 МБ -- всё кроме reserved memory"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Unified Memory Manager сначала вычитает фиксированные 300 МБ reserved memory из общего heap: 4096 - 300 = 3796 МБ. Затем spark.memory.fraction (0.6) применяется к оставшемуся: 0.6 * 3796 = 2278 МБ. Остальные 40% (1518 МБ) -- User Memory для UDF-объектов и пользовательских структур данных.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-07-q2",
+      "type": "multiple-choice",
+      "question": "В Unified Memory Manager execution memory нуждается в дополнительном пространстве для shuffle-буферов, но execution region заполнен. Storage memory занимает 800 МБ кэшированных DataFrame. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark выбросит OutOfMemoryError, потому что execution и storage -- фиксированные регионы"
+        },
+        {
+          "id": "b",
+          "text": "Spark автоматически увеличит spark.executor.memory"
+        },
+        {
+          "id": "c",
+          "text": "Storage заблокирует execution от заимствования, защищая кэшированные данные"
+        },
+        {
+          "id": "d",
+          "text": "Execution вытеснит (evict) часть кэшированных данных из storage memory, освободив место для shuffle-буферов"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Ключевое правило Unified Memory Manager: execution memory МОЖЕТ вытеснить данные из storage (eviction). Обратное НЕ верно -- storage не может вытеснить execution. Это сделано потому, что execution (shuffle, sort, join buffers) критична для завершения задачи -- без неё task упадёт. Storage (кэш) -- это оптимизация, потерянные кэшированные данные можно пересчитать.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-07-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer увеличил spark.memory.fraction с 0.6 до 0.9 для ускорения shuffle-тяжёлого задания. Какой потенциальный риск создаёт это изменение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "User Memory уменьшится до ~10% heap, что может вызвать OutOfMemoryError в UDF-функциях и пользовательских структурах данных"
+        },
+        {
+          "id": "b",
+          "text": "Никакого риска -- больше памяти для Spark всегда лучше"
+        },
+        {
+          "id": "c",
+          "text": "Reserved Memory увеличится пропорционально"
+        },
+        {
+          "id": "d",
+          "text": "Executor перестанет кэшировать данные"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "spark.memory.fraction=0.9 оставляет только 10% heap для User Memory (UDF, RDD metadata, пользовательские объекты). Для executor с 4 ГБ: User Memory = 0.1 * (4096 - 300) = ~380 МБ. Если UDF-функции создают крупные объекты (например, загружают ML-модель в память), 380 МБ может не хватить, и executor упадёт с OOM. Оптимальное значение зависит от характера workload.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-07-q4",
+      "type": "multiple-choice",
+      "question": "Spark-задание на executor с 4 ГБ памяти выполняет sort на 3 ГБ данных. Execution memory (1139 МБ) не вмещает все данные. Что сделает Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Выбросит OutOfMemoryError и завершит task"
+        },
+        {
+          "id": "b",
+          "text": "Заимствует память из storage, а если и этого мало -- выполнит spill-to-disk: запишет часть данных на локальный диск и продолжит сортировку"
+        },
+        {
+          "id": "c",
+          "text": "Попросит Cluster Manager выделить дополнительный executor"
+        },
+        {
+          "id": "d",
+          "text": "Уменьшит объём данных, отбросив часть строк"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Spark сначала попытается заимствовать свободную memory из storage region. Если и этого недостаточно, execution memory выполняет spill-to-disk: данные частично записываются на локальный диск executor, сортировка продолжается через external sort (слияние отсортированных блоков). Это медленнее, чем in-memory, но позволяет обработать данные, превышающие доступную RAM. OOM возникнет только при исчерпании и disk space.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-07-code-1",
+      "type": "code-challenge",
+      "question": "Продемонстрируйте кэширование DataFrame в storage memory. Создайте DataFrame с данными сотрудников, вызовите cache() для помещения в storage memory, выполните count() для материализации кэша, затем отфильтруйте salary > 100000 и вызовите show(). Повторное обращение к кэшированному DataFrame не требует повторного чтения данных.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"memory-mgmt\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(1, \"Alice\", 120000), (2, \"Bob\", 85000), (3, \"Carol\", 150000), (4, \"Dave\", 95000)],\n    [\"id\", \"name\", \"salary\"]\n)\n\n# TODO: Кэшируйте DataFrame через cache()\n# cached_df = employees.cache()\n\n# TODO: Материализуйте кэш через count() и выведите количество строк\n# print(f\"Total employees: {cached_df.count()}\")\n\n# TODO: Используйте кэшированный DataFrame для фильтрации salary > 100000\n# high_salary = cached_df.filter(...)\n\n# TODO: Вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"memory-mgmt\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(1, \"Alice\", 120000), (2, \"Bob\", 85000), (3, \"Carol\", 150000), (4, \"Dave\", 95000)],\n    [\"id\", \"name\", \"salary\"]\n)\n\ncached_df = employees.cache()\n\nprint(f\"Total employees: {cached_df.count()}\")\n\nhigh_salary = cached_df.filter(cached_df[\"salary\"] > 100000)\n\nhigh_salary.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Вывод количества сотрудников",
+          "input": "",
+          "expectedOutput": "Total employees: 4",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Alice в результате фильтрации",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Код содержит cache",
+          "input": "",
+          "expectedOutput": "cache",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "cache() помечает DataFrame для хранения в storage memory (MEMORY_AND_DISK по умолчанию). Сам по себе cache() ленивый -- данные кэшируются только при первом action (здесь count()). После материализации кэша повторные обращения к DataFrame (filter + show) читают данные из RAM, а не пересчитывают с нуля. В Unified Memory Manager кэшированные данные занимают storage region, который может быть вытеснен execution memory при нехватке памяти для shuffle/sort.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

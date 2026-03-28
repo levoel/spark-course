@@ -1,0 +1,165 @@
+{
+  "lessonSlug": "14-advanced-topics/03-mllib-pipelines",
+  "moduleId": "14-advanced-topics",
+  "_meta": {
+    "idPrefix": "spark-m14-03",
+    "description": "Use IDs: m14-03-q1, m14-03-q2, ... (5 questions on Transformer/Estimator/Pipeline, fit/transform, model persistence)"
+  },
+  "questions": [
+    {
+      "id": "spark-m14-03-q1",
+      "type": "multiple-choice",
+      "question": "Какова разница между Transformer и Estimator в MLlib Pipeline API?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Transformer обучает модель, Estimator делает предсказания"
+        },
+        {
+          "id": "b",
+          "text": "Transformer работает с числовыми данными, Estimator -- с категориальными"
+        },
+        {
+          "id": "c",
+          "text": "Transformer принимает DataFrame и возвращает DataFrame с добавленным столбцом (transform()). Estimator обучается на данных (fit()) и возвращает Transformer (обученную модель)"
+        },
+        {
+          "id": "d",
+          "text": "Transformer и Estimator -- синонимы, используются взаимозаменяемо"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Transformer: метод transform() -- принимает DataFrame, добавляет столбец (например VectorAssembler добавляет features). Estimator: метод fit() -- обучается на данных и возвращает Model, который является Transformer (например LogisticRegression.fit() -> LogisticRegressionModel, у которого transform() добавляет prediction). Обученная модель -- это всегда Transformer.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: MLlib Pipeline -- Transformer (transform()) vs Estimator (fit())"
+    },
+    {
+      "id": "spark-m14-03-q2",
+      "type": "multiple-choice",
+      "question": "Pipeline содержит stages: [StringIndexer, VectorAssembler, LogisticRegression]. Что происходит при вызове pipeline.fit(train_df)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Все три stages обучаются параллельно на train_df"
+        },
+        {
+          "id": "b",
+          "text": "Только LogisticRegression обучается, остальные -- preprocessing"
+        },
+        {
+          "id": "c",
+          "text": "Pipeline сохраняет stages и вызывает transform() на каждом"
+        },
+        {
+          "id": "d",
+          "text": "StringIndexer.fit() -> StringIndexerModel (transform train_df); VectorAssembler.transform() (без fit); LogisticRegression.fit() -> LRModel. Результат -- PipelineModel с тремя обученными stages"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Pipeline.fit() последовательно обрабатывает каждый stage: (1) StringIndexer -- Estimator, вызывается fit() -> StringIndexerModel, затем transform() для передачи данных дальше; (2) VectorAssembler -- Transformer, вызывается только transform(); (3) LogisticRegression -- Estimator, вызывается fit() -> LRModel. Результат -- PipelineModel, содержащий все обученные stages.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 3: MLlib Pipeline -- последовательность fit/transform для каждого stage"
+    },
+    {
+      "id": "spark-m14-03-q3",
+      "type": "true-false",
+      "question": "VectorAssembler является Estimator, потому что ему нужно вычислить статистику (mean, std) входных столбцов перед сборкой вектора.",
+      "correctAnswer": false,
+      "explanation": "False. VectorAssembler -- это Transformer, не Estimator. Он просто собирает значения из нескольких столбцов в один вектор features без вычисления статистики. Ему не нужен fit() -- только transform(). StandardScaler, в отличие от VectorAssembler, является Estimator, потому что вычисляет mean и std на обучающих данных.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: MLlib Pipeline -- VectorAssembler как Transformer (не Estimator)"
+    },
+    {
+      "id": "spark-m14-03-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer делает feature engineering (StringIndexer, VectorAssembler, StandardScaler) отдельно от Pipeline, затем обучает модель. Какую проблему это создаёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Training-serving skew: при inference на новых данных нужно вручную повторить те же шаги с теми же параметрами. Pipeline инкапсулирует всё, model.save() сохраняет полную цепочку"
+        },
+        {
+          "id": "b",
+          "text": "Код работает медленнее из-за дополнительных DataFrame операций"
+        },
+        {
+          "id": "c",
+          "text": "Feature engineering нельзя сохранить отдельно от модели"
+        },
+        {
+          "id": "d",
+          "text": "Spark не поддерживает feature engineering вне Pipeline"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Если предобработка делается вне Pipeline, при inference нужно вручную повторить все шаги с точно теми же параметрами (mapping StringIndexer, mean/std StandardScaler). Это частый источник training-serving skew. Pipeline инкапсулирует все stages: model.save() сохраняет и transformers, и их параметры. PipelineModel.load().transform(new_data) автоматически воспроизводит всю цепочку.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: MLlib Pipeline -- anti-pattern ручной предобработки и training-serving skew"
+    },
+    {
+      "id": "spark-m14-03-q5",
+      "type": "multiple-choice",
+      "question": "Какие данные сохраняются при вызове model.save() для обученного PipelineModel?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только веса финальной модели (LogisticRegression coefficients)"
+        },
+        {
+          "id": "b",
+          "text": "Metadata каждого stage (параметры, тип), обученные параметры (weights, vocabulary, mappings) и порядок stages в pipeline"
+        },
+        {
+          "id": "c",
+          "text": "Исходные обучающие данные и модель"
+        },
+        {
+          "id": "d",
+          "text": "Python-код pipeline и requirements.txt"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "model.save() сохраняет: (1) metadata каждого stage -- тип (StringIndexerModel, VectorAssembler, LRModel) и параметры; (2) обученные параметры -- mappings StringIndexer, coefficients LogisticRegression, mean/std StandardScaler; (3) порядок stages. Формат совместим между Spark-кластерами одной major version. Обучающие данные НЕ сохраняются.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 3: MLlib Pipeline -- model persistence и что сохраняется"
+    },
+    {
+      "id": "spark-m14-03-code-1",
+      "type": "code-challenge",
+      "question": "Постройте pipeline подготовки данных для ML. Замените категории на числовые коды (when/otherwise), выполните min-max нормализацию числовых колонок, обработайте null через coalesce. Покажите подготовленный DataFrame.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit, min as _min, max as _max, round as spark_round, coalesce\n\nspark = SparkSession.builder.appName(\"ml_pipeline\").getOrCreate()\n\ndata = spark.createDataFrame([\n    (1, \"high\", 50000, 5, 720),\n    (2, \"medium\", 35000, None, 680),\n    (3, \"low\", 80000, 2, None),\n    (4, \"high\", 120000, 8, 750),\n    (5, \"medium\", None, 3, 700),\n    (6, \"low\", 45000, 1, 650),\n], [\"id\", \"risk_level\", \"income\", \"experience\", \"credit_score\"])\n\n# TODO: Шаг 1 — risk_level -> risk_code: high=3, medium=2, low=1\n# TODO: Шаг 2 — null -> 0 через coalesce\n# TODO: Шаг 3 — min-max нормализация income\n# TODO: Шаг 4 — min-max нормализация credit_score\n# TODO: Покажите (id, risk_code, income_norm, experience, credit_norm) округлённые до 2 знаков\n# TODO: print(f\"Features prepared: {count} rows\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit, min as _min, max as _max, round as spark_round, coalesce\n\nspark = SparkSession.builder.appName(\"ml_pipeline\").getOrCreate()\n\ndata = spark.createDataFrame([\n    (1, \"high\", 50000, 5, 720),\n    (2, \"medium\", 35000, None, 680),\n    (3, \"low\", 80000, 2, None),\n    (4, \"high\", 120000, 8, 750),\n    (5, \"medium\", None, 3, 700),\n    (6, \"low\", 45000, 1, 650),\n], [\"id\", \"risk_level\", \"income\", \"experience\", \"credit_score\"])\n\nresult = data.withColumn(\"risk_code\",\n    when(col(\"risk_level\") == \"high\", lit(3))\n    .when(col(\"risk_level\") == \"medium\", lit(2))\n    .otherwise(lit(1)))\n\nresult = result.withColumn(\"income\", coalesce(col(\"income\"), lit(0)))\nresult = result.withColumn(\"experience\", coalesce(col(\"experience\"), lit(0)))\nresult = result.withColumn(\"credit_score\", coalesce(col(\"credit_score\"), lit(0)))\n\nstats = result.agg(\n    _min(\"income\").alias(\"inc_min\"), _max(\"income\").alias(\"inc_max\"),\n    _min(\"credit_score\").alias(\"cs_min\"), _max(\"credit_score\").alias(\"cs_max\")\n).collect()[0]\n\nresult = result.withColumn(\"income_norm\", spark_round((col(\"income\") - lit(stats[\"inc_min\"])) / lit(stats[\"inc_max\"] - stats[\"inc_min\"]), 2))\nresult = result.withColumn(\"credit_norm\", spark_round((col(\"credit_score\") - lit(stats[\"cs_min\"])) / lit(stats[\"cs_max\"] - stats[\"cs_min\"]), 2))\n\nresult.select(\"id\", \"risk_code\", \"income_norm\", \"experience\", \"credit_norm\").show()\nprint(f\"Features prepared: {result.count()} rows\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Подсчёт строк",
+          "input": "",
+          "expectedOutput": "Features prepared:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит risk_code",
+          "input": "",
+          "expectedOutput": "risk_code",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит income_norm",
+          "input": "",
+          "expectedOutput": "income_norm",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "ML Pipeline — последовательность трансформаций: (1) кодирование категорий через when/otherwise заменяет StringIndexer; (2) обработка null через coalesce заменяет Imputer; (3) min-max нормализация приводит фичи к [0,1]. В production используются Pipeline API, но понимание математики необходимо для отладки.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

@@ -1,0 +1,138 @@
+{
+  "lessonSlug": "09-structured-streaming/01-streaming-fundamentals",
+  "moduleId": "09-structured-streaming",
+  "_meta": {
+    "idPrefix": "spark-m09-01",
+    "description": "Use IDs: m09-01-q1, m09-01-q2, ... (4 questions on streaming fundamentals)"
+  },
+  "questions": [
+    {
+      "id": "spark-m09-01-q1",
+      "type": "multiple-choice",
+      "question": "Какая концептуальная модель лежит в основе Structured Streaming и заменяет DStream-подход?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Потоковые данные представляются как RDD, создаваемый каждую секунду"
+        },
+        {
+          "id": "b",
+          "text": "Потоковые данные представляются как unbounded table (бесконечная таблица), к которой применяются стандартные DataFrame/SQL операции"
+        },
+        {
+          "id": "c",
+          "text": "Потоковые данные обрабатываются по одному событию за раз (event-at-a-time)"
+        },
+        {
+          "id": "d",
+          "text": "Потоковые данные буферизируются в памяти до полного завершения потока"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Structured Streaming (Spark 2.0+) рассматривает поток как unbounded table -- бесконечную таблицу, к которой применяются те же DataFrame/SQL операции, что и к batch-данным. Catalyst optimizer оптимизирует как batch, так и streaming запросы одинаково. DStream работал на уровне RDD и имел отдельный API, не совместимый с DataFrame.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Основы Structured Streaming -- концептуальная модель unbounded table"
+    },
+    {
+      "id": "spark-m09-01-q2",
+      "type": "multiple-choice",
+      "question": "Какие ТРИ проблемы DStream API решает Structured Streaming?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Более быстрая сериализация, автоматический autoscaling executors, GPU-ускорение"
+        },
+        {
+          "id": "b",
+          "text": "Поддержка Python, Scala и Java одновременно, REST API для мониторинга, автоматический restart"
+        },
+        {
+          "id": "c",
+          "text": "Единый API с batch DataFrame, встроенная обработка по event time, exactly-once гарантии через checkpoint"
+        },
+        {
+          "id": "d",
+          "text": "Нативная поддержка Kafka, интеграция со Schema Registry, автоматическое масштабирование"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "DStream имел три фундаментальных ограничения: (1) отдельный API от batch DataFrame -- код нельзя переиспользовать; (2) нет event-time processing -- только processing time; (3) нет exactly-once гарантий без сложного ручного кода. Structured Streaming решает все три: единый DataFrame API, встроенный event-time через watermarks, и exactly-once через checkpoints.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Основы Structured Streaming -- ограничения DStream и преимущества Structured Streaming"
+    },
+    {
+      "id": "spark-m09-01-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer написал streaming pipeline: readStream -> filter -> writeStream с Trigger.ProcessingTime(\"30 seconds\"). Что определяет параметр 30 seconds?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Максимальное время выполнения каждого micro-batch"
+        },
+        {
+          "id": "b",
+          "text": "Размер окна для группировки событий"
+        },
+        {
+          "id": "c",
+          "text": "Таймаут ожидания данных -- если данных нет 30 секунд, поток завершается"
+        },
+        {
+          "id": "d",
+          "text": "Интервал между запусками micro-batch -- Spark проверяет источник на новые данные каждые 30 секунд"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Trigger.ProcessingTime определяет минимальный интервал между запусками micro-batch. Каждые 30 секунд Spark проверяет источник, собирает новые данные в инкрементальный DataFrame, применяет трансформации и записывает результат в sink. Если предыдущий batch ещё выполняется, новый не запускается до его завершения.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 1: Основы Structured Streaming -- trigger modes и micro-batch интервалы"
+    },
+    {
+      "id": "spark-m09-01-q4",
+      "type": "true-false",
+      "question": "Structured Streaming может применять оптимизации Catalyst (predicate pushdown, column pruning) к потоковым запросам так же, как к batch-запросам.",
+      "correctAnswer": true,
+      "explanation": "Да, это одно из ключевых преимуществ Structured Streaming. Поскольку потоковые данные представлены как unbounded table с DataFrame API, Catalyst optimizer применяет одни и те же оптимизации (predicate pushdown, column pruning, join reordering) и к batch, и к streaming запросам. DStream, работавший на уровне RDD, не мог использовать Catalyst.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Основы Structured Streaming -- Catalyst optimizer для streaming запросов"
+    },
+    {
+      "id": "spark-m09-01-code-1",
+      "type": "code-challenge",
+      "question": "Симуляция micro-batch обработки: у вас есть поток событий с временными метками. Разделите события на 2 последовательных batch-окна (batch_1: events до 12:03, batch_2: events с 12:03 и позже), агрегируйте количество событий по категории в каждом batch, затем объедините результаты через union. Вызовите show() на итоговом DataFrame. Это демонстрирует, как micro-batch модель Structured Streaming накапливает результаты инкрементально.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, lit\n\nspark = SparkSession.builder.appName(\"microbatch-sim\").getOrCreate()\n\nevents = spark.createDataFrame([\n    (\"click\", \"2024-01-01 12:00:00\"),\n    (\"click\", \"2024-01-01 12:01:00\"),\n    (\"view\",  \"2024-01-01 12:02:00\"),\n    (\"click\", \"2024-01-01 12:03:00\"),\n    (\"view\",  \"2024-01-01 12:04:00\"),\n    (\"view\",  \"2024-01-01 12:05:00\"),\n], [\"event_type\", \"event_time\"])\n\n# TODO: batch_1 — отфильтруйте события с event_time < '2024-01-01 12:03:00'\n# batch_1 = events.filter(...)\n\n# TODO: Агрегируйте batch_1 — groupBy event_type, count, добавьте колонку batch = 1\n# agg_1 = batch_1.groupBy(...).agg(...).withColumn(\"batch\", lit(1))\n\n# TODO: batch_2 — отфильтруйте события с event_time >= '2024-01-01 12:03:00'\n# batch_2 = events.filter(...)\n\n# TODO: Агрегируйте batch_2 — аналогично, batch = 2\n# agg_2 = batch_2.groupBy(...).agg(...).withColumn(\"batch\", lit(2))\n\n# TODO: Объедините результаты через union и вызовите show()\n# result = agg_1.union(agg_2)\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, lit\n\nspark = SparkSession.builder.appName(\"microbatch-sim\").getOrCreate()\n\nevents = spark.createDataFrame([\n    (\"click\", \"2024-01-01 12:00:00\"),\n    (\"click\", \"2024-01-01 12:01:00\"),\n    (\"view\",  \"2024-01-01 12:02:00\"),\n    (\"click\", \"2024-01-01 12:03:00\"),\n    (\"view\",  \"2024-01-01 12:04:00\"),\n    (\"view\",  \"2024-01-01 12:05:00\"),\n], [\"event_type\", \"event_time\"])\n\nbatch_1 = events.filter(col(\"event_time\") < \"2024-01-01 12:03:00\")\nagg_1 = batch_1.groupBy(\"event_type\").agg(count(\"*\").alias(\"cnt\")).withColumn(\"batch\", lit(1))\n\nbatch_2 = events.filter(col(\"event_time\") >= \"2024-01-01 12:03:00\")\nagg_2 = batch_2.groupBy(\"event_type\").agg(count(\"*\").alias(\"cnt\")).withColumn(\"batch\", lit(2))\n\nresult = agg_1.union(agg_2)\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "click в batch 1 (2 события)",
+          "input": "",
+          "expectedOutput": "click",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "view в batch 2 (2 события)",
+          "input": "",
+          "expectedOutput": "view",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Оба batch присутствуют",
+          "input": "",
+          "expectedOutput": "batch",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Structured Streaming обрабатывает данные инкрементально в micro-batch-ах. Каждый trigger обрабатывает новую порцию данных, агрегирует её и объединяет с предыдущими результатами. В нашей симуляции batch_1 содержит 2 click и 1 view, batch_2 — 1 click и 2 view. Union объединяет результаты, как это делает Structured Streaming в complete output mode.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

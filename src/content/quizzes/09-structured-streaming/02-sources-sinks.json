@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "09-structured-streaming/02-sources-sinks",
+  "moduleId": "09-structured-streaming",
+  "_meta": {
+    "idPrefix": "spark-m09-02",
+    "description": "Use IDs: m09-02-q1, m09-02-q2, ... (4 questions on sources and sinks)"
+  },
+  "questions": [
+    {
+      "id": "spark-m09-02-q1",
+      "type": "multiple-choice",
+      "question": "При настройке Kafka source в Structured Streaming обязательны два параметра. Какие?",
+      "options": [
+        {
+          "id": "a",
+          "text": "kafka.bootstrap.servers и subscribe (или subscribePattern/assign)"
+        },
+        {
+          "id": "b",
+          "text": "kafka.group.id и kafka.auto.offset.reset"
+        },
+        {
+          "id": "c",
+          "text": "kafka.bootstrap.servers и kafka.security.protocol"
+        },
+        {
+          "id": "d",
+          "text": "subscribe и startingOffsets"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Для Kafka source обязательны: kafka.bootstrap.servers (адрес кластера Kafka) и один из вариантов подписки: subscribe (конкретные топики), subscribePattern (regex паттерн) или assign (конкретные partition). Остальные параметры имеют значения по умолчанию.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Sources и Sinks -- обязательные параметры Kafka source"
+    },
+    {
+      "id": "spark-m09-02-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer использует foreachBatch для записи streaming данных. Какое ключевое преимущество foreachBatch перед обычным format(\"delta\") sink?",
+      "options": [
+        {
+          "id": "a",
+          "text": "foreachBatch быстрее, чем Delta sink"
+        },
+        {
+          "id": "b",
+          "text": "foreachBatch позволяет выполнить произвольную логику на каждом micro-batch DataFrame: запись в несколько таблиц, вызов API, deduplication, MERGE INTO"
+        },
+        {
+          "id": "c",
+          "text": "foreachBatch поддерживает exactly-once гарантии, а Delta sink -- нет"
+        },
+        {
+          "id": "d",
+          "text": "foreachBatch не требует checkpoint location"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "foreachBatch(function) предоставляет полный DataFrame API внутри callback-функции для каждого micro-batch. Это позволяет: (1) записывать один batch в несколько таблиц; (2) вызывать MERGE INTO для upserts; (3) вызывать внешние API; (4) применять deduplication. Обычный Delta sink поддерживает только append или complete запись.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: Sources и Sinks -- foreachBatch и произвольная логика записи"
+    },
+    {
+      "id": "spark-m09-02-q3",
+      "type": "multiple-choice",
+      "question": "Streaming pipeline читает из Kafka и записывает в Delta Lake. При рестарте pipeline возобновляет обработку с последнего успешного offset. Какой компонент обеспечивает это поведение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Kafka consumer group автоматически отслеживает offset"
+        },
+        {
+          "id": "b",
+          "text": "Delta Lake transaction log содержит информацию о последнем записанном batch"
+        },
+        {
+          "id": "c",
+          "text": "Checkpoint directory хранит offset и state для каждого micro-batch, обеспечивая exactly-once восстановление"
+        },
+        {
+          "id": "d",
+          "text": "SparkSession запоминает offset в метаданных приложения"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Checkpoint directory -- ключевой механизм отказоустойчивости Structured Streaming. Он хранит: (1) offsets -- какие данные из source уже обработаны; (2) commits -- какие batch'и успешно записаны в sink; (3) state -- данные для stateful операций. При рестарте Spark читает checkpoint и возобновляет обработку с последнего commit, обеспечивая exactly-once семантику.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: Sources и Sinks -- checkpoint directory и exactly-once восстановление"
+    },
+    {
+      "id": "spark-m09-02-q4",
+      "type": "true-false",
+      "question": "Delta Lake может использоваться одновременно как source (readStream) и как sink (writeStream) в Structured Streaming.",
+      "correctAnswer": true,
+      "explanation": "Delta Lake поддерживает оба режима: как streaming source (readStream.format(\"delta\")) и как streaming sink (writeStream.format(\"delta\")). В качестве source Delta отслеживает новые файлы через transaction log, а в качестве sink обеспечивает ACID-запись. Это позволяет строить multi-hop pipeline: Bronze -> Silver -> Gold, где каждый слой -- Delta-таблица.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Sources и Sinks -- Delta Lake как streaming source и sink"
+    }
+  ]
+}

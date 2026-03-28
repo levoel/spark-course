@@ -1,0 +1,138 @@
+{
+  "lessonSlug": "13-testing-data-quality/08-dq-lab-walkthrough",
+  "moduleId": "13-testing-data-quality",
+  "_meta": {
+    "idPrefix": "spark-m13-08",
+    "description": "Use IDs: m13-08-q1, m13-08-q2, ... (4 questions on GE lab workflow, Data Docs)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-08-q1",
+      "type": "multiple-choice",
+      "question": "Из каких компонентов состоит Docker lab для data quality pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только Spark Master и Worker"
+        },
+        {
+          "id": "b",
+          "text": "Spark Master + Worker (compute), Jupyter + Great Expectations (dev/validate), shared volumes для данных и notebooks"
+        },
+        {
+          "id": "c",
+          "text": "Kubernetes кластер с Helm charts"
+        },
+        {
+          "id": "d",
+          "text": "Databricks workspace с Unity Catalog"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Docker lab архитектура: Spark Master (port 8080) + Worker (1 core, 1GB) для compute; Jupyter (port 8888) с PySpark и great-expectations для разработки и валидации; shared volumes (./data/ -> /opt/data/, ./notebooks/ -> /opt/notebooks/) для обмена данными между контейнерами.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 8: Лабораторная DQ -- архитектура Docker lab"
+    },
+    {
+      "id": "spark-m13-08-q2",
+      "type": "multiple-choice",
+      "question": "Какие 5 шагов выполняются в лабораторной по data quality?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Install, Configure, Deploy, Monitor, Report"
+        },
+        {
+          "id": "b",
+          "text": "Write tests, Run tests, Fix bugs, Deploy, Validate"
+        },
+        {
+          "id": "c",
+          "text": "Запустить Docker, загрузить CSV в DataFrame, создать Expectation Suite, запустить Checkpoint, просмотреть Data Docs (HTML-отчёт)"
+        },
+        {
+          "id": "d",
+          "text": "Create database, Insert data, Query data, Export results, Clean up"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Пять шагов лаба: (1) docker compose up -d -- запуск Spark + Jupyter + GE; (2) загрузка CSV-данных в Spark DataFrame; (3) создание Expectation Suite с правилами валидации; (4) запуск Checkpoint для проверки данных; (5) просмотр Data Docs -- HTML-отчёт с pass/fail для каждого expectation.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 8: Лабораторная DQ -- 5 шагов lab workflow"
+    },
+    {
+      "id": "spark-m13-08-q3",
+      "type": "multiple-choice",
+      "question": "Checkpoint в лаборатории показал, что 3 из 5 expectations passed, 2 failed. Какая информация доступна в Data Docs для failed expectations?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только имена failed expectations"
+        },
+        {
+          "id": "b",
+          "text": "SQL-запрос, который нужно выполнить для исправления"
+        },
+        {
+          "id": "c",
+          "text": "Только общий процент pass rate"
+        },
+        {
+          "id": "d",
+          "text": "Pass/fail статус каждого expectation, примеры failing rows (конкретные значения, нарушающие правило), процент observed value vs expected threshold"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Data Docs предоставляют детальную информацию: pass/fail статус каждого expectation, observed value (например: 85% non-null вместо ожидаемых 100%), примеры failing rows (конкретные значения, нарушающие правило), история валидаций (тренды pass rate по дням). Это позволяет быстро найти и исправить проблему.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 8: Лабораторная DQ -- Data Docs и информация о failed expectations"
+    },
+    {
+      "id": "spark-m13-08-q4",
+      "type": "true-false",
+      "question": "В Docker lab для data quality используется Deequ вместо Great Expectations, так как Deequ нативно интегрирован со Spark.",
+      "correctAnswer": false,
+      "explanation": "False. Lab использует Great Expectations, не Deequ. Причина: GE -- Python-native (pip install great-expectations), легко интегрируется с Jupyter и PySpark. Deequ -- Scala-based, требует JVM toolchain и sbt, что значительно усложняет Docker lab setup. GE предоставляет Data Docs (HTML-отчёт) для визуализации результатов.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 8: Лабораторная DQ -- выбор Great Expectations для lab (Python-native, Data Docs)"
+    },
+    {
+      "id": "spark-m13-08-code-1",
+      "type": "code-challenge",
+      "question": "Комплексная лабораторная по валидации данных. Найдите: дубликаты order_id, orphan-записи (заказы с несуществующим customer_id), невалидные даты (order_date > 2026-12-31). Вычислите общий quality score.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, lit, when\n\nspark = SparkSession.builder.appName(\"dq_lab\").getOrCreate()\n\norders = spark.createDataFrame([\n    (101, 1, \"2025-01-15\", 250.00),\n    (102, 2, \"2025-02-20\", 175.50),\n    (103, 1, \"2025-03-10\", 320.00),\n    (101, 3, \"2025-01-15\", 250.00),\n    (104, 99, \"2025-04-05\", 89.99),\n    (105, 2, \"2030-12-31\", 450.00),\n    (106, 3, \"2025-05-01\", 125.00),\n], [\"order_id\", \"customer_id\", \"order_date\", \"amount\"])\n\ncustomers = spark.createDataFrame([\n    (1, \"Alice\"), (2, \"Bob\"), (3, \"Charlie\"),\n], [\"customer_id\", \"customer_name\"])\n\n# TODO: Проверка 1 — дубликаты order_id (groupBy + count > 1)\n# print(f\"Duplicate orders: {count}\")\n\n# TODO: Проверка 2 — orphan records (left_anti join)\n# print(f\"Orphan orders: {count}\")\n\n# TODO: Проверка 3 — будущие даты (> 2026-12-31)\n# print(f\"Future-dated orders: {count}\")\n\n# TODO: quality_score = (total - issues) / total\n# print(f\"Quality score: {score}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, lit, when\n\nspark = SparkSession.builder.appName(\"dq_lab\").getOrCreate()\n\norders = spark.createDataFrame([\n    (101, 1, \"2025-01-15\", 250.00),\n    (102, 2, \"2025-02-20\", 175.50),\n    (103, 1, \"2025-03-10\", 320.00),\n    (101, 3, \"2025-01-15\", 250.00),\n    (104, 99, \"2025-04-05\", 89.99),\n    (105, 2, \"2030-12-31\", 450.00),\n    (106, 3, \"2025-05-01\", 125.00),\n], [\"order_id\", \"customer_id\", \"order_date\", \"amount\"])\n\ncustomers = spark.createDataFrame([\n    (1, \"Alice\"), (2, \"Bob\"), (3, \"Charlie\"),\n], [\"customer_id\", \"customer_name\"])\n\ntotal = orders.count()\n\nduplicates = orders.groupBy(\"order_id\").agg(count(\"*\").alias(\"cnt\")).filter(col(\"cnt\") > 1)\ndup_count = duplicates.count()\nprint(f\"Duplicate orders: {dup_count}\")\n\norphans = orders.join(customers, \"customer_id\", \"left_anti\")\norphan_count = orphans.count()\nprint(f\"Orphan orders: {orphan_count}\")\n\nfuture = orders.filter(col(\"order_date\") > lit(\"2026-12-31\"))\nfuture_count = future.count()\nprint(f\"Future-dated orders: {future_count}\")\n\nissues = dup_count + orphan_count + future_count\nscore = round((total - issues) / total, 2)\nprint(f\"Quality score: {score}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Quality score вычислен",
+          "input": "",
+          "expectedOutput": "Quality score:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Найдены дубликаты",
+          "input": "",
+          "expectedOutput": "Duplicate orders:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Найдены orphan записи",
+          "input": "",
+          "expectedOutput": "Orphan orders:",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Комплексная валидация объединяет: дубликаты (groupBy + count > 1), referential integrity через left_anti join (orphan-записи), временная валидность (даты из будущего). Quality score агрегирует все проблемы в единую метрику. В данных: order_id=101 дублирован, customer_id=99 — orphan, 2030-12-31 — из будущего.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

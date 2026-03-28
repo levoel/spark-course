@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "12-production-operations/01-security-fundamentals",
+  "moduleId": "12-production-operations",
+  "_meta": {
+    "idPrefix": "spark-m12-01",
+    "description": "Use IDs: m12-01-q1, m12-01-q2, ... (4 questions on Kerberos, TLS, ACLs, encryption)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-01-q1",
+      "type": "multiple-choice",
+      "question": "На каких четырёх уровнях строится безопасность production Spark-кластера?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Аутентификация (Kerberos), шифрование в транзите (TLS), шифрование at rest (KMS), авторизация (ACL/Ranger)"
+        },
+        {
+          "id": "b",
+          "text": "Firewall, VPN, антивирус, backup"
+        },
+        {
+          "id": "c",
+          "text": "SSL, HTTPS, OAuth, RBAC"
+        },
+        {
+          "id": "d",
+          "text": "Network isolation, container security, image scanning, runtime protection"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Безопасность Spark строится на четырёх уровнях: (1) аутентификация -- spark.authenticate=true + Kerberos keytab для проверки личности; (2) шифрование в транзите -- TLS для UI, spark.network.crypto для RPC, spark.io.encryption для shuffle; (3) шифрование at rest -- HDFS transparent encryption или cloud KMS; (4) авторизация -- ACLs для Spark UI и Apache Ranger для fine-grained policy engine.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Безопасность Spark-кластеров -- четыре уровня безопасности"
+    },
+    {
+      "id": "spark-m12-01-q2",
+      "type": "multiple-choice",
+      "question": "Какой параметр шифрует shuffle-данные между executor, и какой trade-off он создаёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.ssl.enabled -- шифрует всё без потерь производительности"
+        },
+        {
+          "id": "b",
+          "text": "spark.io.encryption.enabled -- шифрует shuffle AES-256, добавляя ~5-15% overhead по CPU и latency"
+        },
+        {
+          "id": "c",
+          "text": "spark.network.crypto.enabled -- шифрует shuffle с 50% overhead"
+        },
+        {
+          "id": "d",
+          "text": "spark.shuffle.encryption -- встроенная опция без overhead"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "spark.ssl.enabled шифрует только HTTP-трафик (Spark UI, REST API). spark.io.encryption.enabled отдельно шифрует shuffle-данные, передаваемые через block transfer service, используя AES-256. Это добавляет ~5-15% overhead. В security-critical окружениях это приемлемая цена, но в изолированных сетях можно отключить.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 1: Безопасность Spark-кластеров -- шифрование shuffle и trade-off производительности"
+    },
+    {
+      "id": "spark-m12-01-q3",
+      "type": "true-false",
+      "question": "spark.ssl.enabled=true достаточно для шифрования всех каналов связи Spark-кластера, включая shuffle-данные между executor.",
+      "correctAnswer": false,
+      "explanation": "False. spark.ssl.enabled шифрует только HTTP-трафик (Spark UI, REST API). Для шифрования RPC (driver <-> executor) нужен spark.network.crypto.enabled=true, а для shuffle-данных -- spark.io.encryption.enabled=true. Каждый канал требует отдельной настройки.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 1: Безопасность Spark-кластеров -- три отдельных канала шифрования"
+    },
+    {
+      "id": "spark-m12-01-q4",
+      "type": "multiple-choice",
+      "question": "Какой инструмент предоставляет fine-grained авторизацию для Spark SQL (контроль доступа к отдельным базам, таблицам, колонкам)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.acls.enable -- встроенный ACL достаточен для table-level авторизации"
+        },
+        {
+          "id": "b",
+          "text": "Kerberos -- через keytab можно ограничить доступ к таблицам"
+        },
+        {
+          "id": "c",
+          "text": "Apache Ranger -- enterprise policy engine с политиками по database/table/column level"
+        },
+        {
+          "id": "d",
+          "text": "TLS сертификаты -- client certificate определяет уровень доступа"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "spark.acls.enable контролирует только доступ к Spark UI (view/modify приложения). Для fine-grained авторизации на уровне database/table/column используется Apache Ranger -- enterprise policy engine, который интегрируется со Spark SQL через плагины авторизации. Kerberos -- это аутентификация (кто вы), а не авторизация (что вам можно).",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Безопасность Spark-кластеров -- ACL vs Apache Ranger"
+    }
+  ]
+}

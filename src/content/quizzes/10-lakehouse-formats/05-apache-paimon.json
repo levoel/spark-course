@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "10-lakehouse-formats/05-apache-paimon",
+  "moduleId": "10-lakehouse-formats",
+  "_meta": {
+    "idPrefix": "spark-m10-05",
+    "description": "Use IDs: m10-05-q1, m10-05-q2, ... (4 questions on Apache Paimon)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-05-q1",
+      "type": "multiple-choice",
+      "question": "Почему Paimon использует LSM-tree для хранения данных вместо Parquet-файлов (как Delta/Iceberg)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "LSM-tree лучше сжимает данные"
+        },
+        {
+          "id": "b",
+          "text": "LSM-tree быстрее для аналитических запросов"
+        },
+        {
+          "id": "c",
+          "text": "В streaming-first архитектуре данные приходят непрерывно. LSM-tree оптимизирован для высокочастотной записи: всегда sequential append в memory buffer. Parquet-based COW требует rewrite файлов при каждом upsert"
+        },
+        {
+          "id": "d",
+          "text": "LSM-tree -- единственная структура, поддерживающая ACID"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "LSM-tree (Log-Structured Merge-tree) оптимизирован для write-heavy workloads: запись -- всегда append в memory buffer (O(1)), flush на диск -- sequential write. Это на порядки быстрее random writes, необходимых для COW Parquet rewrite. Цена -- более сложное чтение: merge из нескольких уровней (L0, L1, L2+).",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: Apache Paimon -- LSM-tree для streaming-first архитектуры"
+    },
+    {
+      "id": "spark-m10-05-q2",
+      "type": "multiple-choice",
+      "question": "Что такое changelog producer в Paimon?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Инструмент для генерации логов приложения"
+        },
+        {
+          "id": "b",
+          "text": "Компонент для записи audit trail"
+        },
+        {
+          "id": "c",
+          "text": "Система контроля версий для schema changes"
+        },
+        {
+          "id": "d",
+          "text": "Механизм, который автоматически генерирует CDC-поток изменений из Paimon-таблицы -- downstream consumers могут подписаться на INSERT/UPDATE/DELETE события без дополнительной инфраструктуры"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Changelog producer -- уникальная фича Paimon. Таблица одновременно является sink (запись) и source (чтение changelog). Downstream consumers получают CDC-поток (INSERT, UPDATE, DELETE) нативно, без Debezium или другой CDC-инфраструктуры. Это делает Paimon идеальным для streaming-first архитектур.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: Apache Paimon -- changelog producer для нативного CDC-потока"
+    },
+    {
+      "id": "spark-m10-05-q3",
+      "type": "multiple-choice",
+      "question": "Auto-compaction в Paimon отличается от manual compaction в Delta (OPTIMIZE). В чём разница?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Auto-compaction в Paimon запускается автоматически при достижении порогов (число файлов, размер L0), не требуя ручного управления. OPTIMIZE в Delta -- явная команда, которую нужно запускать по расписанию"
+        },
+        {
+          "id": "b",
+          "text": "Нет разницы -- оба требуют ручного запуска"
+        },
+        {
+          "id": "c",
+          "text": "Auto-compaction быстрее, но менее надёжна"
+        },
+        {
+          "id": "d",
+          "text": "OPTIMIZE в Delta запускается автоматически, а Paimon требует ручного compaction"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Paimon наследует auto-compaction из LSM-tree: когда число файлов на уровне L0 превышает порог, compaction запускается автоматически в фоне. В Delta OPTIMIZE -- команда, которую DBA запускает вручную или по cron. Auto-compaction важна для streaming: данные приходят непрерывно, и ручное управление не масштабируется.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: Apache Paimon -- auto-compaction vs manual OPTIMIZE в Delta"
+    },
+    {
+      "id": "spark-m10-05-q4",
+      "type": "true-false",
+      "question": "Paimon изначально создавался для экосистемы Flink и имеет нативную Flink-интеграцию, в то время как поддержка Spark добавлена позже.",
+      "correctAnswer": true,
+      "explanation": "Paimon (бывший Flink Table Store) разработан Alibaba как streaming lakehouse для Flink. Нативная Flink-интеграция: streaming read/write, changelog CDC, auto-compaction. Поддержка Spark добавлена позже и продолжает развиваться. Для Spark-centric сред Delta Lake или Iceberg обычно предпочтительнее.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: Apache Paimon -- Flink-first дизайн и экосистема"
+    }
+  ]
+}

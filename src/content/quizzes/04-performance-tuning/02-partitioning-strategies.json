@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "04-performance-tuning/02-partitioning-strategies",
+  "moduleId": "04-performance-tuning",
+  "_meta": {
+    "idPrefix": "spark-m04-02",
+    "description": "Use IDs: m04-02-q1, m04-02-q2, ... for MC/TF; m04-02-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m04-02-q1",
+      "type": "multiple-choice",
+      "question": "Какие два уровня партиционирования существуют в Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Primary и secondary partitioning"
+        },
+        {
+          "id": "b",
+          "text": "Hash partitioning и range partitioning -- это единственные два вида"
+        },
+        {
+          "id": "c",
+          "text": "In-memory partitioning (repartition/coalesce) и filesystem partitioning (partitionBy при записи)"
+        },
+        {
+          "id": "d",
+          "text": "Input partitioning и output partitioning"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "В Spark существует два независимых уровня: (1) In-memory partitioning определяет, как данные распределены между tasks (repartition, coalesce, после shuffle); (2) Filesystem partitioning определяет структуру директорий на диске (partitionBy при записи). Эти механизмы независимы друг от друга.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m04-02-q2",
+      "type": "multiple-choice",
+      "question": "Как hash partitioning распределяет данные по партициям?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Данные сортируются по ключу и делятся на равные диапазоны"
+        },
+        {
+          "id": "b",
+          "text": "Каждая строка попадает в следующую партицию по очереди (round-robin)"
+        },
+        {
+          "id": "c",
+          "text": "Данные распределяются случайным образом по партициям"
+        },
+        {
+          "id": "d",
+          "text": "По формуле hash(key) % numPartitions -- каждое значение ключа всегда попадает в одну и ту же партицию"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Hash partitioning использует формулу hash(key) % numPartitions. Это гарантирует, что все записи с одним значением ключа всегда попадают в одну партицию -- это критично для join и groupBy. Range partitioning делит данные по диапазонам, round-robin -- по очереди без учёта ключа.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m04-02-q3",
+      "type": "multiple-choice",
+      "question": "Таблица partitioned by date, содержит 3 года данных (1095 дней). Запрос: SELECT * FROM orders WHERE date = '2024-01-15'. Сколько данных прочитает Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Данные только за один день (1/1095 от общего объёма) благодаря partition pruning"
+        },
+        {
+          "id": "b",
+          "text": "Все данные за 3 года -- Spark не умеет пропускать партиции"
+        },
+        {
+          "id": "c",
+          "text": "Данные за весь 2024 год"
+        },
+        {
+          "id": "d",
+          "text": "Зависит от формата файлов"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Partition pruning позволяет Spark пропускать партиции, не содержащие нужных данных. При партиционировании по date запрос с WHERE date = '2024-01-15' читает только директорию date=2024-01-15/, что составляет 1/1095 от общего объёма. Это одна из главных причин использовать filesystem partitioning для аналитических таблиц.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m04-02-q4",
+      "type": "true-false",
+      "question": "Партиционирование таблицы по столбцу с высокой кардинальностью (user_id, 10 млн уникальных значений) -- хорошая практика, так как обеспечивает точную фильтрацию.",
+      "correctAnswer": false,
+      "explanation": "Партиционирование по столбцу с высокой кардинальностью (10 млн уникальных значений) создаст 10 миллионов директорий, каждая с крошечным файлом. Это приводит к проблеме маленьких файлов, перегружает NameNode и делает listing директорий крайне медленным. Оптимальная кардинальность для filesystem partitioning: десятки-сотни уникальных значений (дата, регион, статус).",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-02-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer партиционирует таблицу заказов по date и city. Запрос: SELECT * FROM orders WHERE date = '2024-01-15'. Будет ли применён partition pruning?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет -- при двойном партиционировании нужно указать оба ключа"
+        },
+        {
+          "id": "b",
+          "text": "Да -- Spark пропустит все партиции с date != '2024-01-15', но прочитает все city-подпартиции внутри"
+        },
+        {
+          "id": "c",
+          "text": "Зависит от того, написан ли запрос на SQL или DataFrame API"
+        },
+        {
+          "id": "d",
+          "text": "Да, но только если city указан первым в partitionBy"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "При иерархическом партиционировании partitionBy('date', 'city') Spark создаёт структуру date=.../city=.../. Фильтр по первому ключу (date) работает для partition pruning -- Spark пропустит все директории с другими датами. Внутри найденной директории Spark прочитает все city-подпартиции, потому что фильтра по city нет.",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

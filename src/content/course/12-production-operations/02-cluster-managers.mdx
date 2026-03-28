@@ -1,0 +1,235 @@
+---
+title: "Менеджеры кластеров: Standalone, YARN, Kubernetes"
+description: "Архитектура и сравнение трёх cluster manager для Spark: Standalone, YARN и Kubernetes с decision matrix"
+order: 2
+difficulty: "intermediate"
+estimatedTime: 16
+topics: ["Standalone", "YARN", "Kubernetes", "Cluster Manager", "Resource Management", "spark-submit"]
+---
+
+import { StandaloneArchDiagram, YarnArchDiagram, K8sArchDiagram } from '../../../components/diagrams/module12';
+
+# Менеджеры кластеров: Standalone, YARN, Kubernetes
+
+## Роль Cluster Manager
+
+Spark-приложение состоит из **driver** (координатор) и **executor** (рабочие процессы). Cluster manager отвечает за:
+
+- **Выделение ресурсов** (CPU, memory) для executor
+- **Запуск и мониторинг** executor на worker-нодах
+- **Обработку отказов** -- перезапуск упавших executor
+- **Многопользовательский доступ** -- изоляция ресурсов между приложениями
+
+Spark поддерживает три cluster manager: **Standalone**, **YARN** и **Kubernetes**. Каждый подходит для разных сценариев.
+
+## Standalone Cluster Manager
+
+Standalone -- встроенный cluster manager, поставляемый с Spark. Самый простой в настройке:
+
+<StandaloneArchDiagram client:visible />
+
+```bash
+# Запуск Standalone кластера
+# $SPARK_HOME/sbin/start-master.sh
+# $SPARK_HOME/sbin/start-worker.sh spark://master:7077
+
+# spark-submit для Standalone
+# spark-submit \
+#   --master spark://master:7077 \
+#   --deploy-mode client \
+#   --executor-memory 4g \
+#   --executor-cores 2 \
+#   --total-executor-cores 8 \
+#   app.py
+```
+
+**Преимущества Standalone:**
+- Простая установка -- нет внешних зависимостей
+- Минимальная конфигурация
+- Идеален для Docker-лабов и локальной разработки
+
+**Ограничения:**
+- **Нет resource isolation** -- приложения делят ресурсы без гарантий
+- **Нет multi-tenancy** -- один пользователь может занять весь кластер
+- **Примитивный scheduler** -- FIFO или simple fair scheduling
+- **Нет интеграции** с другими Big Data компонентами
+
+## YARN (Yet Another Resource Negotiator)
+
+YARN -- resource manager из Hadoop-экосистемы. Если ваша инфраструктура построена на Hadoop, YARN -- естественный выбор:
+
+<YarnArchDiagram client:visible />
+
+YARN предлагает два deploy mode:
+
+```bash
+# yarn-client: driver на вашей машине (интерактивный)
+# spark-submit \
+#   --master yarn \
+#   --deploy-mode client \
+#   --num-executors 10 \
+#   --executor-memory 8g \
+#   --executor-cores 4 \
+#   app.py
+
+# yarn-cluster: driver на кластере (production)
+# spark-submit \
+#   --master yarn \
+#   --deploy-mode cluster \
+#   --num-executors 10 \
+#   --executor-memory 8g \
+#   --executor-cores 4 \
+#   app.py
+```
+
+```properties
+# yarn-site.xml -- resource limits
+yarn.nodemanager.resource.memory-mb      65536
+yarn.nodemanager.resource.cpu-vcores     16
+yarn.scheduler.capacity.maximum-am-resource-percent  0.2
+```
+
+**Преимущества YARN:**
+- **Resource isolation** через контейнеры (memory/CPU limits)
+- **Queue-based scheduling** -- Capacity или Fair scheduler
+- **Multi-tenancy** -- разные команды в разных queue
+- **Интеграция** с HDFS, Hive, HBase, Oozie
+
+**Ограничения:**
+- Требует Hadoop-инфраструктуру
+- Сложная конфигурация (xml-файлы)
+- Медленный запуск контейнеров (~30-60 секунд)
+- Не cloud-native -- плохо работает с auto-scaling
+
+<Callout type="tip">
+**client vs cluster mode:** в `client` mode driver работает на вашей машине -- удобно для отладки (видите stdout). В `cluster` mode driver запускается на кластере -- обязательно для production (driver не зависит от вашей машины). Правило: **dev = client, production = cluster**.
+</Callout>
+
+## Kubernetes
+
+Kubernetes -- современный cloud-native cluster manager. С Spark 3.1+ поддержка K8s стала GA (General Availability), и это **рекомендуемый выбор для новых deployment**:
+
+<K8sArchDiagram client:visible />
+
+```bash
+# spark-submit для Kubernetes
+# spark-submit \
+#   --master k8s://https://k8s-api-server:6443 \
+#   --deploy-mode cluster \
+#   --conf spark.kubernetes.container.image=spark:4.0.0 \
+#   --conf spark.kubernetes.namespace=spark-jobs \
+#   --conf spark.kubernetes.authenticate.driver.serviceAccountName=spark \
+#   --conf spark.executor.instances=5 \
+#   --conf spark.executor.memory=4g \
+#   --conf spark.executor.cores=2 \
+#   local:///opt/spark/app.py
+```
+
+**Pod templates** позволяют настроить executor-поды:
+
+```yaml
+# executor-pod-template.yaml
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: spark-executor
+    resources:
+      requests:
+        memory: "4Gi"
+        cpu: "2"
+      limits:
+        memory: "6Gi"
+        cpu: "2"
+    volumeMounts:
+    - name: spark-local
+      mountPath: /tmp/spark-local
+  volumes:
+  - name: spark-local
+    emptyDir:
+      sizeLimit: 20Gi
+  nodeSelector:
+    spark-role: executor
+  tolerations:
+  - key: "spark-workload"
+    operator: "Equal"
+    value: "true"
+    effect: "NoSchedule"
+```
+
+```bash
+# Использование pod template
+# spark-submit \
+#   --master k8s://https://k8s-api:6443 \
+#   --conf spark.kubernetes.executor.podTemplateFile=executor-pod-template.yaml \
+#   app.py
+```
+
+**Dynamic allocation на Kubernetes:**
+
+```properties
+# spark-defaults.conf -- dynamic allocation на K8s
+spark.dynamicAllocation.enabled                true
+spark.dynamicAllocation.shuffleTracking.enabled true
+spark.dynamicAllocation.minExecutors           2
+spark.dynamicAllocation.maxExecutors           20
+spark.dynamicAllocation.initialExecutors       5
+spark.dynamicAllocation.executorIdleTimeout    60s
+spark.dynamicAllocation.schedulerBacklogTimeout 1s
+```
+
+<VersionBadge version="4.0" />
+**Spark 4.0** улучшает поддержку Kubernetes: интеграция с **Volcano scheduler** для batch scheduling, **pod priorities** для preemption, улучшенный garbage collection завершённых executor pod.
+
+## Decision Matrix: когда использовать какой менеджер?
+
+| Критерий | Standalone | YARN | Kubernetes |
+|----------|-----------|------|------------|
+| **Сложность настройки** | Минимальная | Высокая | Средняя |
+| **Resource isolation** | Нет | Контейнеры | Pod limits |
+| **Multi-tenancy** | Базовый | Queue-based | Namespace-based |
+| **Auto-scaling** | Нет | Ограниченный | Нативный (HPA/VPA) |
+| **Cloud-native** | Нет | Нет | Да |
+| **Hadoop интеграция** | Нет | Нативная | Через volumes |
+| **Запуск executor** | Быстрый (~5s) | Медленный (~30s) | Средний (~15s) |
+| **Когда использовать** | Dev, PoC, Docker labs | Hadoop-экосистема, legacy | Cloud, новые проекты |
+
+<Callout type="tip">
+**Современный default: Kubernetes.** Если вы начинаете новый проект и ваша инфраструктура в облаке -- используйте Kubernetes. Он обеспечивает лучшую изоляцию, авто-масштабирование и интеграцию с CI/CD. YARN выбирайте только если у вас уже есть Hadoop-инфраструктура.
+</Callout>
+
+## spark-submit: unified interface
+
+Независимо от cluster manager, `spark-submit` -- единый интерфейс запуска:
+
+```bash
+# Общий формат
+# spark-submit \
+#   --master <master-url> \       # spark://, yarn, k8s://
+#   --deploy-mode <mode> \        # client или cluster
+#   --executor-memory <mem> \     # память на executor
+#   --executor-cores <cores> \    # CPU на executor
+#   --num-executors <num> \       # количество executor (YARN/K8s)
+#   --total-executor-cores <num> \ # общее CPU (Standalone)
+#   <app.py|app.jar>
+
+# Master URL варианты:
+#   spark://host:7077          -- Standalone
+#   yarn                       -- YARN
+#   k8s://https://host:6443    -- Kubernetes
+#   local[*]                   -- локальный (тестирование)
+```
+
+<KnowledgeCheck
+  question="Компания мигрирует из on-premise Hadoop-кластера в AWS. Какой cluster manager рекомендуете для Spark и почему?"
+  answer="Рекомендуется Kubernetes (EKS). Причины: (1) cloud-native авто-масштабирование через HPA/VPA и Cluster Autoscaler; (2) лучшая resource isolation через pod limits и namespaces; (3) интеграция с CI/CD pipeline (Docker images для Spark apps); (4) не зависит от Hadoop -- нет необходимости поддерживать HDFS/YARN в облаке; (5) поддержка spot instances через node selectors и tolerations. YARN имеет смысл только если миграция поэтапная и часть workloads остаётся в Hadoop."
+/>
+
+<KnowledgeCheck
+  question="В чём разница между deploy-mode client и cluster? Почему для production используется cluster mode?"
+  answer="В client mode driver работает на машине, откуда запущен spark-submit -- удобно для интерактивной разработки (видите stdout, можете отлаживать). В cluster mode driver запускается на кластере в отдельном контейнере/pod. Production требует cluster mode потому что: (1) driver не зависит от рабочей станции разработчика; (2) driver ближе к executor -- меньше network latency; (3) если ваша машина отключится, задача продолжит работу; (4) Airflow/CI/CD могут запустить и забыть (fire-and-forget)."
+/>
+
+## Что дальше?
+
+В следующем уроке мы рассмотрим **облачное развёртывание Spark** -- как работают managed Spark-платформы (Databricks, EMR, Dataproc) и когда они предпочтительнее self-managed кластера.

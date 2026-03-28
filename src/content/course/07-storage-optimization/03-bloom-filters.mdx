@@ -1,0 +1,207 @@
+---
+title: "Bloom-фильтры для data skipping"
+description: "Вероятностные структуры данных для эффективного data skipping на высококардинальных столбцах"
+order: 3
+difficulty: "advanced"
+estimatedTime: 12
+topics: ["Bloom Filter", "Probabilistic Data Structure", "False Positive", "Data Skipping", "Parquet Bloom Filter"]
+---
+
+# Bloom-фильтры для data skipping
+
+## Ограничение min/max statistics
+
+В предыдущем уроке мы узнали, что min/max statistics позволяют пропускать row groups. Но для **высококардинальных столбцов** (user_id, session_id, transaction_id) они бесполезны:
+
+```
+Row Group 1: user_id min=1, max=999999
+Row Group 2: user_id min=2, max=999998
+Row Group 3: user_id min=5, max=999997
+
+Запрос: WHERE user_id = 42
+→ Все row groups содержат диапазон [1..999999]
+→ Все row groups проходят min/max проверку
+→ Data skipping: 0% (читаем ВСЁ)
+```
+
+Min/max statistics не помогают, когда значения **равномерно распределены** по всем row groups. Нужна другая структура данных.
+
+## Что такое bloom filter
+
+**Bloom filter** -- это вероятностная структура данных, которая отвечает на вопрос "содержит ли множество элемент X?" с двумя возможными ответами:
+
+- **"Точно НЕТ"** -- элемента гарантированно нет (false negatives невозможны)
+- **"Возможно ДА"** -- элемент, вероятно, есть (false positives возможны)
+
+```
+Bloom filter для Row Group 1: {user_id: 42, 100, 205, 500, ...}
+
+Запрос: WHERE user_id = 42
+  Row Group 1: bloom.contains(42) = true  → МОЖЕТ содержать → READ
+  Row Group 2: bloom.contains(42) = false → ТОЧНО нет       → SKIP!
+  Row Group 3: bloom.contains(42) = false → ТОЧНО нет       → SKIP!
+
+Результат: читаем 1 row group вместо 3
+```
+
+### Как работает внутри
+
+Bloom filter -- это **битовый массив** фиксированного размера с K хеш-функциями:
+
+```
+Добавление элемента "42":
+  hash1(42) = 3  → bits[3] = 1
+  hash2(42) = 7  → bits[7] = 1
+  hash3(42) = 12 → bits[12] = 1
+
+Битовый массив: [0,0,0,1,0,0,0,1,0,0,0,0,1,0,0,0]
+                       ↑           ↑           ↑
+
+Проверка "42":
+  bits[3]=1, bits[7]=1, bits[12]=1 → "Возможно ДА"
+
+Проверка "99":
+  hash1(99)=5 → bits[5]=0 → "Точно НЕТ" (достаточно одного 0)
+```
+
+### False Positive Rate (FPP)
+
+Bloom filter может ошибочно сказать "возможно ДА" для элемента, которого нет (false positive). Вероятность ложноположительного результата (**FPP**) зависит от:
+
+- **Размера битового массива** (больше → меньше FPP)
+- **Количества хеш-функций** (больше → сначала лучше, потом хуже)
+- **Количества элементов** (больше → выше FPP)
+
+| FPP | Размер bloom filter (на 1M элементов) | Data skipping эффективность |
+|-----|--------------------------------------|----------------------------|
+| 10% | ~1.2 MB | Пропускает ~90% неподходящих row groups |
+| 5% | ~1.5 MB | Пропускает ~95% |
+| 1% | ~2.4 MB | Пропускает ~99% |
+| 0.1% | ~3.6 MB | Пропускает ~99.9% |
+
+Компромисс: меньше FPP = больше размер bloom filter = больше storage overhead.
+
+## Bloom filters в Spark / Parquet
+
+Parquet поддерживает bloom filters начиная с версии 1.12:
+
+```python
+# Включение bloom filter при записи Parquet
+df.write \
+  .option("parquet.bloom.filter.enabled#user_id", "true") \
+  .option("parquet.bloom.filter.expected.ndv#user_id", "1000000") \
+  .option("parquet.bloom.filter.fpp#user_id", "0.05") \
+  .parquet("/data/events/")
+```
+
+```python
+# Глобальное включение bloom filter
+spark.conf.set("spark.sql.parquet.bloom.filter.enabled", "true")
+
+# Настройка per-column
+spark.conf.set("parquet.bloom.filter.enabled#session_id", "true")
+spark.conf.set("parquet.bloom.filter.expected.ndv#session_id", "5000000")
+```
+
+### Параметры конфигурации
+
+| Параметр | Значение | Описание |
+|----------|---------|---------|
+| `bloom.filter.enabled` | true/false | Включить bloom filter для столбца |
+| `bloom.filter.expected.ndv` | число | Ожидаемое количество уникальных значений (NDV) |
+| `bloom.filter.fpp` | 0.0-1.0 | False positive probability (default: 0.05) |
+| `bloom.filter.max.bytes` | bytes | Максимальный размер bloom filter |
+
+### Bloom filters в Delta Lake
+
+Delta Lake предоставляет более удобный API:
+
+```sql
+-- Создание bloom filter index
+CREATE BLOOMFILTER INDEX ON TABLE events
+FOR COLUMNS(user_id OPTIONS (fpp = 0.05, numItems = 1000000))
+```
+
+```python
+# Через DeltaTable API
+delta_table = DeltaTable.forPath(spark, "/data/events/")
+# Bloom filters настраиваются в table properties
+spark.sql("""
+  ALTER TABLE delta.`/data/events/`
+  SET TBLPROPERTIES (
+    'delta.bloomFilter.columns' = 'user_id,session_id',
+    'delta.bloomFilter.fpp' = '0.05',
+    'delta.bloomFilter.numItems' = '1000000'
+  )
+""")
+```
+
+<Callout type="tip">
+**Bloom filter vs Z-ordering: когда что использовать**
+
+| Кардинальность | Min/Max | Z-ordering | Bloom Filter |
+|---------------|---------|------------|-------------|
+| Низкая (10-100) | Отлично | Не нужен | Не нужен |
+| Средняя (100-10K) | Хорошо | Отлично | Можно |
+| Высокая (10K-1M+) | Плохо | Неэффективен | Отлично |
+
+Bloom filters **дополняют** min/max и Z-ordering, а не заменяют их.
+</Callout>
+
+## Анти-паттерн: bloom filters на низкокардинальных столбцах
+
+```python
+# ПЛОХО: bloom filter на столбце с 5 уникальными значениями
+df.write \
+  .option("parquet.bloom.filter.enabled#status", "true") \
+  .option("parquet.bloom.filter.expected.ndv#status", "5") \
+  .parquet("/data/orders/")
+
+# status IN ('new', 'processing', 'shipped', 'delivered', 'cancelled')
+# Min/max statistics: min='cancelled', max='shipped'
+# Min/max УЖЕ достаточно для data skipping!
+# Bloom filter добавляет overhead без пользы
+```
+
+Bloom filters оправданы для столбцов с **тысячами и более** уникальных значений, где min/max statistics бесполезны.
+
+## Практический сценарий
+
+**Задача:** таблица событий (1TB, 5 миллиардов строк) с поиском по `user_id` (10M уникальных) и `event_date`.
+
+```python
+# Оптимальная стратегия:
+# 1. Partition by event_date (грубый фильтр по дате)
+# 2. Z-ordering by user_id (кластеризация внутри partition)
+# 3. Bloom filter on user_id (точечный поиск)
+
+df.write \
+  .partitionBy("event_date") \
+  .option("parquet.bloom.filter.enabled#user_id", "true") \
+  .option("parquet.bloom.filter.expected.ndv#user_id", "10000000") \
+  .option("parquet.bloom.filter.fpp#user_id", "0.01") \
+  .parquet("/data/events/")
+
+# Для Delta Lake:
+# OPTIMIZE events
+# ZORDER BY (user_id)
+```
+
+Запрос `WHERE user_id = 12345 AND event_date = '2024-02-01'`:
+1. **Partition pruning**: читает только директорию `event_date=2024-02-01` (~3GB из 1TB)
+2. **Bloom filter**: пропускает row groups, не содержащие `user_id=12345` (~50MB из 3GB)
+3. **Итого**: читает **0.005%** данных
+
+<KnowledgeCheck
+  question="Почему bloom filter не может дать false negative (ложноотрицательный результат)?"
+  answer="При добавлении элемента bloom filter устанавливает K бит в массиве (по одному от каждой хеш-функции). При проверке он проверяет те же K позиций. Если хотя бы один бит = 0, элемент ТОЧНО не был добавлен (этот бит не мог быть установлен другим элементом, потому что при добавлении он был бы установлен). False positive возможен, когда все K бит = 1 из-за других элементов, случайно установивших эти позиции. Но если элемент был добавлен, ВСЕ K бит гарантированно = 1."
+/>
+
+<KnowledgeCheck
+  question="Таблица содержит 1M уникальных user_id. Какой FPP (false positive probability) выбрать для bloom filter и почему?"
+  answer="Для 1M уникальных значений оптимален FPP = 0.01-0.05 (1-5%). При FPP=0.05 bloom filter занимает ~1.5MB на row group и пропускает 95% неподходящих блоков. FPP=0.01 даёт 99% skip rate, но увеличивает размер до ~2.4MB. FPP=0.001 (99.9%) даёт ~3.6MB -- marginal improvement за значительный storage cost. Выбор зависит от частоты точечных запросов: для частых lookups (OLTP-like) стоит FPP=0.01, для редких аналитических -- FPP=0.05 достаточно."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **compaction и vacuum** -- как поддерживать оптимальный размер файлов и очищать устаревшие версии данных.

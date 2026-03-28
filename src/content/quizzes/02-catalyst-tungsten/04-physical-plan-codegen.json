@@ -1,0 +1,152 @@
+{
+  "lessonSlug": "02-catalyst-tungsten/04-physical-plan-codegen",
+  "moduleId": "02-catalyst-tungsten",
+  "_meta": {
+    "idPrefix": "spark-m02-04",
+    "description": "Use IDs: m02-04-q1, m02-04-q2, ... for MC/TF; m02-04-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m02-04-q1",
+      "type": "multiple-choice",
+      "question": "Таблица orders (500 ГБ) joinится с таблицей products (8 МБ). spark.sql.autoBroadcastJoinThreshold = 10MB (по умолчанию). Какую join-стратегию выберет SparkPlanner?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SortMergeJoin -- обе таблицы слишком велики для broadcast"
+        },
+        {
+          "id": "b",
+          "text": "ShuffleHashJoin -- Spark выбирает его по умолчанию для неравных таблиц"
+        },
+        {
+          "id": "c",
+          "text": "CartesianProduct -- SparkPlanner не может определить тип join"
+        },
+        {
+          "id": "d",
+          "text": "BroadcastHashJoin -- products (8 МБ) меньше порога 10 МБ, она будет broadcast на все executors"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "SparkPlanner использует JoinSelection стратегию. Порог broadcast join: spark.sql.autoBroadcastJoinThreshold = 10 МБ. Таблица products (8 МБ) меньше порога, поэтому SparkPlanner выберет BroadcastHashJoin: products будет целиком отправлена на все executors, где из неё построится hash-таблица. Это устраняет shuffle для orders (500 ГБ) -- огромная экономия.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-04-q2",
+      "type": "multiple-choice",
+      "question": "В выводе explain() вы видите CartesianProduct вместо BroadcastHashJoin или SortMergeJoin. Что это означает и как исправить?",
+      "options": [
+        {
+          "id": "a",
+          "text": "JOIN без условия (ON clause) или с неравенством вместо равенства создаёт CartesianProduct -- каждая строка одной таблицы сопоставляется с каждой строкой другой; нужно добавить equi-join условие"
+        },
+        {
+          "id": "b",
+          "text": "CartesianProduct -- оптимальная стратегия для некоторых join; исправлять не нужно"
+        },
+        {
+          "id": "c",
+          "text": "CartesianProduct появляется, когда таблицы слишком малы для SortMergeJoin"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически заменит CartesianProduct на BroadcastHashJoin в runtime"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "CartesianProduct (декартово произведение) -- самая дорогая join-стратегия: O(N*M). SparkPlanner выбирает её, когда нет equi-join условия (ON a.key = b.key). Это происходит при: (1) JOIN без ON; (2) JOIN с неравенством (ON a.price > b.threshold). Для таблиц 1М * 1М строк это 10^12 комбинаций. Решение: добавить equi-join условие или переписать запрос.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-04-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer увеличил spark.sql.autoBroadcastJoinThreshold с 10 МБ до 500 МБ для ускорения join. Какой риск создаёт это изменение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Никакого -- broadcast join всегда быстрее SortMergeJoin"
+        },
+        {
+          "id": "b",
+          "text": "Таблица до 500 МБ будет отправлена на КАЖДЫЙ executor, создавая огромную нагрузку на driver memory и сеть; при 100 executors 500 МБ broadcast = 50 ГБ сетевого трафика"
+        },
+        {
+          "id": "c",
+          "text": "Spark перестанет использовать SortMergeJoin для любых таблиц"
+        },
+        {
+          "id": "d",
+          "text": "BroadcastHashJoin не поддерживает таблицы больше 100 МБ"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "BroadcastHashJoin отправляет маленькую таблицу на каждый executor. При пороге 500 МБ и 100 executors: (1) driver собирает таблицу (до 500 МБ) в свою память; (2) broadcast передаёт 500 МБ * 100 = 50 ГБ по сети; (3) каждый executor хранит 500 МБ hash-таблицу. Это может вызвать OOM на driver и замедлить сеть. Рекомендуемый порог: 10-100 МБ в зависимости от кластера.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-04-q4",
+      "type": "multiple-choice",
+      "question": "Какой физический оператор в explain() указывает на чтение Parquet-файлов с применением predicate pushdown?",
+      "options": [
+        {
+          "id": "a",
+          "text": "InMemoryTableScanExec"
+        },
+        {
+          "id": "b",
+          "text": "FilterExec -- все фильтры всегда остаются на уровне Spark"
+        },
+        {
+          "id": "c",
+          "text": "FileScan parquet с PushedFilters: [IsNotNull(age), GreaterThan(age, 30)]"
+        },
+        {
+          "id": "d",
+          "text": "ProjectExec с указанием Parquet source"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "В Physical Plan оператор FileScan parquet показывает, какие фильтры были опущены на уровень чтения файлов через PushedFilters. Parquet reader использует min/max statistics в footer файла для пропуска row groups, не содержащих подходящих данных. Это значительно сокращает объём I/O. FilterExec над FileScan -- это дополнительная фильтрация на уровне Spark для предикатов, которые не поддерживаются на уровне Parquet.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-04-code-1",
+      "type": "code-challenge",
+      "question": "Продемонстрируйте разницу между CartesianProduct (crossJoin -- декартово произведение) и правильным equi-join. Сначала выполните crossJoin двух таблиц и подсчитайте строки. Затем выполните правильный JOIN по ключу и покажите результат. Сравните количество строк: crossJoin создаёт N*M строк (worst case).",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"join-strategy\").getOrCreate()\n\norders = spark.createDataFrame(\n    [(1, 101, 500), (2, 102, 300), (3, 101, 700)],\n    [\"order_id\", \"product_id\", \"amount\"]\n)\n\nproducts = spark.createDataFrame(\n    [(101, \"Laptop\"), (102, \"Mouse\")],\n    [\"product_id\", \"product_name\"]\n)\n\n# ПЛОХО: crossJoin без условия -- CartesianProduct\n# TODO: Выполните crossJoin и подсчитайте строки\n# cartesian = orders.crossJoin(products)\n# print(f\"CrossJoin rows: {cartesian.count()}\")  # 3 * 2 = 6 строк!\n\n# ПРАВИЛЬНО: equi-join с условием по product_id\n# TODO: Выполните правильный join по product_id\n# correct = orders.join(products, \"product_id\")\n# print(f\"Equi-join rows: {correct.count()}\")  # только 3 строки\n\n# TODO: Покажите правильный результат\n# correct.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"join-strategy\").getOrCreate()\n\norders = spark.createDataFrame(\n    [(1, 101, 500), (2, 102, 300), (3, 101, 700)],\n    [\"order_id\", \"product_id\", \"amount\"]\n)\n\nproducts = spark.createDataFrame(\n    [(101, \"Laptop\"), (102, \"Mouse\")],\n    [\"product_id\", \"product_name\"]\n)\n\ncartesian = orders.crossJoin(products)\nprint(f\"CrossJoin rows: {cartesian.count()}\")\n\ncorrect = orders.join(products, \"product_id\")\nprint(f\"Equi-join rows: {correct.count()}\")\n\ncorrect.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "CrossJoin создаёт 6 строк",
+          "input": "",
+          "expectedOutput": "CrossJoin rows: 6",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Equi-join создаёт 3 строки",
+          "input": "",
+          "expectedOutput": "Equi-join rows: 3",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Правильный join содержит Laptop",
+          "input": "",
+          "expectedOutput": "Laptop",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "CartesianProduct (crossJoin) создаёт декартово произведение: каждая строка одной таблицы сопоставляется с каждой строкой другой. Для 3 * 2 = 6 строк это безобидно, но для production-таблиц 1M * 1M = 10^12 строк -- катастрофа. SparkPlanner выбирает CartesianProduct, когда нет equi-join условия (ON a.key = b.key). Правильный equi-join использует BroadcastHashJoin (для маленькой таблицы) или SortMergeJoin (для больших), обрабатывая только совпадающие ключи.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

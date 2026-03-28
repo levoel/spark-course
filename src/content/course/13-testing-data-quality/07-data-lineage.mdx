@@ -1,0 +1,196 @@
+---
+title: "Отслеживание lineage данных"
+description: "Data lineage: OpenLineage стандарт, Apache Atlas, Unity Catalog, интеграция с Spark через OpenLineage transport"
+order: 7
+difficulty: "intermediate"
+estimatedTime: 12
+topics: ["Data Lineage", "OpenLineage", "Apache Atlas", "Unity Catalog", "Compliance", "Impact Analysis"]
+---
+
+import { OpenLineageEventDiagram, ApacheAtlasDiagram } from '../../../components/diagrams/module13';
+
+# Отслеживание lineage данных
+
+## Зачем нужен data lineage?
+
+**Data lineage** -- это карта происхождения данных: откуда они пришли, через какие трансформации прошли, и куда записались. Три причины, почему lineage критичен:
+
+### 1. Compliance (GDPR, SOX)
+
+```
+Регулятор: "Покажите, из каких источников формируется отчёт по клиентам."
+Без lineage: "Э-э-э... наверное, из PostgreSQL? Или из S3? Спросим у Васи, он писал pipeline 2 года назад."
+С lineage: "Вот граф: CRM → bronze.customers → silver.customers → gold.customer_metrics → report_daily."
+```
+
+### 2. Impact Analysis
+
+Перед изменением таблицы вы должны знать: кто от неё зависит?
+
+```
+silver.orders (вы хотите удалить колонку `discount`)
+    ↓ читает
+gold.revenue_daily (использует discount для расчёта net_revenue)
+    ↓ читает
+dashboard_finance (показывает net_revenue C-level)
+
+Без lineage: удалили колонку → dashboard сломался → инцидент.
+С lineage: увидели зависимость → мигрировали downstream → безопасно удалили.
+```
+
+### 3. Debugging
+
+Данные в gold-таблице неправильные. Lineage показывает путь:
+
+```
+Источник ← bronze ← silver ← gold (ошибка здесь)
+                      ↑
+                 Вот здесь JOIN потерял строки (LEFT → INNER по ошибке)
+```
+
+## OpenLineage: открытый стандарт
+
+**OpenLineage** -- открытый стандарт для сбора lineage-метаданных. Разработан Datakin (ныне часть Astronomer/Atlan). Не привязан к конкретному инструменту.
+
+### Модель данных
+
+OpenLineage оперирует тремя сущностями:
+
+<OpenLineageEventDiagram client:visible />
+
+- **Dataset** -- таблица, файл, topic (input или output)
+- **Job** -- трансформация (Spark job, dbt model, Airflow task)
+- **Run** -- конкретный запуск Job (с ID, временем, статусом)
+- **Facets** -- метаданные: schema, row count, SQL query, data quality metrics
+
+### События жизненного цикла
+
+OpenLineage отправляет события в моменты:
+
+```
+START  → Job начал выполнение (inputs known)
+RUNNING → промежуточные обновления (опционально)
+COMPLETE → Job завершён успешно (outputs known)
+FAIL   → Job завершён с ошибкой
+```
+
+## Spark + OpenLineage
+
+### Конфигурация
+
+OpenLineage интегрируется с Spark через **SparkListener**:
+
+```bash
+# spark-submit с OpenLineage
+spark-submit \
+  --packages "io.openlineage:openlineage-spark_2.12:1.25.0" \
+  --conf "spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener" \
+  --conf "spark.openlineage.transport.type=http" \
+  --conf "spark.openlineage.transport.url=http://marquez:5000/api/v1/lineage" \
+  --conf "spark.openlineage.namespace=production" \
+  my_pipeline.py
+```
+
+Или в `spark-defaults.conf`:
+
+```properties
+spark.extraListeners=io.openlineage.spark.agent.OpenLineageSparkListener
+spark.openlineage.transport.type=http
+spark.openlineage.transport.url=http://marquez:5000/api/v1/lineage
+spark.openlineage.namespace=production
+```
+
+### Что Spark отправляет автоматически
+
+После подключения OpenLineage listener, Spark автоматически отправляет:
+
+- **Input datasets** -- таблицы и файлы, которые Spark читает
+- **Output datasets** -- куда Spark записывает результат
+- **Schema facets** -- структура входных и выходных данных
+- **SQL facets** -- SQL-запрос (если используется Spark SQL)
+- **Run metadata** -- время запуска, продолжительность, статус
+
+Никаких изменений в коде pipeline не нужно -- listener перехватывает события Spark автоматически.
+
+<KnowledgeCheck
+  question="Какие три сущности составляют модель данных OpenLineage? Что такое facets?"
+  answer="Три сущности OpenLineage: (1) Dataset -- таблица, файл или topic; бывает input (источник) или output (результат). (2) Job -- трансформация, которая читает inputs и создаёт outputs (Spark job, dbt model, Airflow task). (3) Run -- конкретный запуск Job с уникальным ID, временем, статусом (START/COMPLETE/FAIL). Facets -- метаданные, прикреплённые к Dataset, Job или Run: schema (структура колонок), row count, SQL query, data quality metrics. Facets расширяемы -- можно добавить custom facets для своих нужд."
+/>
+
+## Apache Atlas
+
+**Apache Atlas** -- система управления метаданными для Hadoop-экосистемы. Предоставляет:
+
+- **Type system** -- определение типов сущностей (hive_table, spark_process, kafka_topic)
+- **Lineage graph** -- визуальный граф происхождения данных
+- **Classification** -- теги (PII, financial, confidential) для governance
+- **REST API** -- программный доступ к метаданным
+
+### Архитектура Atlas
+
+<ApacheAtlasDiagram client:visible />
+
+Atlas интегрируется с Spark через **Atlas Spark Hook** -- listener, аналогичный OpenLineage, но отправляет метаданные в формате Atlas:
+
+```properties
+# spark-defaults.conf для Atlas
+spark.extraListeners=org.apache.atlas.spark.hook.SparkAtlasEventTracker
+atlas.rest.address=http://atlas-server:21000
+atlas.cluster.name=production
+```
+
+Atlas хорошо подходит для **Hadoop-centric** инфраструктуры (HDFS, Hive, HBase, Kafka). Для cloud-native стека рассмотрите OpenLineage + Marquez или Unity Catalog.
+
+## Unity Catalog (Databricks)
+
+**Unity Catalog** -- система governance от Databricks. Предоставляет lineage **из коробки** для всех Spark workloads на Databricks:
+
+- **Автоматический lineage** -- захватывает все read/write без конфигурации
+- **Column-level lineage** -- отслеживает не только таблицы, но и отдельные колонки
+- **Cross-workspace** -- lineage между разными Databricks workspace
+- **Интеграция с Delta Lake** -- линки к конкретным версиям таблиц
+
+```sql
+-- Unity Catalog: просмотр lineage через SQL
+-- (доступно только на Databricks)
+SHOW TABLE LINEAGE FOR gold.customer_metrics;
+```
+
+<VersionBadge version="4.0" />
+
+Spark 4.0 улучшает lineage-интеграцию через **Spark Connect** -- стандартизированный протокол, который упрощает сбор lineage-метаданных из клиентских приложений.
+
+### Сравнение инструментов lineage
+
+| Аспект | OpenLineage | Apache Atlas | Unity Catalog |
+|--------|-------------|--------------|---------------|
+| Тип | Открытый стандарт | Открытый проект | Проприетарный |
+| Инфраструктура | Marquez / Atlan | Hadoop cluster | Databricks |
+| Lineage level | Table + column | Table | Table + column |
+| Setup | Spark listener config | Atlas hook + server | Из коробки |
+| Стоимость | Бесплатно | Бесплатно | Databricks license |
+| Best for | Multi-tool, cloud-native | Hadoop ecosystem | Databricks users |
+
+<KnowledgeCheck
+  question="Как OpenLineage интегрируется с Spark? Нужно ли менять код pipeline?"
+  answer="OpenLineage интегрируется с Spark через SparkListener (spark.extraListeners). Достаточно добавить конфигурацию при spark-submit или в spark-defaults.conf: указать OpenLineage listener class и URL для отправки событий. Менять код pipeline НЕ нужно -- listener автоматически перехватывает события Spark (read, write, SQL) и отправляет OpenLineage events с metadata: input/output datasets, schema facets, SQL queries, run timing. Это zero-code integration."
+/>
+
+## Практический выбор инструмента lineage
+
+```
+Вопрос 1: Вы на Databricks?
+  ДА → Unity Catalog (из коробки, ничего настраивать не нужно)
+  НЕТ ↓
+
+Вопрос 2: У вас Hadoop-кластер с Hive/HBase/Atlas?
+  ДА → Apache Atlas (нативная интеграция)
+  НЕТ ↓
+
+Вопрос 3: Cloud-native или multi-tool?
+  ДА → OpenLineage + Marquez (открытый стандарт, любой инструмент)
+```
+
+## Что дальше?
+
+В следующем уроке -- **лабораторная работа**: собираем pipeline качества данных с Great Expectations и Spark в Docker.

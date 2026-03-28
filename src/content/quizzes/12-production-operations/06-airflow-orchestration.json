@@ -1,0 +1,156 @@
+{
+  "lessonSlug": "12-production-operations/06-airflow-orchestration",
+  "moduleId": "12-production-operations",
+  "_meta": {
+    "idPrefix": "spark-m12-06",
+    "description": "Use IDs: m12-06-q1, m12-06-q2, ... (4 questions on SparkSubmitOperator, DAG patterns)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-06-q1",
+      "type": "multiple-choice",
+      "question": "Зачем production ETL pipeline нужен orchestrator (Airflow), если уже есть CI/CD?",
+      "options": [
+        {
+          "id": "a",
+          "text": "CI/CD и Airflow делают одно и то же -- достаточно одного"
+        },
+        {
+          "id": "b",
+          "text": "Airflow быстрее запускает Spark jobs"
+        },
+        {
+          "id": "c",
+          "text": "CI/CD собирает и деплоит код. Airflow управляет цепочкой зависимых задач: дождаться данных, запустить transform, проверить качество, загрузить в DWH, отправить уведомление"
+        },
+        {
+          "id": "d",
+          "text": "CI/CD не поддерживает расписание запуска"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "CI/CD pipeline собирает и деплоит Spark-приложение (код). Airflow -- orchestrator для runtime: управляет зависимостями между задачами, расписанием, retry-логикой и мониторингом. Production ETL -- это не один job, а цепочка: sensor (ждёт данных) -> transform -> validate -> load -> notify.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 6: Оркестрация Spark через Airflow -- роль orchestrator vs CI/CD"
+    },
+    {
+      "id": "spark-m12-06-q2",
+      "type": "multiple-choice",
+      "question": "Какой оператор Airflow используется для запуска Spark job через spark-submit?",
+      "options": [
+        {
+          "id": "a",
+          "text": "BashOperator с командой spark-submit"
+        },
+        {
+          "id": "b",
+          "text": "KubernetesOperator с Spark-контейнером"
+        },
+        {
+          "id": "c",
+          "text": "PythonOperator с вызовом PySpark"
+        },
+        {
+          "id": "d",
+          "text": "SparkSubmitOperator -- специализированный оператор с поддержкой conf, py_files, application_args и Airflow Connection"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "SparkSubmitOperator из airflow.providers.apache.spark -- специализированный оператор для spark-submit. Он поддерживает: conf (Spark конфигурация), py_files (wheel/egg), application_args (аргументы через Jinja templates {{ ds }}), conn_id (Airflow Connection для master URL). BashOperator работает, но не предоставляет типизированный интерфейс и мониторинг.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 6: Оркестрация Spark через Airflow -- SparkSubmitOperator API"
+    },
+    {
+      "id": "spark-m12-06-q3",
+      "type": "multiple-choice",
+      "question": "В Airflow DAG настроен retries=2 и retry_delay=timedelta(minutes=5). Spark job упал из-за OOM. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Airflow подождёт 5 минут и перезапустит job с теми же настройками. Через 2 попытки -- task marked as failed, отправляется email_on_failure"
+        },
+        {
+          "id": "b",
+          "text": "Airflow немедленно перезапустит job с увеличенной памятью"
+        },
+        {
+          "id": "c",
+          "text": "Airflow пропустит задачу и продолжит DAG"
+        },
+        {
+          "id": "d",
+          "text": "Airflow остановит весь DAG без retry"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Airflow retry-механизм: после сбоя ждёт retry_delay (5 минут), затем перезапускает task с теми же параметрами. После retries=2 попыток без успеха -- task помечается failed, отправляется email (email_on_failure=True). Airflow НЕ меняет Spark-конфигурацию автоматически -- OOM будет повторяться при тех же настройках.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Оркестрация Spark через Airflow -- retry-логика и default_args"
+    },
+    {
+      "id": "spark-m12-06-q4",
+      "type": "multiple-choice",
+      "question": "Зачем в SparkSubmitOperator используется application_args=[\"--date\", \"{{ ds }}\"]?",
+      "options": [
+        {
+          "id": "a",
+          "text": "{{ ds }} -- фиксированная дата, hardcoded в DAG"
+        },
+        {
+          "id": "b",
+          "text": "{{ ds }} -- Jinja template, который Airflow заменяет на logical date выполнения DAG (YYYY-MM-DD). Это обеспечивает idempotent reruns: перезапуск за 2024-01-15 обработает данные именно за эту дату"
+        },
+        {
+          "id": "c",
+          "text": "{{ ds }} -- текущая системная дата на момент запуска"
+        },
+        {
+          "id": "d",
+          "text": "{{ ds }} -- дата следующего scheduled run"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "{{ ds }} -- Airflow Jinja template, который resolves в logical (execution) date DAG run в формате YYYY-MM-DD. Это НЕ текущая дата, а дата, за которую запущен DAG. При backfill или rerun за 2024-01-15 -- ds = '2024-01-15', job обработает данные именно за эту дату. Это обеспечивает idempotent reruns.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 6: Оркестрация Spark через Airflow -- Jinja templates и idempotent reruns"
+    },
+    {
+      "id": "spark-m12-06-code-1",
+      "type": "code-challenge",
+      "question": "Смоделируйте зависимости DAG задач как DataFrame. У вас есть список задач с зависимостями и длительностью. Вычислите in_degree и out_degree для каждой задачи, найдите стартовые задачи (без зависимостей) и bottleneck-задачу с максимальным out_degree.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, coalesce, lit, desc\n\nspark = SparkSession.builder.appName(\"dag_analysis\").getOrCreate()\n\ntasks = spark.createDataFrame([\n    (\"t1\", \"extract_raw\", 10),\n    (\"t2\", \"validate_schema\", 5),\n    (\"t3\", \"clean_data\", 15),\n    (\"t4\", \"enrich_features\", 20),\n    (\"t5\", \"train_model\", 30),\n    (\"t6\", \"generate_report\", 10),\n    (\"t7\", \"publish_results\", 5),\n], [\"task_id\", \"task_name\", \"duration_min\"])\n\nedges = spark.createDataFrame([\n    (\"t1\", \"t2\"), (\"t1\", \"t3\"),\n    (\"t2\", \"t4\"), (\"t3\", \"t4\"),\n    (\"t4\", \"t5\"), (\"t4\", \"t6\"),\n    (\"t5\", \"t7\"), (\"t6\", \"t7\"),\n], [\"from_task\", \"to_task\"])\n\n# TODO: Вычислите out_degree для каждой задачи\n\n# TODO: Вычислите in_degree для каждой задачи\n\n# TODO: Join tasks с in/out degree, null -> 0\n\n# TODO: Покажите таблицу отсортированную по out_degree desc\n\n# TODO: print(f\"Start tasks: {список}\")\n\n# TODO: print(f\"Bottleneck: {task_name}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, coalesce, lit, desc\n\nspark = SparkSession.builder.appName(\"dag_analysis\").getOrCreate()\n\ntasks = spark.createDataFrame([\n    (\"t1\", \"extract_raw\", 10),\n    (\"t2\", \"validate_schema\", 5),\n    (\"t3\", \"clean_data\", 15),\n    (\"t4\", \"enrich_features\", 20),\n    (\"t5\", \"train_model\", 30),\n    (\"t6\", \"generate_report\", 10),\n    (\"t7\", \"publish_results\", 5),\n], [\"task_id\", \"task_name\", \"duration_min\"])\n\nedges = spark.createDataFrame([\n    (\"t1\", \"t2\"), (\"t1\", \"t3\"),\n    (\"t2\", \"t4\"), (\"t3\", \"t4\"),\n    (\"t4\", \"t5\"), (\"t4\", \"t6\"),\n    (\"t5\", \"t7\"), (\"t6\", \"t7\"),\n], [\"from_task\", \"to_task\"])\n\nout_deg = edges.groupBy(\"from_task\").agg(count(\"to_task\").alias(\"out_degree\"))\nin_deg = edges.groupBy(\"to_task\").agg(count(\"from_task\").alias(\"in_degree\"))\n\nresult = tasks.join(out_deg, tasks[\"task_id\"] == out_deg[\"from_task\"], \"left\") \\\n    .join(in_deg, tasks[\"task_id\"] == in_deg[\"to_task\"], \"left\") \\\n    .select(\"task_id\", \"task_name\", \"duration_min\",\n            coalesce(col(\"in_degree\"), lit(0)).alias(\"in_degree\"),\n            coalesce(col(\"out_degree\"), lit(0)).alias(\"out_degree\"))\n\nresult.orderBy(desc(\"out_degree\")).show()\n\nstart_tasks = result.filter(col(\"in_degree\") == 0).select(\"task_name\").collect()\nstart_names = [r[0] for r in start_tasks]\nprint(f\"Start tasks: {start_names}\")\n\nbottleneck = result.orderBy(desc(\"out_degree\")).select(\"task_name\").collect()[0][0]\nprint(f\"Bottleneck: {bottleneck}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Найдены стартовые задачи",
+          "input": "",
+          "expectedOutput": "Start tasks:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Найден bottleneck",
+          "input": "",
+          "expectedOutput": "Bottleneck:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит in_degree",
+          "input": "",
+          "expectedOutput": "in_degree",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Моделирование DAG зависимостей как DataFrame — фундамент для анализа Airflow-оркестрации Spark-задач. In-degree показывает, сколько задач должны завершиться перед запуском текущей. Out-degree выявляет bottleneck-задачи — их задержка каскадно влияет на весь pipeline. Стартовые задачи (in_degree = 0) запускаются параллельно первыми.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

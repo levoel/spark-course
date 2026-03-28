@@ -1,0 +1,224 @@
+---
+title: "Альтернативные движки и расширения Spark"
+description: "DataFusion, Photon, push-based shuffle и позиционирование альтернативных движков относительно Apache Spark"
+order: 6
+difficulty: "intermediate"
+estimatedTime: 14
+topics: ["DataFusion", "Ballista", "Photon", "Databricks", "External Shuffle", "Push-Based Shuffle"]
+---
+
+import { DataFusionArchDiagram, PushShuffleDiagram } from '../../../components/diagrams/module14';
+
+# Альтернативные движки и расширения Spark
+
+## Экосистема вокруг Spark
+
+Apache Spark -- доминирующий distributed processing engine, но он не единственный. Ряд проектов дополняют, ускоряют или заменяют Spark в определённых нишах. Разберём три категории:
+
+1. **DataFusion** -- Rust-based альтернатива для small-to-medium data
+2. **Photon** -- проприетарный ускоритель Spark от Databricks
+3. **External Shuffle Services** -- расширения shuffle-подсистемы Spark
+
+## DataFusion: Arrow-native query engine
+
+**Apache DataFusion** -- query engine написанный на Rust, работающий поверх Apache Arrow. Это **не форк Spark** -- это совершенно другая архитектура:
+
+<DataFusionArchDiagram client:visible />
+
+### Ключевые характеристики
+
+- **Rust + Arrow native:** нет JVM, нет GC pauses, предсказуемая производительность
+- **Embedded:** можно встроить как библиотеку в Rust/Python приложение
+- **Vectorized execution:** обработка данных batch-ами в Arrow columnar format
+- **Extensible:** custom data sources, functions, optimizers
+
+```python
+# DataFusion через Python binding
+import datafusion
+
+ctx = datafusion.SessionContext()
+
+# Регистрация Parquet файла как таблицы
+ctx.register_parquet("events", "/data/events.parquet")
+
+# SQL-запросы -- синтаксис аналогичен Spark SQL
+result = ctx.sql("""
+    SELECT city, COUNT(*) as total
+    FROM events
+    WHERE event_date >= '2024-01-01'
+    GROUP BY city
+    ORDER BY total DESC
+    LIMIT 10
+""")
+
+# Результат -- Arrow RecordBatch
+print(result.to_pandas())
+```
+
+### Ballista: распределённый DataFusion
+
+**Ballista** -- distributed query engine поверх DataFusion. Концептуально аналогичен Spark, но на Rust + Arrow:
+
+```
+Spark:     JVM   + RDD/DataFrame  + Catalyst  = Distributed SQL
+Ballista:  Rust  + Arrow/DataFusion + Custom   = Distributed SQL
+```
+
+Ballista находится в ранней стадии развития и не заменяет Spark для production big data workloads, но демонстрирует направление: **native execution без JVM overhead**.
+
+### Когда DataFusion vs Spark?
+
+| Сценарий | DataFusion | Spark |
+|----------|-----------|-------|
+| Single-node analytics (&lt;100GB) | Отлично | Overkill |
+| Embedded в приложение | Да (библиотека) | Нет (framework) |
+| Distributed (TB+) | Ballista (early) | Production-ready |
+| ML Pipeline | Нет | MLlib + ecosystem |
+| Streaming | Нет | Structured Streaming |
+| Rust/WASM deployment | Да | Нет |
+
+DataFusion -- **комплемент** Spark для small-to-medium data и embedded сценариев, где JVM overhead неоправдан. Для TB-scale distributed processing Spark остаётся стандартом.
+
+<Callout type="tip">
+**DataFusion и Arrow** (cross-reference M11: Arrow и нативная интеграция). DataFusion работает напрямую с Arrow RecordBatch -- тот же формат, что Spark 4.0 использует для PySpark UDF через Arrow. Навыки работы с Arrow columnar format применимы в обеих экосистемах.
+</Callout>
+
+## Photon: Databricks Vectorized Engine
+
+**Photon** -- проприетарный native execution engine от Databricks, написанный на **C++**. Он заменяет JVM-based execution для Spark SQL:
+
+```
+Standard Spark:
+  SQL Query -> Catalyst -> Tungsten (JVM bytecode) -> CPU
+
+Photon (Databricks):
+  SQL Query -> Catalyst -> Photon (C++ native code) -> CPU
+```
+
+### Ключевые характеристики
+
+- **Vectorized execution:** обработка данных column-batch-ами (аналогично Arrow)
+- **Native C++:** нет JVM overhead, нет GC pauses, SIMD-оптимизации
+- **100% совместим с Spark SQL:** тот же SQL, те же DataFrame API, без изменений кода
+- **Доступен только на Databricks Runtime** -- не open-source
+
+### Производительность Photon
+
+| Операция | Standard Spark | Photon | Ускорение |
+|----------|---------------|--------|-----------|
+| Scan + Filter | baseline | 2-3x faster | ~2.5x |
+| Aggregation | baseline | 3-5x faster | ~4x |
+| Join (hash) | baseline | 2-4x faster | ~3x |
+| String processing | baseline | 3-8x faster | ~5x |
+| TPC-DS benchmark | baseline | 2-3x overall | ~2.5x |
+
+String-операции показывают наибольшее ускорение: C++ работает с UTF-8 строками нативно, в отличие от JVM, где каждая string -- объект с heap allocation.
+
+<Callout type="warning">
+**Vendor lock-in.** Photon доступен только в Databricks Runtime. Код, написанный для Spark, работает и с Photon, и без него -- но выигрыш в производительности получают только Databricks customers. При оценке total cost учитывайте premium pricing Databricks.
+</Callout>
+
+## External Shuffle Services
+
+### Проблема shuffle reliability
+
+В стандартном Spark shuffle-данные хранятся на **локальном диске executor**. Если executor умирает -- shuffle-данные теряются, и upstream stages нужно **пересчитать**:
+
+```
+Standard shuffle:
+  Executor 1 (map output) ──── dies ──── shuffle data LOST
+                                          │
+  Executor 3 (reduce) ◄──── needs ────── X
+                                          │
+                              RECOMPUTE map stage!
+```
+
+### Spark External Shuffle Service (ESS)
+
+ESS выносит shuffle-данные из executor в отдельный процесс на node:
+
+```properties
+# Включение External Shuffle Service
+spark.shuffle.service.enabled              true
+
+# ESS запущен как YARN auxiliary service или standalone daemon
+# Shuffle-данные сохраняются даже при crash executor
+```
+
+### Push-Based Shuffle
+
+<VersionBadge version="3.5" /> **Push-based shuffle** (Spark 3.2+, production-ready в 3.5) -- оптимизация, при которой mapper **push**-ит shuffle-блоки на reducer-ноды, вместо того чтобы reducer **pull**-ил их:
+
+<PushShuffleDiagram client:visible />
+
+Преимущества push-based shuffle:
+- **Меньше fetch запросов:** reducer читает один merged файл вместо N блоков
+- **Меньше мелких I/O:** merge на mapper-стороне создаёт larger sequential reads
+- **Устойчивость:** merged shuffle data на отдельном сервисе
+
+```properties
+# Включение push-based shuffle (Spark 3.2+)
+spark.shuffle.push.enabled                 true
+spark.shuffle.push.maxBlockSizeToPush      1m
+spark.shuffle.push.maxBlockBatchSize        3m
+
+# Требует External Shuffle Service
+spark.shuffle.service.enabled              true
+```
+
+### Custom Shuffle Implementations
+
+Крупные компании разрабатывают собственные shuffle-системы для масштаба:
+
+| Проект | Компания | Подход |
+|--------|----------|--------|
+| **Cosco** | LinkedIn | Remote shuffle service, disaggregated storage |
+| **Sailfish** | eBay | Intermediate data on distributed FS |
+| **Zeus** | Uber | Shuffle service с tiered storage (memory -> SSD -> HDD) |
+| **Celeborn** | Apache TLP | Open-source remote shuffle service |
+
+**Apache Celeborn** (Apache TLP с апреля 2024) -- ведущий open-source remote shuffle service: push-based shuffle, поддержка Spark 2.4-4.1 и Flink, pluggable storage backends. Также см. **Apache Uniffle** (Apache TLP с февраля 2025) -- альтернативный remote shuffle service с 3-tier storage.
+
+## Сравнение: позиционирование движков
+
+| Движок | Отношение к Spark | Лицензия | Лучший сценарий |
+|--------|------------------|----------|-----------------|
+| **Apache Spark** | -- | Open-source | Distributed processing, ML, Streaming (standard) |
+| **DataFusion** | Альтернатива (small data) | Open-source | Single-node analytics, embedded, Rust ecosystem |
+| **Photon** | Ускоритель (Databricks) | Proprietary | Databricks customers, SQL-heavy workloads |
+| **RAPIDS** | Ускоритель (GPU) | Open-source | GPU clusters, large ETL |
+| **Celeborn** | Расширение (shuffle) | Open-source | Large-scale shuffle-heavy jobs |
+
+<Callout type="tip">
+**Spark как экосистема.** Spark -- не просто execution engine. Это экосистема: Spark SQL, MLlib, Structured Streaming, GraphX, Delta Lake integration, широкое community. Альтернативные движки сильнее в узких нишах, но ни один не покрывает всю ширину Spark ecosystem. В production чаще всего используют Spark + ускорители (Photon, RAPIDS) + расширения (Celeborn), а не полную замену.
+</Callout>
+
+<Callout type="tip">
+**Deep-dive:** Подробный разбор remote shuffle архитектур (Celeborn и Uniffle), конфигурации и production deployment см. в [М16 (External Shuffle Service)](/courses/spark-course/16-external-shuffle-service/01-shuffle-fundamentals-ess).
+</Callout>
+
+<KnowledgeCheck
+  question="В чём ключевое архитектурное отличие DataFusion от Spark? Когда DataFusion предпочтительнее?"
+  answer="DataFusion написан на Rust и работает нативно поверх Apache Arrow без JVM. Нет garbage collection, нет JVM startup overhead, предсказуемая производительность. DataFusion предпочтительнее для: (1) single-node analytics на данных менее 100GB; (2) embedded сценариев, когда query engine нужен как библиотека внутри приложения; (3) Rust/WASM deployment. Для distributed processing на TB+ данных Spark остаётся production-стандартом, хотя Ballista (distributed DataFusion) развивается."
+/>
+
+<KnowledgeCheck
+  question="Как push-based shuffle улучшает производительность по сравнению с традиционным pull-based shuffle?"
+  answer="В традиционном shuffle reducer PULL-ит блоки от всех mapper -- N*M мелких fetch-запросов с network overhead. В push-based shuffle mapper PUSH-ит блоки на reducer-ноды, где merge service объединяет их в один файл. Reducer читает один крупный merged файл вместо множества мелких блоков. Преимущества: (1) меньше fetch-запросов (1 vs N); (2) sequential read вместо random I/O; (3) устойчивость -- merged данные на отдельном сервисе. Push-based shuffle доступен с Spark 3.2+ и требует External Shuffle Service."
+/>
+
+<Callout type="tip">
+**Deep-dive: Alternative Execution Engines (M15).** Для глубокого изучения Apache DataFusion Comet, Apache Gluten (Velox/ClickHouse) и нативного ускорения Spark см. модуль **Alternative Execution Engines**, который детально разбирает архитектуру, конфигурацию, бенчмарки и стратегию миграции каждого движка.
+</Callout>
+
+## Итоги модуля
+
+Модуль M14 Advanced Topics дал обзор расширенной экосистемы Spark:
+
+- **Spark Connect** -- клиент-серверная архитектура для ресурсной изоляции и multi-tenancy
+- **GraphX/GraphFrames** -- графовые вычисления в Spark
+- **MLlib** -- распределённое машинное обучение с Pipeline API
+- **RAPIDS** -- прозрачное GPU-ускорение
+- **DataFusion, Photon, Celeborn** -- альтернативные и дополняющие технологии
+
+Каждая из этих технологий решает конкретную задачу. Ключевой навык data engineer -- понимать **когда** и **зачем** применять каждый инструмент, а не знать все API наизусть.

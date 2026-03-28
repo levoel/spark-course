@@ -1,0 +1,138 @@
+{
+  "lessonSlug": "12-production-operations/04-cost-optimization",
+  "moduleId": "12-production-operations",
+  "_meta": {
+    "idPrefix": "spark-m12-04",
+    "description": "Use IDs: m12-04-q1, m12-04-q2, ... (4 questions on spot instances, autoscaling, instance selection)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-04-q1",
+      "type": "multiple-choice",
+      "question": "Shuffle-heavy ETL обрабатывает 500 GB данных. 10x m5.xlarge (16 GB RAM, $0.192/hr) завершает job за 4 часа с частыми spill. 10x r5.xlarge (32 GB RAM, $0.252/hr) завершает за 2 часа без spill. Какой вариант дешевле?",
+      "options": [
+        {
+          "id": "a",
+          "text": "m5.xlarge -- цена за час ниже: 10 * $0.192 * 4 = $7.68"
+        },
+        {
+          "id": "b",
+          "text": "Невозможно определить без данных о сети"
+        },
+        {
+          "id": "c",
+          "text": "Одинаково -- разница в RAM компенсируется временем"
+        },
+        {
+          "id": "d",
+          "text": "r5.xlarge -- стоимость за job ниже: 10 * $0.252 * 2 = $5.04, экономия 34% благодаря отсутствию spill"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Больше памяти может быть дешевле. r5.xlarge стоит на 31% дороже за час, но job завершается в 2 раза быстрее (нет spill to disk). Стоимость за job: m5 = $7.68, r5 = $5.04 -- экономия 34%. Всегда считайте стоимость за job, а не стоимость за час.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 4: Оптимизация стоимости -- instance selection и стоимость за job"
+    },
+    {
+      "id": "spark-m12-04-q2",
+      "type": "multiple-choice",
+      "question": "Как правильно распределить On-Demand и Spot instances в production Spark-кластере?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Driver -- On-Demand, ~30% core executor -- On-Demand, ~70% task executor -- Spot"
+        },
+        {
+          "id": "b",
+          "text": "100% Spot -- максимальная экономия"
+        },
+        {
+          "id": "c",
+          "text": "50/50 On-Demand и Spot для всех компонентов"
+        },
+        {
+          "id": "d",
+          "text": "Driver на Spot (самый дешёвый), executor на On-Demand (гарантия)"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Driver ВСЕГДА On-Demand (потеря driver = потеря всего job). Core executor (30%) On-Demand -- гарантированный минимум для shuffle data. Task executor (70%) Spot -- масштабирование, потеря допустима. spark.decommission.enabled=true обеспечивает graceful decommissioning при отзыве spot instance.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Оптимизация стоимости -- стратегия On-Demand + Spot"
+    },
+    {
+      "id": "spark-m12-04-q3",
+      "type": "multiple-choice",
+      "question": "Какие три ключевых рычага оптимизации стоимости Spark-кластера в облаке?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Компрессия данных, партиционирование, кеширование"
+        },
+        {
+          "id": "b",
+          "text": "Instance selection (правильный тип ресурсов), spot instances (60-90% скидка), autoscaling (платить за используемое)"
+        },
+        {
+          "id": "c",
+          "text": "Снижение числа executor, увеличение timeout, batch processing"
+        },
+        {
+          "id": "d",
+          "text": "Переход на serverless, отказ от shuffle, использование broadcast joins"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Три ключевых рычага: (1) Instance selection -- выбор правильного типа (memory-optimized для joins, compute для ML); (2) Spot instances -- скидка 60-90%, с graceful decommissioning; (3) Autoscaling (dynamic allocation) -- автоматическое масштабирование executor, оплата только за используемые ресурсы.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 4: Оптимизация стоимости -- три рычага оптимизации"
+    },
+    {
+      "id": "spark-m12-04-q4",
+      "type": "true-false",
+      "question": "spark.decommission.enabled=true позволяет Spark корректно перенести shuffle-данные при отзыве spot instance, минимизируя потерю прогресса.",
+      "correctAnswer": true,
+      "explanation": "True. Graceful decommissioning (Spark 3.1+) при получении сигнала об отзыве spot instance: spark.storage.decommission.shuffleBlocks.enabled=true переносит shuffle-блоки на другие executor, spark.storage.decommission.rddBlocks.enabled=true переносит cached RDD-блоки. Это минимизирует пересчёт при потере executor.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Оптимизация стоимости -- graceful decommissioning для spot instances"
+    },
+    {
+      "id": "spark-m12-04-code-1",
+      "type": "code-challenge",
+      "question": "Рассчитайте стоимость выполнения запросов по типу инстанса. У вас есть DataFrame с метриками executor'ов (instance_type, hours_used, utilization_pct). Используйте справочник стоимости для вычисления total_cost и эффективной стоимости (cost_per_useful_hour = total_cost / (utilization / 100)). Выведите итоговую таблицу и общую сумму затрат.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, lit, round as spark_round, sum as _sum, desc\n\nspark = SparkSession.builder.appName(\"cost_optimization\").getOrCreate()\n\nexecutor_data = [\n    (\"m5.xlarge\", 12.5, 78.0),\n    (\"m5.2xlarge\", 8.0, 92.0),\n    (\"r5.xlarge\", 15.0, 45.0),\n    (\"m5.xlarge\", 20.0, 85.0),\n    (\"r5.2xlarge\", 6.0, 30.0),\n    (\"m5.2xlarge\", 10.0, 88.0),\n]\nexecutors = spark.createDataFrame(executor_data, [\"instance_type\", \"hours_used\", \"utilization_pct\"])\n\ncost_data = [\n    (\"m5.xlarge\", 0.192),\n    (\"m5.2xlarge\", 0.384),\n    (\"r5.xlarge\", 0.252),\n    (\"r5.2xlarge\", 0.504),\n]\ncost_ref = spark.createDataFrame(cost_data, [\"instance_type\", \"cost_per_hour\"])\n\n# TODO: Join executors с cost_ref по instance_type\n\n# TODO: Вычислите total_cost = hours_used * cost_per_hour\n\n# TODO: Вычислите cost_per_useful_hour = total_cost / (utilization_pct / 100)\n\n# TODO: Округлите total_cost и cost_per_useful_hour до 2 знаков\n\n# TODO: Покажите результат отсортированный по cost_per_useful_hour desc\n\n# TODO: Выведите общую сумму: print(f\"Total cost: ${total}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, lit, round as spark_round, sum as _sum, desc\n\nspark = SparkSession.builder.appName(\"cost_optimization\").getOrCreate()\n\nexecutor_data = [\n    (\"m5.xlarge\", 12.5, 78.0),\n    (\"m5.2xlarge\", 8.0, 92.0),\n    (\"r5.xlarge\", 15.0, 45.0),\n    (\"m5.xlarge\", 20.0, 85.0),\n    (\"r5.2xlarge\", 6.0, 30.0),\n    (\"m5.2xlarge\", 10.0, 88.0),\n]\nexecutors = spark.createDataFrame(executor_data, [\"instance_type\", \"hours_used\", \"utilization_pct\"])\n\ncost_data = [\n    (\"m5.xlarge\", 0.192),\n    (\"m5.2xlarge\", 0.384),\n    (\"r5.xlarge\", 0.252),\n    (\"r5.2xlarge\", 0.504),\n]\ncost_ref = spark.createDataFrame(cost_data, [\"instance_type\", \"cost_per_hour\"])\n\nresult = executors.join(cost_ref, \"instance_type\")\nresult = result.withColumn(\"total_cost\", spark_round(col(\"hours_used\") * col(\"cost_per_hour\"), 2))\nresult = result.withColumn(\"cost_per_useful_hour\", spark_round(col(\"total_cost\") / (col(\"utilization_pct\") / lit(100)), 2))\nresult.orderBy(desc(\"cost_per_useful_hour\")).show()\n\ntotal = result.agg(_sum(\"total_cost\")).collect()[0][0]\nprint(f\"Total cost: ${total}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Общая стоимость вычислена",
+          "input": "",
+          "expectedOutput": "Total cost: $",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит cost_per_useful_hour",
+          "input": "",
+          "expectedOutput": "cost_per_useful_hour",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит r5.2xlarge",
+          "input": "",
+          "expectedOutput": "r5.2xlarge",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Оптимизация стоимости Spark-кластера начинается с понимания реальной стоимости вычислений. Join метрик executor'ов со справочником цен позволяет рассчитать total_cost. Ключевая метрика — cost_per_useful_hour: она учитывает utilization и показывает, где ресурсы расходуются неэффективно. Инстансы с низким utilization (r5.2xlarge — 30%) имеют высокую эффективную стоимость, что указывает на необходимость right-sizing.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

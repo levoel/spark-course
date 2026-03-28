@@ -1,0 +1,233 @@
+---
+title: "Сравнение и выбор движка"
+description: "Техническое сравнение Comet, Gluten, Photon и vanilla Spark -- матрица решений, flowchart выбора и стратегия миграции в production"
+order: 4
+difficulty: "advanced"
+estimatedTime: 16
+topics: ["Comparison", "Decision Framework", "Comet", "Gluten", "Photon", "Migration", "Production"]
+---
+
+# Сравнение и выбор движка
+
+## Зачем сравнивать
+
+Мы разобрали три подхода к нативному ускорению Spark: DataFusion Comet (L02), Gluten с Velox и ClickHouse бэкендами (L03), и Photon (М14/L06). Каждый имеет свои tradeoffs: производительность, сложность настройки, лицензия, operator coverage, ecosystem support. Этот урок даёт **decision framework** для production-выбора.
+
+## Техническое сравнение
+
+| Аспект | Vanilla Spark | Comet | Gluten (Velox) | Gluten (CH) | Photon |
+|--------|--------------|-------|----------------|-------------|--------|
+| **Execution** | JVM (Tungsten) | Rust (DataFusion) | C++ (Velox) | C++ (ClickHouse) | C++ (proprietary) |
+| **Plan format** | N/A | Proprietary ProtoBuf | Substrait | Substrait | Proprietary |
+| **TPC-H speedup** | 1x (baseline) | ~2.4x | ~3.3x | ~2.5--3x | ~3--4x |
+| **Spark version** | 3.2+ | 3.4+ | 3.2+ | 3.3+ | DBR only |
+| **Test compat** | 100% | 97% (24K tests) | Subset | Subset | N/A (proprietary) |
+| **Лицензия** | Apache 2.0 | Apache 2.0 | Apache 2.0 | Apache 2.0 | Proprietary |
+| **Setup complexity** | None | Low (single JAR) | Medium (C++ deps) | Medium (C++ deps) | Zero (DBR built-in) |
+| **Dev language** | Java/Scala | Rust | C++ | C++ | C++ |
+| **Shuffle** | Spark default | CometShuffleManager | ColumnarShuffleManager | ColumnarShuffleManager | Photon Shuffle |
+| **Remote shuffle** | External | Comet native | Celeborn | Celeborn | N/A |
+| **Native UDFs** | No | Rust UDFs | C++ UDFs | C++ UDFs | No |
+| **Iceberg native scan** | No | Experimental | No | No | Yes |
+| **Off-heap required** | Optional | Required | Required | Required | Auto-managed |
+| **Maturity** | Production | Growing (Apache) | Production (TLP 2026) | Production | Production (DBR) |
+
+<KnowledgeCheck>
+**Вопрос:** Comet показывает 2.4x ускорение, а Gluten (Velox) -- 3.3x. Означает ли это, что Gluten всегда лучший выбор?
+
+**Ответ:** Нет. Бенчмарки -- только один фактор. Comet предлагает: (1) **simpler setup** -- один JAR, без C++ зависимостей; (2) **97% тест-совместимость** -- значительно выше, чем у Gluten; (3) **Rust safety** -- memory-safe язык, меньше риск native crashes; (4) **экспериментальный Iceberg native scan**. Gluten быстрее на чистых аналитических запросах, но сложнее в deploy и debug. Для команды без C++ опыта Comet -- менее рискованный выбор.
+</KnowledgeCheck>
+
+## Decision flowchart
+
+Используйте этот flowchart для быстрого определения подходящего движка:
+
+```
+Вы на Databricks?
+├── Да -> Photon (built-in, zero config, лучшая интеграция)
+└── Нет -> Open-source deployment?
+    ├── Нужна простейшая настройка?
+    │   └── Да -> Comet (single JAR, Rust safety, 97% test compat)
+    ├── Нужна максимальная производительность?
+    │   └── Да -> Gluten + Velox (3.3x TPC-H, ByteDance-proven)
+    ├── Есть ClickHouse экспертиза?
+    │   └── Да -> Gluten + ClickHouse бэкенд
+    └── Не уверены -> Начните с Comet (lower risk),
+                       оцените Gluten позже
+```
+
+**Ключевое правило:** если сомневаетесь -- **начните с Comet**. Более простой deployment, более высокая тест-совместимость, меньше risk. Если Comet не даёт достаточного ускорения для вашего workload -- evaluate Gluten + Velox.
+
+<KnowledgeCheck>
+**Вопрос:** Ваша команда работает на open-source Spark 3.5 кластере. У команды нет опыта с C++ или ClickHouse, но нужно ускорить ETL pipeline. Какой движок выбрать и почему?
+
+**Ответ:** **Comet** -- лучший выбор. Причины: (1) single JAR deployment -- минимальная сложность; (2) Spark 3.5 -- fully supported; (3) 97% тест-совместимость -- минимальный risk поведенческих отличий; (4) Rust-based -- memory-safe, ошибки нативного кода менее катастрофичны; (5) команда без C++ опыта не сможет эффективно дебажить Gluten нативные crash. Если Comet даст достаточный speedup (2.2--2.4x), остаётся на нём. Если нужно больше -- тогда evaluate Gluten + Velox с инвестицией в C++ debugging capabilities.
+</KnowledgeCheck>
+
+## Когда НЕ использовать нативные движки
+
+Нативные движки -- не silver bullet. В следующих случаях vanilla Spark может быть **лучшим выбором**:
+
+### UDF-heavy workloads
+
+Все пользовательские UDF (Python, Java, Scala) выполняются на JVM. Ни Comet, ни Gluten не могут ускорить arbitrary user code. Если ваш pipeline на 70%+ состоит из UDF-вычислений -- нативные движки дадут минимальный эффект.
+
+**Рекомендация:** перепишите UDF на built-in functions (М06) или pandas UDF через Arrow (М11).
+
+### Complex window functions
+
+Window functions с нестандартными frame specifications часто не поддерживаются нативно. Каждый unsupported window operator вызывает C2R/R2C overhead.
+
+### High fallback rate (&gt;30%)
+
+Если более 30% операторов вашего workload не поддерживаются нативным бэкендом, суммарный overhead C2R/R2C конвертаций может **превысить** ускорение. Правило: fallback rate &lt;10% -- отлично, 10--30% -- допустимо, &gt;30% -- нативный движок скорее всего вреден.
+
+### Short-lived jobs
+
+Для короткоживущих jobs (секунды) overhead загрузки нативных библиотек, JNI initialization и off-heap allocation может превысить выигрыш от нативного исполнения. Нативные движки наиболее эффективны на long-running batch workloads (минуты--часы).
+
+### Spark Structured Streaming
+
+Поддержка streaming в Comet и Gluten -- **ограничена**. Comet фокусируется на batch SQL; Gluten имеет частичную streaming поддержку. Для production streaming workloads vanilla Spark остаётся наиболее надёжным выбором.
+
+## Стратегия миграции в production
+
+Переход на нативные движки -- не мгновенный процесс. Рекомендуемая 5-фазная стратегия:
+
+### Phase 1: Диагностика
+
+Включите fallback диагностику **без изменения production workloads**:
+
+```properties
+# Comet — включить объяснение причин fallback
+spark.comet.explainFallback.enabled=true
+spark.comet.debug.enabled=true
+
+# Gluten — включить логирование unsupported operators
+spark.gluten.sql.debug=true
+# Проверить physical plan на наличие ColumnarToRow узлов:
+# spark.sql("EXPLAIN FORMATTED SELECT ...").show(truncate=False)
+```
+
+### Phase 2: Измерение fallback rate
+
+Для каждого production query измерьте fallback rate. Цель: **&lt;10% fallback** для максимального ускорения.
+
+| Fallback rate | Рекомендация |
+|---------------|-------------|
+| &lt;10% | Отлично -- нативный движок даст близкий к benchmark speedup |
+| 10--30% | Допустимо -- ускорение будет, но ниже benchmark |
+| &gt;30% | Не рекомендуется -- overhead C2R/R2C может замедлить query |
+
+### Phase 3: A/B тестирование
+
+Запустите **тот же workload** с нативным движком и без него. Сравните:
+- Wall-clock time (end-to-end)
+- Resource usage (CPU, memory, off-heap)
+- Cost per query (cloud billing)
+
+Пример A/B конфигурации для benchmarking:
+
+```bash
+# Baseline — vanilla Spark
+spark-submit \
+  --name "benchmark-vanilla" \
+  --conf spark.eventLog.enabled=true \
+  --conf spark.eventLog.dir=hdfs:///spark-events/vanilla \
+  benchmark_query.py
+
+# Test — Comet native execution
+spark-submit \
+  --name "benchmark-comet" \
+  --jars comet-spark-spark3.5_2.12-0.12.0.jar \
+  --conf spark.plugins=org.apache.spark.CometPlugin \
+  --conf spark.comet.enabled=true \
+  --conf spark.comet.exec.enabled=true \
+  --conf spark.comet.exec.shuffle.enabled=true \
+  --conf spark.memory.offHeap.enabled=true \
+  --conf spark.memory.offHeap.size=8g \
+  --conf spark.eventLog.enabled=true \
+  --conf spark.eventLog.dir=hdfs:///spark-events/comet \
+  benchmark_query.py
+```
+
+Не сравнивайте только время -- нативные движки потребляют **off-heap память**, что увеличивает memory footprint executor.
+
+### Phase 4: Production rollout
+
+Постепенный rollout с мониторингом:
+- Начните с **одного workload** (lowest risk)
+- Мониторьте memory pressure (off-heap usage via Spark Metrics)
+- Имейте **rollback plan**: отключение plugin JAR возвращает vanilla Spark
+
+Prometheus metrics для мониторинга нативного исполнения:
+
+```properties
+# Включить Spark metrics sink для Prometheus
+spark.metrics.conf.*.sink.prometheus.class=\
+  org.apache.spark.metrics.sink.PrometheusSink
+spark.metrics.conf.executor.source.jvm.class=\
+  org.apache.spark.metrics.source.JvmSource
+
+# Ключевые метрики для нативных движков:
+# - jvm.heap.used / jvm.heap.max — JVM overhead (должен снижаться)
+# - executor.memoryUsed — off-heap usage (будет расти)
+# - executor.shuffleWriteTime — shuffle time (должен снижаться)
+# - stage.executorRunTime — total execution time
+```
+
+### Phase 5: Tuning
+
+Тонкая настройка engine-specific конфигурации:
+
+```properties
+# Comet: замена SortMergeJoin на hash join
+spark.comet.exec.replaceSortMergeJoin=true
+
+# Gluten: batch size tuning
+spark.gluten.sql.columnar.batchSize=4096
+
+# Gluten: Velox cache
+spark.gluten.sql.columnar.backend.velox.memCacheSize=8g
+```
+
+## Production checklist
+
+<Callout type="warning">
+**Перед production deployment проверьте:**
+
+- Off-heap memory сконфигурирована (`spark.memory.offHeap.enabled=true`)
+- Off-heap size адекватен workload (16g+ для Comet, 20g+ для Gluten)
+- Fallback rate измерен для каждого production query (&lt;10% цель)
+- Memory monitoring настроен для нативного off-heap usage
+- Rollback plan готов: отключение plugin JAR возвращает vanilla Spark
+- Spark version compatibility проверена (Comet 3.4+, Gluten 3.2+/3.3+)
+- A/B тестирование пройдено с production данными
+</Callout>
+
+<KnowledgeCheck>
+**Вопрос:** Вы включили Gluten на production кластере и заметили, что некоторые запросы стали работать МЕДЛЕННЕЕ. Каковы ваши действия?
+
+**Ответ:** (1) **Проверить fallback rate** этих конкретных запросов -- вероятно, &gt;30% операторов не поддерживаются нативно, и C2R/R2C overhead превышает ускорение. (2) **Проверить off-heap memory** -- возможно, off-heap.size недостаточен, и нативный код борется за память. (3) **Анализировать physical plan** -- найти ColumnarToRow/RowToColumnar узлы и определить, какие операторы вызывают fallback. (4) **Selective disable** -- отключить Gluten для конкретных медленных запросов через session-level config, оставив для остальных. (5) **Rollback plan** -- если проблема массовая, отключить plugin JAR и вернуть vanilla Spark.
+</KnowledgeCheck>
+
+## Cross-references
+
+Этот модуль (М15) связан с несколькими другими модулями курса:
+
+- **М14/L06** ([Альтернативные движки и расширения Spark](/courses/spark-course/14-advanced-topics/06-alternative-engines)) -- awareness-level обзор DataFusion standalone, Photon и ESS. М15 даёт deep-dive в Spark-native plugins
+- **М14/L05** ([NVIDIA RAPIDS](/courses/spark-course/14-advanced-topics/05-rapids-gpu)) -- GPU-ускорение. RAPIDS -- **комплементарная** технология, не конкурирующая с CPU-native движками (Comet/Gluten). В некоторых deployment-ах RAPIDS + Gluten могут сосуществовать
+- **М02** ([Catalyst Optimizer](/courses/spark-course/02-catalyst-tungsten/01-catalyst-overview)) -- Catalyst генерирует физический план, который перехватывают Comet и Gluten. Понимание Catalyst pipeline -- prerequisite для понимания нативного ускорения
+- **М11** (Apache Arrow) -- Arrow columnar format -- общий субстрат для всех нативных движков. Comet возвращает Arrow RecordBatch, Gluten возвращает ArrowColumnarBatch
+- **М16** ([External Shuffle Service](/courses/spark-course/16-external-shuffle-service/01-shuffle-fundamentals-ess)) -- Celeborn, Uniffle. Deep-dive в remote shuffle архитектуры, которые интегрируются с Gluten
+
+## Итоги модуля
+
+Модуль М15 «Альтернативные движки исполнения» охватил:
+
+1. **L01:** Основы нативного исполнения -- JVM limitations, Arrow как субстрат, Velox и DataFusion как standalone engines
+2. **L02:** Apache DataFusion Comet -- Rust/DataFusion Spark plugin, 2.2--2.4x ускорение, 97% тест-совместимость
+3. **L03:** Apache Gluten -- middleware с Velox и ClickHouse бэкендами, 3.34x ускорение, Substrait трансляция
+4. **L04:** Сравнение и decision framework -- comparison matrix, migration strategy, production checklist
+
+**Ключевой вывод:** нативные движки -- мощный инструмент ускорения Spark без изменения кода. Но успех зависит от **правильного выбора** (Comet vs Gluten vs Photon), **измерения fallback rate** и **постепенной миграции** с мониторингом. Не существует универсального «лучшего движка» -- есть лучший движок для **вашего конкретного workload**.

@@ -1,0 +1,229 @@
+---
+title: "Grafana dashboards для Spark"
+description: "Проектирование Grafana dashboard, PromQL запросы для Spark метрик, provisioning и alerting"
+order: 4
+difficulty: "intermediate"
+estimatedTime: 12
+topics: ["Grafana", "Dashboard", "Provisioning", "PromQL", "Panels"]
+---
+
+import { GrafanaProvisioningDiagram } from '../../../components/diagrams/module8';
+
+# Grafana Dashboards для Spark
+
+Prometheus собирает метрики, но анализировать сырые time series в PromQL -- это как читать access logs глазами. **Grafana** превращает метрики в визуальные панели, графики и алерты. В этом уроке мы спроектируем production-ready Grafana dashboard для Spark.
+
+## Ключевые панели
+
+Хороший Spark dashboard содержит 6-8 панелей, организованных по приоритету -- самое важное сверху:
+
+### 1. Executor Memory Usage
+
+Самая критичная метрика -- сколько heap memory используют executors.
+
+**PromQL запрос:**
+```promql
+jvm_heap_used{component="driver"}
+/ jvm_heap_max{component="driver"} * 100
+```
+
+**Тип панели:** Gauge (0-100%)
+**Пороги:** 0-60% зелёный, 60-80% жёлтый, 80-100% красный
+
+Когда heap usage приближается к 100%, начинаются Full GC паузы, а затем -- OutOfMemoryError.
+
+### 2. GC Time Percentage
+
+Какой процент времени executor тратит на сборку мусора вместо полезной работы.
+
+**PromQL запрос:**
+```promql
+rate(jvm_gc_time_total{component="driver"}[5m])
+/ 1000 * 100
+```
+
+**Тип панели:** Time series graph
+**Пороги:** < 5% нормально, 5-10% внимание, > 10% проблема
+
+<Callout type="danger">
+**Красный флаг: GC Time > 10%**
+
+Если executor тратит более 10% времени на GC, это означает: (1) слишком мало памяти для workload, (2) слишком большие партиции, (3) утечка объектов через UDF, или (4) кэширование вытесняет execution memory.
+</Callout>
+
+### 3. Shuffle Read/Write Bytes
+
+Объём данных, перемещаемых по сети при shuffle operations.
+
+**PromQL запросы:**
+```promql
+# Shuffle write rate (bytes/sec)
+rate(executor_totalShuffleWrite_total[5m])
+
+# Shuffle read rate (bytes/sec)
+rate(executor_totalShuffleRead_total[5m])
+```
+
+**Тип панели:** Time series graph с двумя сериями
+**Что искать:** Shuffle write >> shuffle read = data explosion (результат больше входа)
+
+### 4. Active Tasks Count
+
+Сколько tasks одновременно выполняется на кластере.
+
+**PromQL запрос:**
+```promql
+executor_threadpool_activeTasks{component="driver"}
+```
+
+**Тип панели:** Time series graph
+**Что искать:** Длительные периоды с 0 active tasks = кластер простаивает (scheduling overhead, skew)
+
+### 5. Task Duration Distribution
+
+Среднее время выполнения task за последние 5 минут.
+
+**PromQL запрос:**
+```promql
+rate(executor_runTime_total[5m])
+/ rate(executor_completedTasks_total[5m])
+```
+
+**Тип панели:** Time series graph
+**Что искать:** Резкие скачки = одна из tasks обрабатывает skewed partition
+
+### 6. Disk Spill Bytes
+
+Объём данных, записанных на диск из-за нехватки execution memory.
+
+**PromQL запрос:**
+```promql
+rate(executor_diskBytesSpilled_total[5m])
+```
+
+**Тип панели:** Time series graph
+**Пороги:** Любое значение > 0 = нужно исследовать
+
+<KnowledgeCheck
+  question="На Grafana dashboard вы видите: Active Tasks = 1 (из 16 доступных слотов), Task Duration резко вырос. Что происходит?"
+  answer="Это классический признак data skew. Из 16 доступных слотов executor используется только 1 -- все остальные tasks уже завершились, а одна 'тяжёлая' task обрабатывает skewed partition. Кластер фактически простаивает, пока эта одна task завершится. Решение: AQE skew join или salting для равномерного распределения данных."
+/>
+
+## Dashboard Provisioning
+
+Для production Grafana dashboards должны быть **declarative** -- определены в JSON и version-controlled в Git. Не создавайте dashboards вручную через UI.
+
+### Структура provisioning:
+
+<GrafanaProvisioningDiagram client:visible />
+
+### datasources/prometheus.yml
+
+```yaml
+apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: false
+```
+
+### dashboards/dashboards.yml
+
+```yaml
+apiVersion: 1
+providers:
+  - name: 'Spark Monitoring'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
+```
+
+### Dashboard JSON
+
+Dashboard экспортируется как JSON файл с `schemaVersion: 38`. Каждая панель содержит:
+- **title** -- название панели
+- **type** -- тип визуализации (timeseries, gauge, stat)
+- **targets** -- PromQL запросы
+- **fieldConfig** -- пороги, единицы измерения, цвета
+
+<Callout type="tip">
+**Совет: версионирование dashboards**
+
+Храните `spark-metrics.json` в Git рядом с `docker-compose.yml`. При обновлении dashboard -- экспортируйте JSON из Grafana UI и замените файл. Это гарантирует, что dashboard можно восстановить одной командой `docker compose up`.
+</Callout>
+
+## Alerting
+
+Grafana поддерживает алерты на основе PromQL условий:
+
+### Критический: OOM Risk
+
+```yaml
+# Алерт: Heap usage > 85% в течение 5 минут
+condition: avg(jvm_heap_used / jvm_heap_max * 100) > 85
+for: 5m
+severity: critical
+```
+
+### Warning: Sustained GC Pressure
+
+```yaml
+# Алерт: GC time > 10% в течение 10 минут
+condition: rate(jvm_gc_time_total[5m]) / 1000 * 100 > 10
+for: 10m
+severity: warning
+```
+
+### Warning: Disk Spill
+
+```yaml
+# Алерт: Spill to disk detected
+condition: rate(executor_diskBytesSpilled_total[5m]) > 0
+for: 2m
+severity: warning
+```
+
+В production алерты отправляются в Slack, PagerDuty или Telegram через Grafana notification channels.
+
+<Callout type="warning">
+**Анти-паттерн: мониторинг только cluster-level метрик**
+
+Средние значения по кластеру скрывают проблемы. Executor с OOM может быть замаскирован здоровыми executors. Всегда добавляйте **per-executor breakdown** -- группируйте метрики по `instance` label.
+</Callout>
+
+## Workflow мониторинга
+
+Типичный workflow при расследовании performance проблемы:
+
+```
+1. Алерт в Slack: "GC Time > 10% на spark-worker-3"
+     ↓
+2. Grafana: открыть Spark Performance dashboard
+     ↓
+3. Проверить панели: Memory Usage, GC Time, Shuffle, Spill
+     ↓
+4. Найти аномалию: Disk Spill > 0 + GC Time spike
+     ↓
+5. Spark UI / History Server: найти stage с проблемой
+     ↓
+6. Диагноз: data skew в join, одна partition 500 MB
+     ↓
+7. Fix: добавить AQE skew join или salting
+```
+
+<KnowledgeCheck
+  question="Вы создали Grafana dashboard с 12 панелями. Через месяц cluster был пересоздан, и dashboard потерян. Как этого избежать?"
+  answer="Используйте dashboard provisioning: экспортируйте dashboard в JSON (spark-metrics.json) и храните его в Git рядом с docker-compose.yml. При запуске Grafana через Docker, примонтируйте директорию provisioning с datasource и dashboard конфигами. Dashboard будет автоматически создан при каждом docker compose up. Это declarative подход -- infrastructure as code."
+/>
+
+## Что дальше?
+
+Стандартные метрики Spark покрывают JVM, executor и shuffle. Но иногда нужны **бизнес-метрики**: сколько записей обработано, сколько отклонено validation, время SLA. Для этого в Spark есть **SparkListener** и **AccumulatorV2** -- инструменты для custom metrics, которые мы разберём в следующем уроке.

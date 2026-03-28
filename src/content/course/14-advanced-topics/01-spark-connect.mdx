@@ -1,0 +1,171 @@
+---
+title: "Spark Connect: клиент-серверная архитектура"
+description: "Клиент-серверная декомпозиция Spark через gRPC, pyspark-client, resource isolation и преимущества тонкого клиента"
+order: 1
+difficulty: "advanced"
+estimatedTime: 16
+topics: ["Spark Connect", "gRPC", "Protocol Buffers", "pyspark-client", "Client-Server Architecture"]
+---
+
+import SparkConnectDiagram from '../../../components/diagrams/module14/SparkConnectDiagram';
+import { ThickClientDiagram } from '../../../components/diagrams/module14';
+
+# Spark Connect: клиент-серверная архитектура
+
+## Проблема традиционного режима
+
+В традиционном режиме PySpark-приложение запускает **driver process** прямо на клиентской машине. Driver -- это полноценный JVM-процесс, который:
+
+- Содержит **SparkContext** и управляет всей координацией задач
+- Держит **сетевое соединение** с каждым executor в кластере
+- Потребляет **сотни мегабайт памяти** (JVM + метаданные планов)
+- При crash клиентского процесса **весь Spark-job погибает**
+
+<ThickClientDiagram client:visible />
+
+Это создаёт **tight coupling**: клиент и кластер связаны напрямую. Версия PySpark на клиенте должна точно совпадать с версией на кластере. Обновление Spark требует обновления всех клиентских машин.
+
+## Архитектура Spark Connect
+
+<VersionBadge version="3.5" /> Spark Connect, представленный в Spark 3.4 и доведённый до production-ready состояния в 3.5, решает эту проблему через **клиент-серверную декомпозицию**.
+
+Идея простая: вынести driver из клиента на сервер. Клиент отправляет только **описание плана** (unresolved logical plan), а сервер выполняет всё остальное:
+
+<SparkConnectDiagram client:visible />
+
+### gRPC и Protocol Buffers
+
+Клиент и сервер общаются через **gRPC** -- высокопроизводительный RPC-фреймворк от Google. Каждая DataFrame-операция на клиенте транслируется в **Protocol Buffers** сообщение:
+
+```python
+# Клиентский код выглядит ИДЕНТИЧНО обычному PySpark
+from pyspark.sql import SparkSession
+
+# Подключение через Spark Connect
+spark = SparkSession.builder \
+    .remote("sc://spark-server:15002") \
+    .getOrCreate()
+
+# Обычные DataFrame операции
+df = spark.read.parquet("/data/events")
+result = df.filter(df.age > 25).groupBy("city").count()
+result.show()
+```
+
+Под капотом каждый вызов (`filter`, `groupBy`, `count`) **не выполняется локально** -- он сериализуется в Protocol Buffers и отправляется на сервер. Сервер разворачивает план, оптимизирует через Catalyst и запускает на кластере.
+
+```
+Spark Connect протокол:
+  Client                          Server
+    │                                │
+    ├──── AnalyzePlan (proto) ──────►│  Resolve имена, типы
+    │◄─── AnalyzePlanResponse ──────┤
+    │                                │
+    ├──── ExecutePlan (proto) ──────►│  Catalyst → Tungsten → Execute
+    │◄─── Arrow RecordBatch ────────┤  Результат через Apache Arrow
+    │◄─── Arrow RecordBatch ────────┤  (streaming chunks)
+    │◄─── ResultComplete ──────────┤
+    │                                │
+```
+
+Данные возвращаются клиенту в формате **Apache Arrow** (cross-reference M11: Arrow и нативная интеграция) -- column-oriented, zero-copy десериализация.
+
+### Строка подключения
+
+Spark Connect использует URI-схему `sc://`:
+
+```python
+# Базовое подключение
+spark.remote = "sc://hostname:15002"
+
+# С параметрами
+spark.remote = "sc://hostname:15002/;use_ssl=true;token=<auth-token>"
+
+# Через SparkSession builder
+spark = SparkSession.builder \
+    .remote("sc://spark-server:15002") \
+    .getOrCreate()
+```
+
+Порт **15002** -- стандартный порт Spark Connect gRPC server.
+
+## pyspark-client: лёгкий клиент
+
+Полный пакет `pyspark` весит ~300MB и тянет JVM-зависимости. Для работы через Spark Connect нужна только клиентская часть:
+
+```bash
+# Полный PySpark -- ~300MB, требует Java
+pip install pyspark
+
+# Только Spark Connect клиент -- ~5MB, НЕ требует Java
+pip install pyspark[connect]
+```
+
+Пакет `pyspark[connect]` содержит только:
+- gRPC-клиент для Protocol Buffers
+- DataFrame API (трансляция операций в proto-сообщения)
+- Arrow-десериализацию для получения результатов
+
+**Никакого JVM**, никакого `JAVA_HOME`, никакого `SPARK_HOME`. Это радикально упрощает deployment на клиентских машинах и в CI/CD.
+
+## Преимущества Spark Connect
+
+| Аспект | Традиционный режим | Spark Connect |
+|--------|-------------------|---------------|
+| Клиентский размер | ~300MB + JVM | ~5MB, без JVM |
+| Crash isolation | Crash клиента = потеря job | Crash клиента не влияет на server |
+| Версии | Client и cluster должны совпадать | Независимые версии (протокол стабилен) |
+| Multi-tenancy | Один driver на приложение | Множество клиентов к одному серверу |
+| Языки | Python, Scala, Java, R | Любой язык с gRPC (Go, Rust, ...) |
+| Ресурсы клиента | JVM heap + metastore connections | Минимальные (gRPC stub) |
+
+### Resource Isolation
+
+В традиционном режиме crash одного пользовательского приложения может повлиять на стабильность shared cluster. С Spark Connect:
+
+- Каждый клиент получает **изолированную SparkSession** на сервере
+- Server управляет lifecycle сессий: timeout, cleanup, resource limits
+- **Один клиент не может уронить другого** -- сервер изолирует fault domains
+
+<VersionBadge version="4.0" /> В Spark 4.0 Spark Connect стал рекомендуемым режимом работы. Улучшения включают расширенную поддержку streaming, UDF через Arrow и полную совместимость DataFrame API.
+
+<Callout type="tip">
+**Spark Connect не заменяет Spark** -- он заменяет способ подключения к Spark. Все возможности (SQL, DataFrame, MLlib, Streaming) доступны через Connect. Единственное ограничение: low-level RDD API недоступен через Connect, но он и не рекомендуется для новых проектов.
+</Callout>
+
+## Запуск Spark Connect Server
+
+На стороне кластера Spark Connect server запускается как дополнительный endpoint:
+
+```bash
+# Запуск Spark Connect server
+./sbin/start-connect-server.sh \
+  --master spark://master:7077 \
+  --conf spark.connect.grpc.binding.port=15002 \
+  --packages org.apache.spark:spark-connect_2.12:4.0.0
+```
+
+Server принимает gRPC-подключения и маршрутизирует их к SparkSession на кластере. Один server обслуживает множество клиентов.
+
+<Callout type="warning">
+**Production deployment:** в production Spark Connect server разворачивается за load balancer (nginx, envoy) с TLS termination. Аутентификация реализуется через token-based gRPC interceptors. Мониторинг -- через стандартные gRPC metrics (Prometheus exporter).
+</Callout>
+
+<KnowledgeCheck
+  question="Чем Spark Connect отличается от традиционного режима PySpark? Назовите минимум 3 ключевых отличия."
+  answer="Ключевые отличия: (1) Клиент НЕ содержит JVM/driver -- только лёгкий gRPC-клиент (~5MB vs ~300MB); (2) Crash isolation -- crash клиента не уничтожает Spark job, сервер продолжает работу; (3) Независимость версий -- клиент и сервер могут быть разных версий Spark (протокол стабилен); (4) Multi-tenancy -- множество клиентов подключаются к одному серверу с изолированными SparkSession; (5) Language independence -- любой язык с gRPC-клиентом может работать со Spark."
+/>
+
+<KnowledgeCheck
+  question="Какой протокол используется для передачи данных между клиентом и Spark Connect сервером? Почему именно он?"
+  answer="Для отправки запросов используется gRPC с Protocol Buffers -- высокопроизводительная бинарная сериализация, идеальная для передачи структурированных планов (Logical Plan). Для возврата результатов используется Apache Arrow -- column-oriented формат с zero-copy десериализацией, что минимизирует overhead при передаче табличных данных. Комбинация gRPC (control plane) + Arrow (data plane) обеспечивает оптимальную производительность."
+/>
+
+<KnowledgeCheck
+  question="Почему pyspark[connect] не требует Java на клиентской машине?"
+  answer="В традиционном PySpark клиент содержит embedded JVM (driver process), который напрямую координирует executor на кластере. pyspark[connect] содержит только gRPC-клиент, который отправляет описание плана (Protocol Buffers) на удалённый Spark Connect server. Вся JVM-логика (Catalyst optimizer, Tungsten execution, SparkContext) выполняется на сервере. Клиенту нужен только Python + grpcio + pyarrow для десериализации результатов."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **GraphX и GraphFrames** -- как Spark обрабатывает графовые структуры данных и какие алгоритмы доступны из коробки.

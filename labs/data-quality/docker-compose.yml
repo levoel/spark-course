@@ -1,0 +1,73 @@
+# Data Quality Lab (LAB-04): Spark + Great Expectations
+# Usage: docker compose up -d
+# Jupyter: http://localhost:8888 (token: spark)
+# Spark Master UI: http://localhost:8080
+# Total memory budget: ~4 GB (2GB Spark + 2GB Jupyter/GE)
+
+services:
+  spark-master:
+    image: apache/spark:4.0.0-scala2.13-java21-python3-ubuntu
+    container_name: spark-master
+    command: /opt/spark/sbin/start-master.sh
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+      - "4040:4040"
+    environment:
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_NO_DAEMONIZE=true
+    volumes:
+      - ./scripts:/opt/spark/work-dir
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - spark-dq-net
+
+  spark-worker:
+    image: apache/spark:4.0.0-scala2.13-java21-python3-ubuntu
+    container_name: spark-worker-1
+    command: /opt/spark/sbin/start-worker.sh spark://spark-master:7077
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    environment:
+      - SPARK_WORKER_MEMORY=1g
+      - SPARK_WORKER_CORES=2
+      - SPARK_NO_DAEMONIZE=true
+    volumes:
+      - ./scripts:/opt/spark/work-dir
+    mem_limit: 1g
+    restart: unless-stopped
+    networks:
+      - spark-dq-net
+
+  jupyter:
+    image: jupyter/pyspark-notebook:latest
+    container_name: spark-jupyter-dq
+    ports:
+      - "8888:8888"
+    environment:
+      - JUPYTER_TOKEN=spark
+      - SPARK_MASTER=spark://spark-master:7077
+    volumes:
+      - ./scripts:/home/jovyan/work
+    mem_limit: 2g
+    depends_on:
+      spark-master:
+        condition: service_healthy
+    command: >
+      bash -c "pip install -r /home/jovyan/work/requirements.txt &&
+      start-notebook.sh --NotebookApp.token='spark'"
+    restart: unless-stopped
+    networks:
+      - spark-dq-net
+
+networks:
+  spark-dq-net:
+    driver: bridge

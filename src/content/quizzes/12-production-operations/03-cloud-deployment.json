@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "12-production-operations/03-cloud-deployment",
+  "moduleId": "12-production-operations",
+  "_meta": {
+    "idPrefix": "spark-m12-03",
+    "description": "Use IDs: m12-03-q1, m12-03-q2, ... (4 questions on Databricks, EMR, Dataproc patterns)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-03-q1",
+      "type": "multiple-choice",
+      "question": "Какое ключевое преимущество managed Spark-платформы (Databricks/EMR/Dataproc) перед self-managed кластером на Kubernetes?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Time-to-production: часы вместо недель -- платформа берёт на себя настройку, обновления и мониторинг кластера"
+        },
+        {
+          "id": "b",
+          "text": "Managed-платформы всегда дешевле self-managed"
+        },
+        {
+          "id": "c",
+          "text": "Managed-платформы поддерживают больше языков программирования"
+        },
+        {
+          "id": "d",
+          "text": "Self-managed кластеры не поддерживают auto-scaling"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Главное преимущество managed-платформ -- time-to-production. Self-managed K8s кластер требует недель на настройку (networking, security, monitoring, upgrades). Managed-платформы делают это за часы. Стоимость включает platform fee, но экономия на операционных расходах обычно перевешивает. Self-managed даёт больше гибкости, managed -- больше скорости.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: Облачное развёртывание -- Self-Managed vs Managed сравнение"
+    },
+    {
+      "id": "spark-m12-03-q2",
+      "type": "multiple-choice",
+      "question": "В архитектуре Databricks, где физически размещаются compute-ресурсы (кластеры) и данные?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Всё в Databricks cloud -- и compute, и storage"
+        },
+        {
+          "id": "b",
+          "text": "Compute и данные в вашем облачном аккаунте (Data Plane), управление -- в Databricks Control Plane"
+        },
+        {
+          "id": "c",
+          "text": "Compute в Databricks, данные в вашем S3/ADLS"
+        },
+        {
+          "id": "d",
+          "text": "Всё в вашем облачном аккаунте, Databricks только предоставляет UI"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Databricks использует архитектуру Control Plane / Data Plane: Control Plane (managed by Databricks) содержит Workspace Manager, Jobs Scheduler, Unity Catalog. Data Plane (ваш облачный аккаунт) содержит compute-кластеры, Delta Lake storage, и работает в вашей VPC. Данные никогда не покидают ваш аккаунт.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: Облачное развёртывание -- архитектура Databricks Control Plane / Data Plane"
+    },
+    {
+      "id": "spark-m12-03-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer выбирает между Databricks, EMR и Dataproc. Команда использует AWS, Delta Lake, и хочет Unity Catalog для governance. Какая платформа оптимальна?",
+      "options": [
+        {
+          "id": "a",
+          "text": "EMR -- нативная AWS-интеграция, самый дешёвый вариант"
+        },
+        {
+          "id": "b",
+          "text": "Dataproc -- лучшая поддержка Delta Lake"
+        },
+        {
+          "id": "c",
+          "text": "Databricks on AWS -- нативная Delta Lake, Unity Catalog для governance, Spark создан авторами Databricks"
+        },
+        {
+          "id": "d",
+          "text": "Любая платформа -- Unity Catalog работает на всех managed Spark"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Unity Catalog -- это проприетарная система Databricks, не доступная на EMR или Dataproc. Если команде нужен Unity Catalog для governance (lineage, access control, data discovery), выбор однозначен: Databricks. Databricks также предоставляет лучшую интеграцию с Delta Lake (создатели обоих технологий). EMR и Dataproc поддерживают Delta Lake, но без Unity Catalog.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 3: Облачное развёртывание -- сравнение платформ и Unity Catalog"
+    },
+    {
+      "id": "spark-m12-03-q4",
+      "type": "true-false",
+      "question": "Для большинства команд managed Spark-платформа -- правильный выбор, так как экономия на операционных расходах перевешивает platform fee.",
+      "correctAnswer": true,
+      "explanation": "True. Self-managed Spark требует DevOps-команды для настройки, обновлений, мониторинга и security -- это значительные операционные расходы. Managed-платформы берут platform fee ($0.10-0.50/DBU), но экономят недели инженерного времени. Self-managed оправдан при очень больших масштабах (1000+ узлов) или строгих compliance-требованиях.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: Облачное развёртывание -- Self-Managed vs Managed trade-offs"
+    }
+  ]
+}

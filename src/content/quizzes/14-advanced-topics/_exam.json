@@ -1,0 +1,336 @@
+{
+  "lessonSlug": "14-advanced-topics/_exam",
+  "moduleId": "14-advanced-topics",
+  "examTitle": "Экзамен: Advanced Topics",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m14-exam",
+    "description": "Use IDs: m14-exam-q1, m14-exam-q2, ... (12 questions covering all M14 lessons: Spark Connect, GraphX, MLlib, RAPIDS, Alternative Engines)"
+  },
+  "questions": [
+    {
+      "id": "spark-m14-exam-q1",
+      "type": "multiple-choice",
+      "question": "Data engineer поддерживает 50 аналитиков, запускающих ad-hoc PySpark-запросы. В текущей архитектуре каждый аналитик запускает JVM-driver на своей машине (~300MB). Какая архитектура обеспечит лучшую ресурсную изоляцию и масштабируемость?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Традиционный PySpark -- каждый аналитик запускает свой driver (проверенный подход)"
+        },
+        {
+          "id": "b",
+          "text": "Выделить каждому аналитику отдельный Spark-кластер"
+        },
+        {
+          "id": "c",
+          "text": "DataFusion -- Rust-based engine без JVM для всех аналитиков"
+        },
+        {
+          "id": "d",
+          "text": "Spark Connect -- 50 лёгких gRPC-клиентов (~5MB) подключаются к серверу с изолированными SparkSession. Crash одного клиента не влияет на других, JVM не нужен на клиентских машинах"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Spark Connect решает проблему multi-tenancy: вместо 50 JVM-driver по ~300MB, 50 лёгких gRPC-клиентов (~5MB) подключаются к одному серверу. Сервер изолирует SparkSession каждого клиента, управляет ресурсами и lifecycle. DataFusion не поддерживает distributed processing и MLlib. Отдельные кластеры -- дорого и неэффективно.",
+      "studyHint": "Повторите урок 1: Spark Connect -- multi-tenancy и resource isolation",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m14-exam-q2",
+      "type": "multiple-choice",
+      "question": "Команда имеет 100TB датасет с сетью связей пользователей (vertices: 500M, edges: 2B). Нужно вычислить PageRank и найти циклические паттерны fraud. Какой инструмент выбрать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "GraphFrames для PageRank + motif finding (циклические паттерны). Но при 500M вершин рассмотреть специализированную graph database (Neo4j, TigerGraph) для постоянных графовых запросов"
+        },
+        {
+          "id": "b",
+          "text": "GraphX -- часть ядра Spark, оптимизирован для больших графов"
+        },
+        {
+          "id": "c",
+          "text": "Spark SQL с self-join -- более эффективно для 100TB"
+        },
+        {
+          "id": "d",
+          "text": "DataFusion -- Rust-based engine обработает 100TB быстрее"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "GraphFrames поддерживает PageRank и motif finding для циклических паттернов (fraud detection). Однако при 500M вершин / 2B рёбер Spark-based графовые решения могут быть недостаточно эффективны для постоянных запросов. Для масштабных графовых задач рекомендуются специализированные graph databases. GraphX -- maintenance mode, Scala-only. DataFusion не поддерживает distributed.",
+      "studyHint": "Повторите урок 2: GraphFrames -- motif finding для fraud detection и ограничения при масштабных графах",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m14-exam-q3",
+      "type": "multiple-choice",
+      "question": "ML pipeline обрабатывает 500GB ежедневно. Feature engineering: categorical encoding (cabin_class, sex), scaling числовых features, сборка вектора. Какие MLlib компоненты образуют правильный Pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "VectorAssembler -> StandardScaler -> LogisticRegression"
+        },
+        {
+          "id": "b",
+          "text": "StringIndexer (categorical) -> OneHotEncoder -> VectorAssembler (сборка) -> StandardScaler (нормализация) -> LogisticRegression"
+        },
+        {
+          "id": "c",
+          "text": "pandas preprocessing -> VectorAssembler -> LogisticRegression"
+        },
+        {
+          "id": "d",
+          "text": "StandardScaler -> StringIndexer -> LogisticRegression"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Правильный порядок: (1) StringIndexer -- categorical string -> numeric index; (2) OneHotEncoder -- index -> binary vector (избегая ordinal bias); (3) VectorAssembler -- собирает все features в один вектор; (4) StandardScaler -- нормализация для LogisticRegression (градиентный спуск); (5) LogisticRegression. pandas preprocessing вне Pipeline создаёт training-serving skew.",
+      "studyHint": "Повторите уроки 3-4: MLlib Pipeline -- порядок stages (StringIndexer -> OneHotEncoder -> VectorAssembler -> Scaler -> Model)",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m14-exam-q4",
+      "type": "multiple-choice",
+      "question": "Компания оценивает GPU-ускорение для ежедневного ETL (200GB, Sort + Join + Aggregation). RAPIDS Accelerator показал 4x ускорение на benchmark. GPU-инстанс стоит $1.62/час, CPU -- $0.77/час. CPU job занимает 2 часа. Стоит ли переходить?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет -- GPU-инстанс дороже, не окупится"
+        },
+        {
+          "id": "b",
+          "text": "Нужно больше данных для принятия решения"
+        },
+        {
+          "id": "c",
+          "text": "Да -- при 4x ускорении GPU job займёт ~30 минут ($0.81) vs CPU 2 часа ($1.54). GPU дешевле при достаточном ускорении на регулярных jobs"
+        },
+        {
+          "id": "d",
+          "text": "Да, но только с spot instances"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "CPU: 2 часа x $0.77 = $1.54. GPU при 4x ускорении: 0.5 часа x $1.62 = $0.81. GPU экономит ~47% стоимости при ежедневном запуске. RAPIDS прозрачно заменяет Sort, Join, Aggregation на GPU-реализации -- код не меняется. Ключевые факторы: достаточный объём данных (200GB), GPU-friendly операции, регулярность jobs.",
+      "studyHint": "Повторите урок 5: RAPIDS -- cost considerations и расчёт TCO (GPU vs CPU)",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m14-exam-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer использует Pipeline с CrossValidator: ParamGrid 24 комбинации, numFolds=3. Обучение одной модели занимает 10 минут. Сколько времени займёт полный grid search и как его ускорить?",
+      "options": [
+        {
+          "id": "a",
+          "text": "24 x 10 = 240 минут. Ускорить нельзя."
+        },
+        {
+          "id": "b",
+          "text": "24 x 10 = 240 минут. Ускорить: уменьшить данные в 10 раз."
+        },
+        {
+          "id": "c",
+          "text": "3 x 10 = 30 минут. CrossValidator параллелизирует автоматически."
+        },
+        {
+          "id": "d",
+          "text": "24 x 3 x 10 = 720 минут (~12 часов). Ускорить: увеличить parallelism (параллельное обучение), использовать TrainValidationSplit (1 split vs 3 фолда), грубая сетка -> уточнение"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "CrossValidator: 24 комбинации x 3 фолда = 72 обучения x 10 минут = 720 минут. Оптимизация: (1) parallelism=8 -- до 8 моделей параллельно (~90 минут); (2) TrainValidationSplit вместо CrossValidator -- 24 обучения вместо 72; (3) грубая сетка (6 комбинаций) -> уточнение вокруг лучших значений. Уменьшение данных -- anti-pattern, искажает оценку.",
+      "studyHint": "Повторите урок 4: CrossValidator -- стоимость (комбинации x фолды x время) и стратегии оптимизации",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m14-exam-q6",
+      "type": "multiple-choice",
+      "question": "Какой протокол передачи данных использует Spark Connect для отправки запросов и возврата результатов?",
+      "options": [
+        {
+          "id": "a",
+          "text": "gRPC + Protocol Buffers для отправки Logical Plan, Apache Arrow RecordBatch для возврата данных (zero-copy десериализация)"
+        },
+        {
+          "id": "b",
+          "text": "JDBC для запросов, CSV для результатов"
+        },
+        {
+          "id": "c",
+          "text": "REST API + Parquet для всех операций"
+        },
+        {
+          "id": "d",
+          "text": "Thrift для запросов, JSON для результатов"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Spark Connect разделяет control plane и data plane: gRPC + Protocol Buffers -- бинарная сериализация для отправки unresolved Logical Plan (AnalyzePlan, ExecutePlan). Apache Arrow RecordBatch -- columnar format с zero-copy десериализацией для возврата данных (streaming chunks). Порт 15002 -- стандартный для Spark Connect gRPC server.",
+      "studyHint": "Повторите урок 1: Spark Connect -- gRPC (control plane) + Arrow (data plane)",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m14-exam-q7",
+      "type": "multiple-choice",
+      "question": "Data engineer включил RAPIDS на кластере. PySpark job содержит: df.groupBy().agg() (70% времени) и Python UDF (30% времени). Какое реальное ускорение ожидать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "5x -- RAPIDS ускоряет всё"
+        },
+        {
+          "id": "b",
+          "text": "groupBy().agg() ускорится 3-7x на GPU. Python UDF останется на CPU (fallback). Общее ускорение: ~2-3x (70% ускоренного + 30% без изменений, по закону Амдала)"
+        },
+        {
+          "id": "c",
+          "text": "0x -- Python UDF блокирует GPU-ускорение для всего job"
+        },
+        {
+          "id": "d",
+          "text": "10x -- groupBy на GPU даёт максимальное ускорение"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "RAPIDS заменяет физические операторы (GroupBy, Aggregate) на GPU-реализации (3-7x). Python UDF выполняется в отдельном Python-процессе -- RAPIDS не может его ускорить (fallback на CPU). По закону Амдала: если 70% времени ускоряется в 5x, а 30% не ускоряется, общее ускорение = 1/(0.3 + 0.7/5) = ~2.3x.",
+      "studyHint": "Повторите урок 5: RAPIDS -- CPU fallback для UDF и закон Амдала для оценки реального ускорения",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m14-exam-q8",
+      "type": "multiple-choice",
+      "question": "Pipeline сохранён через model.save(). На production кластере загружается через PipelineModel.load(). Новые данные содержат категорию 'premium', которой не было в train данных. StringIndexer настроен с handleInvalid='error'. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "StringIndexer автоматически добавит новую категорию"
+        },
+        {
+          "id": "b",
+          "text": "Новая категория получит индекс 0"
+        },
+        {
+          "id": "c",
+          "text": "transform() выбросит ошибку -- handleInvalid='error' не допускает unseen категорий. Нужно использовать handleInvalid='keep' (отдельный индекс для unseen) или 'skip' (пропуск строк)"
+        },
+        {
+          "id": "d",
+          "text": "Pipeline проигнорирует StringIndexer и перейдёт к следующему stage"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "handleInvalid='error' (default) -- StringIndexerModel.transform() выбросит SparkException при встрече unseen категории. Решение: handleInvalid='keep' -- unseen значения получают дополнительный индекс (numCategories), позволяя модели обработать их. handleInvalid='skip' -- строки с unseen значениями пропускаются. В production всегда используйте 'keep' для robustness.",
+      "studyHint": "Повторите урок 4: StringIndexer -- handleInvalid='keep' для production robustness",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m14-exam-q9",
+      "type": "multiple-choice",
+      "question": "Стартап обрабатывает 50GB данных на single-node сервере. Нужна аналитика: SQL-запросы к Parquet файлам. Бюджет минимален, JVM overhead нежелателен. Какой движок выбрать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Apache Spark -- стандартный выбор для любых данных"
+        },
+        {
+          "id": "b",
+          "text": "GraphFrames -- поддерживает SQL через Catalyst"
+        },
+        {
+          "id": "c",
+          "text": "Photon от Databricks -- максимальная производительность"
+        },
+        {
+          "id": "d",
+          "text": "DataFusion -- Rust-based query engine, работает без JVM, оптимален для single-node <100GB. Embedded как библиотека, минимальный overhead, Apache Arrow native"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "DataFusion идеален для этого сценария: single-node analytics <100GB, без JVM (Rust native), может быть встроен как библиотека, минимальный overhead. Spark -- overkill для 50GB single-node (JVM startup, GC). Photon -- только Databricks (vendor lock-in, дорого). GraphFrames -- для графовых данных, не для SQL analytics.",
+      "studyHint": "Повторите урок 6: DataFusion -- single-node analytics, embedded, без JVM (когда Spark -- overkill)",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m14-exam-q10",
+      "type": "multiple-choice",
+      "question": "Push-based shuffle (Spark 3.2+) активирован через spark.shuffle.push.enabled=true. Какое дополнительное требование необходимо для его работы?",
+      "options": [
+        {
+          "id": "a",
+          "text": "External Shuffle Service (spark.shuffle.service.enabled=true) -- push-based shuffle использует merge service на reducer-нодах"
+        },
+        {
+          "id": "b",
+          "text": "GPU на каждом executor"
+        },
+        {
+          "id": "c",
+          "text": "Apache Celeborn -- отдельный shuffle service"
+        },
+        {
+          "id": "d",
+          "text": "Никаких -- push-based shuffle работает standalone"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Push-based shuffle требует External Shuffle Service (spark.shuffle.service.enabled=true). Mapper push-ит блоки на reducer-ноды, где merge service (часть ESS) объединяет их в один файл. Без ESS push-based shuffle невозможен. Celeborn -- альтернативный remote shuffle service, но не обязательный.",
+      "studyHint": "Повторите урок 6: Push-based shuffle -- требование External Shuffle Service",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m14-exam-q11",
+      "type": "multiple-choice",
+      "question": "Data engineer обучил RandomForestClassifier в MLlib Pipeline. Коллега спрашивает: нужен ли StandardScaler перед RandomForest? Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- StandardScaler всегда улучшает качество модели"
+        },
+        {
+          "id": "b",
+          "text": "Нет -- RandomForest принимает решения по порогам отдельных features (if fare > 50), масштаб не влияет. StandardScaler нужен для алгоритмов с градиентным спуском (LogisticRegression, SVM) и расстояниями (KMeans)"
+        },
+        {
+          "id": "c",
+          "text": "Да -- без StandardScaler RandomForest не сходится"
+        },
+        {
+          "id": "d",
+          "text": "Нет -- StandardScaler работает только с LinearRegression"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Tree-based модели (RandomForest, GBTClassifier) работают с порогами: каждый split выбирает feature и пороговое значение (if fare > 50). Масштаб features не влияет на качество порога. StandardScaler обязателен для алгоритмов, чувствительных к расстояниям или градиентам: LogisticRegression (градиентный спуск), KMeans (евклидово расстояние), SVM.",
+      "studyHint": "Повторите урок 4: StandardScaler -- tree-based модели не нуждаются в нормализации",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m14-exam-q12",
+      "type": "multiple-choice",
+      "question": "Компания выбирает между Spark + RAPIDS (open-source, GPU) и Databricks + Photon (managed, C++) для ежедневного ETL 1TB. Какие ключевые факторы определяют выбор?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Photon всегда быстрее RAPIDS -- выбирать Photon"
+        },
+        {
+          "id": "b",
+          "text": "RAPIDS и Photon идентичны -- выбирать по цене"
+        },
+        {
+          "id": "c",
+          "text": "Spark + RAPIDS: open-source, требует GPU-кластер, ускоряет compute-heavy операции (Sort, Join). Databricks + Photon: managed platform, C++ native execution, vendor lock-in. Выбор: инфраструктурная независимость vs managed convenience"
+        },
+        {
+          "id": "d",
+          "text": "Оба варианта одинаково зависимы от вендора"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Spark + RAPIDS: open-source, требует GPU-инфраструктуру (NVIDIA), ускоряет compute-heavy операции на уровне physical plan. Databricks + Photon: managed, C++ native engine, vendor lock-in (Photon не open-source). RAPIDS ускоряет GPU-friendly операции (5-10x Join), Photon ускоряет все SQL-операции (2-5x). Выбор зависит от: бюджет, cloud strategy, vendor independence.",
+      "studyHint": "Повторите уроки 5-6: RAPIDS (open-source GPU) vs Photon (Databricks C++) -- trade-offs",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

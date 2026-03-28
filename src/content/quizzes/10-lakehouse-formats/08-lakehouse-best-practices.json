@@ -1,0 +1,138 @@
+{
+  "lessonSlug": "10-lakehouse-formats/08-lakehouse-best-practices",
+  "moduleId": "10-lakehouse-formats",
+  "_meta": {
+    "idPrefix": "spark-m10-08",
+    "description": "Use IDs: m10-08-q1, m10-08-q2, ... (4 questions on best practices)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-08-q1",
+      "type": "multiple-choice",
+      "question": "Какой размер Parquet-файлов считается оптимальным для lakehouse-таблиц и почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "1 МБ -- маленькие файлы быстрее читаются"
+        },
+        {
+          "id": "b",
+          "text": "128 МБ - 1 ГБ -- баланс между эффективностью I/O (крупные sequential reads) и параллелизмом обработки (не слишком много партиций). Слишком мелкие файлы создают small files problem"
+        },
+        {
+          "id": "c",
+          "text": "10 ГБ -- максимальный размер для минимального числа файлов"
+        },
+        {
+          "id": "d",
+          "text": "Размер файлов не влияет на производительность"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "128 МБ - 1 ГБ -- sweet spot: достаточно крупные для эффективного sequential read (минимизация overhead), достаточно мелкие для параллелизма. Small files problem (тысячи файлов по 1 МБ) перегружает metadata management и file listing. OPTIMIZE / compaction объединяет мелкие файлы в оптимальные.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 8: Best Practices -- оптимальный размер файлов и small files problem"
+    },
+    {
+      "id": "spark-m10-08-q2",
+      "type": "multiple-choice",
+      "question": "При партиционировании lakehouse-таблицы по дате, какой уровень гранулярности выбрать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Всегда partitionBy(\"date\") -- дневная гранулярность"
+        },
+        {
+          "id": "b",
+          "text": "Всегда partitionBy(\"minute\") для максимальной гранулярности"
+        },
+        {
+          "id": "c",
+          "text": "Зависит от объёма данных и паттерна запросов: при 1 ТБ/день -- hour; при 1 ГБ/день -- day или month. Цель: каждая партиция содержит 128 МБ - 1 ГБ данных"
+        },
+        {
+          "id": "d",
+          "text": "Не партиционировать -- lakehouse-форматы не нуждаются в партиционировании"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Правило: каждая партиция должна содержать 128 МБ - 1 ГБ данных. При 1 ТБ/день: hourly партиции (1ТБ/24 ~ 40 ГБ/час -- можно ещё дробить). При 1 ГБ/день: daily или monthly. Слишком мелкие партиции (minute при 10 МБ/мин) = small files problem. Слишком крупные (yearly) = нет partition pruning.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 8: Best Practices -- выбор гранулярности партиционирования"
+    },
+    {
+      "id": "spark-m10-08-q3",
+      "type": "multiple-choice",
+      "question": "VACUUM retention policy: data engineer установил vacuum retention = 0 часов для экономии хранилища. Какие риски?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет рисков -- старые данные не нужны"
+        },
+        {
+          "id": "b",
+          "text": "Vacuum с retention = 0 не допускается системой"
+        },
+        {
+          "id": "c",
+          "text": "Только потеря time travel -- остальное работает"
+        },
+        {
+          "id": "d",
+          "text": "Time travel перестанет работать; concurrent readers могут получить FileNotFoundException; невозможно откатить ошибочную операцию"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Retention = 0 удаляет ВСЕ файлы, не входящие в текущую версию. Последствия: (1) time travel невозможен -- нет предыдущих версий; (2) long-running queries могут обратиться к удалённому файлу (FileNotFoundException); (3) невозможно откатить DELETE или ошибочный UPDATE. Рекомендуемый минимум -- 168 часов (7 дней).",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 8: Best Practices -- риски vacuum retention = 0"
+    },
+    {
+      "id": "spark-m10-08-q4",
+      "type": "true-false",
+      "question": "Z-ORDER в Delta Lake кластеризует данные по указанным колонкам внутри файлов, ускоряя фильтрацию по этим колонкам через data skipping.",
+      "correctAnswer": true,
+      "explanation": "Z-ORDER (OPTIMIZE ... ZORDER BY (col1, col2)) физически переупорядочивает данные внутри файлов, группируя строки с похожими значениями col1 и col2. Это улучшает data skipping: каждый файл содержит узкий диапазон значений, и Spark пропускает файлы, не содержащие нужных значений. Особенно эффективно для колонок с высокой кардинальностью.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 8: Best Practices -- Z-ORDER и data skipping"
+    },
+    {
+      "id": "spark-m10-08-code-1",
+      "type": "code-challenge",
+      "question": "Анализ стратегии партиционирования: проанализируйте датасет заказов, чтобы определить оптимальные колонки для партиционирования. Для каждой колонки-кандидата (country, category, order_date) вычислите количество уникальных значений (cardinality). Создайте рекомендательный DataFrame, отсортируйте по cardinality и выведите результат.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import countDistinct, lit\n\nspark = SparkSession.builder.appName(\"partition-analysis\").getOrCreate()\n\norders = spark.createDataFrame([\n    (\"US\",  \"electronics\", \"2024-01-01\", 100),\n    (\"US\",  \"clothing\",    \"2024-01-01\", 50),\n    (\"DE\",  \"electronics\", \"2024-01-02\", 200),\n    (\"US\",  \"electronics\", \"2024-01-02\", 150),\n    (\"FR\",  \"clothing\",    \"2024-01-03\", 75),\n    (\"DE\",  \"clothing\",    \"2024-01-03\", 90),\n    (\"FR\",  \"electronics\", \"2024-01-01\", 120),\n    (\"US\",  \"clothing\",    \"2024-01-03\", 60),\n], [\"country\", \"category\", \"order_date\", \"amount\"])\n\n# TODO: Вычислите cardinality для каждой колонки-кандидата\n# Используйте agg с countDistinct для каждой колонки\n# stats = orders.agg(\n#     countDistinct(\"country\").alias(\"country_card\"),\n#     countDistinct(\"category\").alias(\"category_card\"),\n#     countDistinct(\"order_date\").alias(\"date_card\")\n# ).collect()[0]\n\n# TODO: Создайте DataFrame с результатами анализа\n# analysis = spark.createDataFrame([\n#     (\"country\",    stats[\"country_card\"]),\n#     (\"category\",   stats[\"category_card\"]),\n#     (\"order_date\", stats[\"date_card\"]),\n# ], [\"column_name\", \"cardinality\"])\n\n# TODO: Отсортируйте по cardinality и вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import countDistinct, lit\n\nspark = SparkSession.builder.appName(\"partition-analysis\").getOrCreate()\n\norders = spark.createDataFrame([\n    (\"US\",  \"electronics\", \"2024-01-01\", 100),\n    (\"US\",  \"clothing\",    \"2024-01-01\", 50),\n    (\"DE\",  \"electronics\", \"2024-01-02\", 200),\n    (\"US\",  \"electronics\", \"2024-01-02\", 150),\n    (\"FR\",  \"clothing\",    \"2024-01-03\", 75),\n    (\"DE\",  \"clothing\",    \"2024-01-03\", 90),\n    (\"FR\",  \"electronics\", \"2024-01-01\", 120),\n    (\"US\",  \"clothing\",    \"2024-01-03\", 60),\n], [\"country\", \"category\", \"order_date\", \"amount\"])\n\nstats = orders.agg(\n    countDistinct(\"country\").alias(\"country_card\"),\n    countDistinct(\"category\").alias(\"category_card\"),\n    countDistinct(\"order_date\").alias(\"date_card\")\n).collect()[0]\n\nanalysis = spark.createDataFrame([\n    (\"country\",    stats[\"country_card\"]),\n    (\"category\",   stats[\"category_card\"]),\n    (\"order_date\", stats[\"date_card\"]),\n], [\"column_name\", \"cardinality\"])\n\nanalysis.orderBy(\"cardinality\").show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "category имеет cardinality 2",
+          "input": "",
+          "expectedOutput": "category",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "country имеет cardinality 3",
+          "input": "",
+          "expectedOutput": "country",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Колонка cardinality присутствует",
+          "input": "",
+          "expectedOutput": "cardinality",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Оптимальная колонка для партиционирования должна иметь низкую кардинальность (мало уникальных значений) — иначе создаётся слишком много мелких файлов (small files problem). В нашем анализе: category (2) — лучший кандидат, country (3) — допустимый, order_date (3) — приемлемый, но в реальных данных дата может иметь высокую кардинальность. Идеал: 10-1000 партиций для оптимального параллелизма и размера файлов.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

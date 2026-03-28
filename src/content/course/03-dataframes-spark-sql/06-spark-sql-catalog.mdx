@@ -1,0 +1,207 @@
+---
+title: "Spark SQL и Catalog API"
+description: "SQL-интерфейс к DataFrames, временные представления, Catalog API для работы с метаданными"
+order: 6
+difficulty: "intermediate"
+estimatedTime: 14
+topics: ["Spark SQL", "Catalog", "createOrReplaceTempView", "spark.sql", "Hive Metastore", "Database", "Table"]
+---
+
+# Spark SQL и Catalog API
+
+## Два пути к одному результату
+
+Spark предоставляет **два равноценных API** для работы с данными: DataFrame API и Spark SQL. Оба проходят через **один и тот же Catalyst optimizer** и генерируют **идентичный физический план выполнения**:
+
+```python
+# DataFrame API
+result_df = (
+    employees
+    .filter(col("age") > 30)
+    .join(departments, employees.dept_id == departments.id)
+    .groupBy("dept_name")
+    .agg(avg("salary").alias("avg_salary"))
+)
+
+# Spark SQL -- абсолютно тот же результат и план
+result_sql = spark.sql("""
+    SELECT d.dept_name, AVG(e.salary) as avg_salary
+    FROM employees e
+    JOIN departments d ON e.dept_id = d.id
+    WHERE e.age > 30
+    GROUP BY d.dept_name
+""")
+```
+
+Оба запроса пройдут одинаковые стадии Catalyst: парсинг, анализ, логическая оптимизация (predicate pushdown, constant folding), физическое планирование. Результат -- один и тот же DAG из stages и tasks.
+
+<Callout type="tip">
+**Когда использовать SQL, а когда DataFrame API?**
+
+- **SQL**: удобнее для аналитиков с SQL-опытом, лучше для сложных JOIN + подзапросов, легче читать при множественных агрегациях
+- **DataFrame API**: compile-time type checking (ошибки в названиях колонок видны при сборке), лучше для цепочки трансформаций, проще комбинировать с бизнес-логикой на Python/Scala
+- **Совет**: используйте то, что читабельнее для конкретного запроса. Можно свободно смешивать оба подхода в одном приложении.
+</Callout>
+
+## spark.sql() и регистрация представлений
+
+Чтобы использовать SQL-синтаксис, DataFrame нужно зарегистрировать как **временное представление** (temporary view):
+
+```python
+# Регистрируем DataFrame как SQL-таблицу
+employees.createOrReplaceTempView("employees")
+departments.createOrReplaceTempView("departments")
+
+# Теперь можно писать SQL
+top_earners = spark.sql("""
+    SELECT name, salary, department
+    FROM employees
+    WHERE salary > 70000
+    ORDER BY salary DESC
+""")
+top_earners.show()
+```
+
+Методы регистрации представлений:
+
+| Метод | Область видимости | Когда использовать |
+|-------|------------------|-------------------|
+| `createOrReplaceTempView("name")` | Текущая SparkSession | Стандартный выбор для интерактивной работы |
+| `createTempView("name")` | Текущая SparkSession | Если хотите ошибку при дублировании имени |
+| `createOrReplaceGlobalTempView("name")` | Все SparkSession в приложении | Межсессионный обмен данными |
+| `createGlobalTempView("name")` | Все SparkSession | С проверкой дублирования |
+
+Глобальные представления доступны через схему `global_temp`:
+
+```python
+df.createOrReplaceGlobalTempView("shared_data")
+spark.sql("SELECT * FROM global_temp.shared_data")
+```
+
+<VersionBadge version="3.5" />
+
+Метод `registerTempTable()` **устарел** с Spark 2.0. Используйте `createOrReplaceTempView()` -- он явно указывает, что создаётся представление (view), а не физическая таблица.
+
+## Catalog API: метаданные под контролем
+
+`spark.catalog` предоставляет программный доступ к метаданным -- базам данных, таблицам, колонкам:
+
+```python
+# Список баз данных
+spark.catalog.listDatabases()
+
+# Список таблиц в текущей базе
+spark.catalog.listTables()
+
+# Список колонок таблицы
+spark.catalog.listColumns("employees")
+
+# Проверить существование таблицы
+spark.catalog.tableExists("employees")
+
+# Текущая база данных
+spark.catalog.currentDatabase()
+
+# Сменить базу данных
+spark.catalog.setCurrentDatabase("analytics")
+```
+
+Catalog API особенно полезен для:
+- **Автоматизации ETL**: проверка существования таблиц перед записью
+- **Data discovery**: перебор всех таблиц и их схем
+- **Тестирования**: верификация, что DDL-операции создали нужные объекты
+
+<KnowledgeCheck
+  question="Чем отличается createOrReplaceTempView() от createGlobalTempView()?"
+  answer="createOrReplaceTempView() создаёт представление, видимое только в текущей SparkSession. createGlobalTempView() создаёт представление, доступное из всех SparkSession в приложении, через схему global_temp (например, SELECT * FROM global_temp.my_view). Для интерактивной работы в notebook обычно достаточно createOrReplaceTempView()."
+/>
+
+## Managed vs External Tables
+
+Spark поддерживает два типа **постоянных таблиц** (в отличие от временных представлений, которые живут только в сессии):
+
+```python
+# Managed table -- Spark управляет и данными, и метаданными
+df.write.saveAsTable("analytics.sales_summary")
+
+# External table -- Spark управляет только метаданными
+df.write.option("path", "/data/warehouse/sales/").saveAsTable("analytics.sales_raw")
+
+# Или через SQL
+spark.sql("""
+    CREATE EXTERNAL TABLE sales_raw (
+        id BIGINT, amount DOUBLE, sale_date DATE
+    )
+    STORED AS PARQUET
+    LOCATION '/data/warehouse/sales/'
+""")
+```
+
+| Тип | Данные | Метаданные | DROP TABLE |
+|-----|--------|------------|------------|
+| **Managed** | Управляет Spark (warehouse dir) | В Hive Metastore | Удаляет данные и метаданные |
+| **External** | На внешнем storage (вы управляете) | В Hive Metastore | Удаляет **только метаданные**, данные остаются |
+
+**Практическое правило:** используйте managed tables для промежуточных результатов, external tables для данных, которыми пользуются другие системы.
+
+## Hive Metastore Integration
+
+Spark использует **Hive Metastore** для хранения метаданных о постоянных таблицах, базах данных, партициях. По умолчанию Spark запускает **встроенный Derby-based metastore** (файл `metastore_db` в рабочей директории).
+
+В production обычно настраивают **внешний Hive Metastore** (MySQL/PostgreSQL):
+
+```python
+spark = (
+    SparkSession.builder
+    .appName("production-etl")
+    .config("spark.sql.warehouse.dir", "/data/warehouse/")
+    .config("hive.metastore.uris", "thrift://metastore-host:9083")
+    .enableHiveSupport()
+    .getOrCreate()
+)
+```
+
+Это позволяет нескольким Spark-приложениям и другим инструментам (Hive, Presto, Trino) **видеть одни и те же таблицы**.
+
+## Смешивание SQL и DataFrame API
+
+Одно из мощных свойств Spark -- возможность **свободно переключаться** между SQL и DataFrame API в одном пайплайне:
+
+```python
+# Шаг 1: DataFrame API для ETL-логики
+clean_data = (
+    raw_data
+    .filter(col("amount").isNotNull())
+    .withColumn("amount_usd", col("amount") * col("exchange_rate"))
+)
+
+# Шаг 2: Регистрируем промежуточный результат как SQL view
+clean_data.createOrReplaceTempView("clean_sales")
+
+# Шаг 3: SQL для аналитического запроса
+report = spark.sql("""
+    SELECT
+        region,
+        COUNT(*) as total_sales,
+        SUM(amount_usd) as total_revenue,
+        AVG(amount_usd) as avg_deal_size
+    FROM clean_sales
+    GROUP BY region
+    HAVING total_revenue > 100000
+    ORDER BY total_revenue DESC
+""")
+
+# Шаг 4: Обратно к DataFrame API для записи
+report.write.mode("overwrite").parquet("/reports/regional_sales/")
+```
+
+Результат `spark.sql()` -- обычный DataFrame, с которым можно продолжить работу через DataFrame API.
+
+<KnowledgeCheck
+  question="Почему DataFrame API и Spark SQL генерируют одинаковый физический план выполнения?"
+  answer="Оба API проходят через один и тот же Catalyst optimizer. DataFrame API строит логический план из вызовов методов (filter, join, groupBy), SQL-запрос парсится в логический план из текстового синтаксиса. После этого оба логических плана проходят одинаковые стадии оптимизации: analysis, logical optimization (predicate pushdown, constant folding), physical planning (выбор join-стратегии). Результат -- идентичный физический план и DAG из stages/tasks."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **UDF (User-Defined Functions)** -- как расширить Spark собственными функциями, когда встроенных недостаточно, и почему Python UDF значительно медленнее pandas UDF.

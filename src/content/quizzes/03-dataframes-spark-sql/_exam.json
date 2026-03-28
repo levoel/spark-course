@@ -1,0 +1,417 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/_exam",
+  "moduleId": "03-dataframes-spark-sql",
+  "examTitle": "Экзамен: DataFrames и Spark SQL",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m03-exam",
+    "description": "Use IDs: m03-exam-q1 through m03-exam-q15 (13-15 analytical-skewed questions)"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-exam-q1",
+      "type": "multiple-choice",
+      "question": "Production ETL-пайплайн читает CSV-файл с 50 колонками через inferSchema=True. При очередном запуске колонка price содержит только целые числа, и Spark выводит IntegerType. В следующем запуске файл содержит 99.99, и Spark выводит DoubleType. Downstream-задание ожидает IntegerType и падает. Как предотвратить эту проблему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Использовать inferSchema=False и обрабатывать все колонки как StringType"
+        },
+        {
+          "id": "b",
+          "text": "Использовать spark.sql.ansi.enabled=false для разрешения неявного приведения типов"
+        },
+        {
+          "id": "c",
+          "text": "Кэшировать результат первого чтения, чтобы зафиксировать схему"
+        },
+        {
+          "id": "d",
+          "text": "Определить явную схему через StructType с DoubleType для колонки price -- это гарантирует стабильный тип между запусками и устраняет двойное чтение файла"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "inferSchema=True определяет типы из данных, что создаёт schema drift: одни и те же колонки могут получать разные типы в разных запусках. Явная StructType с DoubleType для price решает три проблемы: (1) стабильный тип между запусками, (2) отсутствие двойного чтения файла (extra I/O), (3) downstream-задания не падают из-за неожиданного типа.",
+      "studyHint": "Повторите урок 01: DataFrames: Создание и схема -- раздел об анти-паттерне inferSchema=True в production",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer написал цепочку: df.select('*').filter(salary > 60000).withColumn('tax', salary * 0.13).select('name', 'salary', 'tax'). Как Catalyst optimizer может оптимизировать этот план?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Catalyst перенесёт filter ближе к источнику данных (predicate pushdown) и уберёт select('*'), оставив только нужные колонки через column pruning"
+        },
+        {
+          "id": "b",
+          "text": "Catalyst не может оптимизировать DataFrame API -- только SQL-запросы"
+        },
+        {
+          "id": "c",
+          "text": "Catalyst объединит все трансформации в одну JVM-операцию через code generation"
+        },
+        {
+          "id": "d",
+          "text": "Catalyst заменит withColumn на UDF для ускорения вычислений"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Catalyst optimizer видит весь план благодаря lazy evaluation и применяет: (1) predicate pushdown -- переносит filter(salary > 60000) до чтения данных, чтобы отбросить строки как можно раньше; (2) column pruning -- вместо select('*') читает только name, salary (+ вычисляет tax). Это минимизирует I/O и объём данных в памяти. Оптимизация работает одинаково для DataFrame API и SQL.",
+      "studyHint": "Повторите урок 02: Трансформации (select, filter) -- раздел о цепочке трансформаций и Catalyst optimizer",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q3",
+      "type": "multiple-choice",
+      "question": "У вас таблица orders (5 ГБ) и таблица products (50 МБ). spark.sql.autoBroadcastJoinThreshold = 10MB. Вы выполняете orders.join(products, 'product_id'). Spark выбирает Sort-Merge Join с shuffle обеих таблиц. Какая оптимизация даст наибольший прирост производительности?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить spark.sql.shuffle.partitions для уменьшения размера каждой партиции"
+        },
+        {
+          "id": "b",
+          "text": "Использовать broadcast(products) hint, чтобы Spark отправил 50 МБ таблицу на каждый executor и выполнил join без shuffle"
+        },
+        {
+          "id": "c",
+          "text": "Кэшировать обе таблицы перед join для ускорения чтения"
+        },
+        {
+          "id": "d",
+          "text": "Заменить inner join на left semi join"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "50 МБ products > 10 МБ autoBroadcastJoinThreshold, поэтому Spark выбирает Sort-Merge Join. broadcast(products) hint заставляет Spark broadcast 50 МБ таблицу на каждый executor: (1) устраняет shuffle обеих таблиц (основной bottleneck), (2) executor делает hash lookup локально. 50 МБ легко помещается в память executor. Альтернатива: увеличить порог до 100 МБ, но broadcast hint предпочтительнее -- он явный и не влияет на другие join.",
+      "studyHint": "Повторите урок 03: Joins -- Broadcast Hash Join и дерево решений выбора стратегии",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer заменяет table_a.join(table_b) на table_a.join(table_b, 'user_id'). Для таблиц по 1 миллиону строк, сколько строк будет в результате каждого варианта (при условии, что каждый user_id уникален в обеих таблицах и все user_id совпадают)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оба варианта вернут 1 миллион строк"
+        },
+        {
+          "id": "b",
+          "text": "Первый вариант = 2 миллиона строк, второй = 1 миллион строк"
+        },
+        {
+          "id": "c",
+          "text": "Первый вариант (без условия) = 1 триллион строк (cross join), второй (с условием) = 1 миллион строк (equi-join)"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически добавит условие join по первой общей колонке"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "join() без условия создаёт cross join (декартово произведение): 1M * 1M = 1 триллион строк. С условием join по user_id (equi-join) и уникальными ключами: 1M строк. Разница в 1 000 000x. Это классический анти-паттерн: забытый join condition. В production Spark 3.x+ требует явный spark.sql.crossJoin.enabled=true для случайных cross join.",
+      "studyHint": "Повторите урок 03: Joins -- анти-паттерн случайного cross join",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q5",
+      "type": "multiple-choice",
+      "question": "DataFrame содержит 5 сотрудников: Engineering (Alice 75000, Carol 80000, Eve 70000), Marketing (Bob 55000, Dave 60000). Какой результат вернёт df.groupBy('department').agg(count('*').alias('cnt'), avg('salary').alias('avg_sal'))?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Engineering: cnt=3, avg_sal=225000.0; Marketing: cnt=2, avg_sal=115000.0"
+        },
+        {
+          "id": "b",
+          "text": "Engineering: cnt=3, avg_sal=80000.0; Marketing: cnt=2, avg_sal=60000.0"
+        },
+        {
+          "id": "c",
+          "text": "Одна строка: cnt=5, avg_sal=68000.0"
+        },
+        {
+          "id": "d",
+          "text": "Engineering: cnt=3, avg_sal=75000.0; Marketing: cnt=2, avg_sal=57500.0"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "groupBy('department') создаёт группы по отделам. Engineering: 3 сотрудника, avg = (75000 + 80000 + 70000) / 3 = 75000.0. Marketing: 2 сотрудника, avg = (55000 + 60000) / 2 = 57500.0. agg() вычисляет оба агрегата (count, avg) за один shuffle.",
+      "studyHint": "Повторите урок 04: GroupBy и агрегации -- основы groupBy + agg с примерами",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-exam-q6",
+      "type": "multiple-choice",
+      "question": "DataFrame sales: (Alice, Q1, 100), (Alice, Q2, 150), (Bob, Q1, 200), (Bob, Q3, 80). Что вернёт sales.groupBy('name').pivot('quarter').sum('amount')?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Две строки: Alice(Q1=100, Q2=150, Q3=NULL), Bob(Q1=200, Q2=NULL, Q3=80)"
+        },
+        {
+          "id": "b",
+          "text": "Четыре строки с колонками name, quarter, sum(amount)"
+        },
+        {
+          "id": "c",
+          "text": "Две строки: Alice(Q1=100, Q2=150), Bob(Q1=200, Q3=80) -- без пропущенных кварталов"
+        },
+        {
+          "id": "d",
+          "text": "Ошибку, потому что Alice и Bob имеют разные наборы кварталов"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "pivot() преобразует уникальные значения quarter (Q1, Q2, Q3) в столбцы. Для каждой группы (Alice, Bob) вычисляется sum(amount) по каждому кварталу. Пропущенные комбинации заполняются NULL: Alice не имеет Q3 -> NULL, Bob не имеет Q2 -> NULL. Для оптимизации рекомендуется передавать список значений явно: pivot('quarter', ['Q1', 'Q2', 'Q3']).",
+      "studyHint": "Повторите урок 04: GroupBy и агрегации -- pivot() кросс-табуляция",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q7",
+      "type": "multiple-choice",
+      "question": "Четыре сотрудника Sales: Alice 80000, Bob 80000, Carol 70000, Dave 60000. Window: partitionBy('department').orderBy(salary.desc()). Какие значения rank() и dense_rank() получит Carol?",
+      "options": [
+        {
+          "id": "a",
+          "text": "rank=2, dense_rank=2"
+        },
+        {
+          "id": "b",
+          "text": "rank=3, dense_rank=2"
+        },
+        {
+          "id": "c",
+          "text": "rank=3, dense_rank=3"
+        },
+        {
+          "id": "d",
+          "text": "rank=2, dense_rank=3"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Alice и Bob имеют одинаковую зарплату 80000 и оба получают rank=1, dense_rank=1. rank() пропускает номера после ties: следующий после двух первых мест -- 3. dense_rank() не пропускает: следующий -- 2. Carol (70000): rank=3 (пропущен 2), dense_rank=2 (без пропуска). Dave: rank=4, dense_rank=3.",
+      "studyHint": "Повторите урок 05: Window-функции -- row_number, rank, dense_rank при ties",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-exam-q8",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет вычислить накопительную сумму продаж по месяцам внутри каждого региона. Какая frame specification правильная?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Window.partitionBy('region') -- без orderBy (общий агрегат без порядка)"
+        },
+        {
+          "id": "b",
+          "text": "Window.partitionBy('region').orderBy('month').rowsBetween(-2, Window.currentRow) -- скользящее окно за 3 месяца"
+        },
+        {
+          "id": "c",
+          "text": "Window.partitionBy('region').orderBy('month') -- без явной frame specification (по умолчанию включает строки от начала до текущей)"
+        },
+        {
+          "id": "d",
+          "text": "Window.orderBy('month').rowsBetween(Window.unboundedPreceding, Window.unboundedFollowing) -- все строки"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Для накопительной суммы (running sum) при наличии orderBy Spark по умолчанию использует frame от unboundedPreceding до currentRow -- именно то, что нужно для running sum. Вариант B -- скользящее окно за 3 строки (не accumulative). Вариант C -- общий агрегат без порядка. Вариант D -- без partitionBy, что опасно на больших данных. Явная frame specification: rowsBetween(Window.unboundedPreceding, Window.currentRow).",
+      "studyHint": "Повторите урок 05: Window-функции -- frame specification, rowsBetween и rangeBetween",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q9",
+      "type": "multiple-choice",
+      "question": "Data engineer регистрирует DataFrame как createOrReplaceTempView('sales'). Затем запускает новый SparkSession в том же приложении. Будет ли представление 'sales' доступно в новой сессии?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- все temp views глобальны внутри приложения"
+        },
+        {
+          "id": "b",
+          "text": "Нет, и единственный способ поделиться данными -- записать на диск"
+        },
+        {
+          "id": "c",
+          "text": "Да, если обе сессии используют один Hive Metastore"
+        },
+        {
+          "id": "d",
+          "text": "Нет -- createOrReplaceTempView создаёт представление в области видимости конкретной SparkSession; для межсессионного доступа нужен createOrReplaceGlobalTempView с обращением через global_temp.sales"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "createOrReplaceTempView() создаёт представление, привязанное к конкретной SparkSession. Другие сессии в том же приложении его не видят. Для межсессионного доступа используйте createOrReplaceGlobalTempView(), которое создаёт представление в схеме global_temp. Обращение: spark.sql('SELECT * FROM global_temp.sales').",
+      "studyHint": "Повторите урок 06: Spark SQL и Catalog API -- область видимости temp views",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-exam-q10",
+      "type": "multiple-choice",
+      "question": "Команда data engineers состоит из 5 SQL-специалистов и 2 Python-разработчиков. Они разрабатывают ETL-пайплайн с 20 трансформациями. Какой API лучше выбрать для максимальной читаемости и maintainability?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark SQL для основных аналитических запросов (JOIN, GROUP BY, подзапросы), DataFrame API для программных обёрток и записи результатов -- оба API генерируют одинаковый физический план через Catalyst"
+        },
+        {
+          "id": "b",
+          "text": "Только DataFrame API -- он более \"программистский\" и безопаснее"
+        },
+        {
+          "id": "c",
+          "text": "Только SQL -- DataFrame API устарел"
+        },
+        {
+          "id": "d",
+          "text": "RDD API -- он даёт больше контроля"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "С командой из 5 SQL-специалистов основные аналитические запросы читабельнее в SQL-синтаксисе (привычный для большинства). DataFrame API удобен для программных обёрток, конфигурации, записи результатов. Оба API проходят через один Catalyst optimizer и генерируют идентичный физический план -- нет разницы в производительности. Можно свободно смешивать оба подхода в одном приложении.",
+      "studyHint": "Повторите урок 06: Spark SQL и Catalog API -- когда использовать SQL, а когда DataFrame API",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q11",
+      "type": "multiple-choice",
+      "question": "Data engineer написал Python UDF для извлечения домена из email: @udf(returnType=StringType()) def get_domain(email): return email.split('@')[1]. Пайплайн обрабатывает 500 миллионов строк и работает 2 часа. Какой подход ускорит обработку?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Кэшировать DataFrame перед применением UDF"
+        },
+        {
+          "id": "b",
+          "text": "Заменить Python UDF на встроенные функции: split(col('email'), '@')[1] или regexp_extract() -- встроенные функции выполняются на JVM без сериализации и могут быть в 10-50x быстрее"
+        },
+        {
+          "id": "c",
+          "text": "Увеличить число executors для параллелизации UDF"
+        },
+        {
+          "id": "d",
+          "text": "Переписать UDF на Pandas UDF без изменения логики"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Python UDF сериализует/десериализует каждую из 500M строк через socket между JVM и Python -- огромный overhead. Встроенная функция split(col('email'), '@')[1] выполняется нативно на JVM, поддерживает code generation (Tungsten), и Catalyst может оптимизировать. Замена даст 10-50x ускорение. Правило: прежде чем писать UDF, проверьте pyspark.sql.functions -- Spark предоставляет 300+ встроенных функций.",
+      "studyHint": "Повторите урок 07: UDF -- иерархия производительности и анти-паттерн UDF вместо встроенных функций",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-exam-q12",
+      "type": "multiple-choice",
+      "question": "Data engineer создал UDF для нормализации имён, хотя Spark имеет встроенные функции trim(), lower(), initcap(). Какие ДВЕ проблемы возникают при использовании UDF вместо встроенных функций?",
+      "options": [
+        {
+          "id": "a",
+          "text": "(1) UDF требует компиляции, (2) UDF не поддерживает NULL-значения"
+        },
+        {
+          "id": "b",
+          "text": "(1) UDF нельзя использовать в SELECT, только в WHERE; (2) UDF не поддерживает StringType"
+        },
+        {
+          "id": "c",
+          "text": "(1) Python UDF -- чёрный ящик для Catalyst: нет predicate pushdown через UDF; (2) Per-row сериализация между JVM и Python создаёт 10-100x overhead по сравнению со встроенными функциями"
+        },
+        {
+          "id": "d",
+          "text": "(1) UDF замедляет DAG Scheduler; (2) UDF увеличивает число stages"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Две ключевые проблемы Python UDF: (1) Оптимизация -- UDF является чёрным ящиком для Catalyst: optimizer не может применить predicate pushdown, constant folding или code generation через UDF. (2) Производительность -- каждая строка сериализуется в bytes, передаётся через socket в Python worker, обрабатывается, сериализуется обратно, передаётся в JVM и десериализуется. На 500M строк этот overhead огромен.",
+      "studyHint": "Повторите урок 07: UDF -- проблема производительности Python UDF и Pandas UDF как решение",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q13",
+      "type": "multiple-choice",
+      "question": "Data scientist привык к pandas и хочет масштабировать существующий код на кластер Spark. Данные -- 50 ГБ логов пользователей. Какой подход рекомендуется?",
+      "options": [
+        {
+          "id": "a",
+          "text": "pandas (import pandas as pd) -- он быстрее для любых объёмов"
+        },
+        {
+          "id": "b",
+          "text": "Использовать RDD API для максимального контроля над распределённой обработкой"
+        },
+        {
+          "id": "c",
+          "text": "Полностью переписать весь код на native PySpark без промежуточных шагов"
+        },
+        {
+          "id": "d",
+          "text": "pyspark.pandas (import pyspark.pandas as ps) для начальной миграции, с возможным переходом на native PySpark для production ETL, если потребуется больше контроля"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "pyspark.pandas предоставляет ~90% совместимость с pandas API, транслируя операции в Spark DataFrame API. Для 50 ГБ данных это оптимальный путь миграции: (1) минимальные изменения кода (замена import pandas на import pyspark.pandas), (2) распределённое выполнение на кластере через Catalyst. Если потребуется больше контроля (партиционирование, broadcast, кэширование), можно конвертировать в native PySpark через .to_spark().",
+      "studyHint": "Повторите урок 08: pandas API on Spark -- decision matrix и миграция от pandas",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q14",
+      "type": "multiple-choice",
+      "question": "Data engineer вызвал big_df.to_pandas() на ps.DataFrame с 200 ГБ данных. Driver memory = 4 ГБ. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Driver получит OutOfMemoryError, потому что .to_pandas() собирает все 200 ГБ данных со всех executors в память driver (4 ГБ)"
+        },
+        {
+          "id": "b",
+          "text": "pyspark.pandas автоматически разобьёт данные на chunks и вернёт их по частям"
+        },
+        {
+          "id": "c",
+          "text": "Spark сохранит данные на диск и вернёт путь к файлу"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически увеличит driver memory до нужного объёма"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": ".to_pandas() -- аналог collect() в Spark: собирает ВСЕ данные со всех executors в память driver. 200 ГБ данных в 4 ГБ RAM driver = гарантированный OutOfMemoryError. Решение: используйте .to_pandas() только после агрегации (groupby().sum().to_pandas()), когда результат содержит тысячи строк. Для 200 ГБ данных работайте через pyspark.pandas API или native PySpark без конвертации.",
+      "studyHint": "Повторите урок 08: pandas API on Spark -- ограничение .to_pandas() и анти-паттерн на больших данных",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-exam-q15",
+      "type": "multiple-choice",
+      "question": "Пайплайн: (1) read CSV with StructType schema, (2) filter(age > 30), (3) join с broadcast(departments), (4) groupBy('dept_name').agg(avg('salary')), (5) filter(avg_salary > 60000), (6) write.parquet(). Из 6 операций какие вызывают shuffle?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Все 6 операций вызывают shuffle"
+        },
+        {
+          "id": "b",
+          "text": "Только операция (4) groupBy -- вызывает shuffle для перегруппировки данных по dept_name; broadcast join (3) не вызывает shuffle, остальные narrow"
+        },
+        {
+          "id": "c",
+          "text": "Операции (3) join и (4) groupBy -- обе вызывают shuffle"
+        },
+        {
+          "id": "d",
+          "text": "Только (6) write -- запись на диск требует перераспределения данных"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Анализ каждой операции: (1) read -- scan, без shuffle; (2) filter -- narrow, per-partition; (3) broadcast join -- маленькая таблица отправляется на каждый executor, hash lookup локально, БЕЗ shuffle; (4) groupBy -- wide, данные перераспределяются по ключу dept_name через shuffle; (5) filter после agg -- narrow (фильтрация результата); (6) write -- narrow (каждая партиция записывается независимо). Итого: один shuffle из-за groupBy.",
+      "studyHint": "Повторите уроки 02 (narrow трансформации), 03 (broadcast join без shuffle), 04 (groupBy как wide трансформация)",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

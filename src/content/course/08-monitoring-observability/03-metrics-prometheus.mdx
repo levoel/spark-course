@@ -1,0 +1,186 @@
+---
+title: "Система метрик и Prometheus"
+description: "Архитектура метрик Spark, PrometheusServlet sink, конфигурация scraping для production кластера"
+order: 3
+difficulty: "advanced"
+estimatedTime: 14
+topics: ["Prometheus", "PrometheusServlet", "Metrics System", "Scraping", "metrics.properties"]
+---
+
+import { MetricsArchitectureDiagram } from '../../../components/diagrams/module8';
+
+# Система метрик и Prometheus
+
+Spark UI и History Server показывают метрики **по запросу** -- вы открываете страницу и видите текущее состояние. Но для production вам нужен **continuous monitoring**: сбор метрик каждые 15 секунд, хранение истории, алерты при аномалиях. Для этого Spark интегрируется с **Prometheus** -- стандартом мониторинга в мире distributed systems.
+
+## Архитектура метрик Spark
+
+Система метрик Spark построена на модели **Sources + Sinks**:
+
+<MetricsArchitectureDiagram client:visible />
+
+**Sources** -- компоненты Spark, которые генерируют метрики. Каждый Source обновляет счётчики (counters), gauges и timers в реальном времени.
+
+**Sinks** -- способы экспорта метрик. Для Prometheus используется встроенный **PrometheusServlet** -- HTTP endpoint, который Prometheus периодически scrape'ит.
+
+## PrometheusServlet: встроенный экспортёр
+
+Начиная со Spark 3.0, в Spark встроен **PrometheusServlet** -- HTTP sink, который экспонирует метрики в формате Prometheus на endpoint `/metrics/prometheus`. Не нужны внешние JAR-файлы или Pushgateway.
+
+### Конфигурация: metrics.properties
+
+Создайте файл `metrics.properties` в директории `$SPARK_HOME/conf/`:
+
+```properties
+# Включить PrometheusServlet для всех компонентов
+*.sink.prometheusServlet.class=org.apache.spark.metrics.sink.PrometheusServlet
+*.sink.prometheusServlet.path=/metrics/prometheus
+
+# Включить JVM метрики для всех компонентов
+master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+worker.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
+```
+
+После настройки метрики доступны по HTTP:
+
+```bash
+# Master metrics
+curl http://spark-master:8080/metrics/prometheus/
+
+# Worker metrics
+curl http://spark-worker:8081/metrics/prometheus/
+
+# Driver metrics (только при активном приложении)
+curl http://spark-driver:4040/metrics/prometheus/
+```
+
+<Callout type="warning">
+**Анти-паттерн: использование Pushgateway для Spark метрик**
+
+До Spark 3.0 для интеграции с Prometheus требовался внешний Prometheus Sink JAR + Pushgateway. Сейчас PrometheusServlet встроен -- используйте его. Pushgateway добавляет лишнюю сложность и точку отказа.
+</Callout>
+
+## Ключевые метрики Spark
+
+### JVM Metrics
+
+| Метрика | Что показывает | Когда бить тревогу |
+|---------|---------------|-------------------|
+| `jvm_heap_used` | Использование heap memory | > 80% от max |
+| `jvm_heap_max` | Максимальный размер heap | Слишком маленький для workload |
+| `jvm_non_heap_used` | Non-heap memory (metaspace) | Растёт без остановки |
+| `jvm_gc_time_total` | Суммарное время GC | > 10% от uptime |
+| `jvm_gc_count_total` | Количество GC циклов | Частые Full GC |
+
+### Executor Metrics
+
+| Метрика | Что показывает | Когда бить тревогу |
+|---------|---------------|-------------------|
+| `executor_cpuTime_total` | CPU время executors | Низкое CPU = ожидание I/O |
+| `executor_runTime_total` | Время выполнения tasks | Сравните с cpuTime |
+| `executor_memoryUsed` | Использование памяти | Близко к лимиту |
+| `executor_diskBytesSpilled` | Spill на диск | > 0 = нужно больше памяти |
+| `executor_totalShuffleRead` | Shuffle read bytes | Слишком много = плохой partitioning |
+| `executor_totalShuffleWrite` | Shuffle write bytes | >> read = data explosion |
+
+### DAG Scheduler Metrics
+
+| Метрика | Что показывает | Когда бить тревогу |
+|---------|---------------|-------------------|
+| `DAGScheduler_job_activeJobs` | Активные jobs | Слишком много параллельных jobs |
+| `DAGScheduler_stage_failedStages` | Упавшие stages | > 0 в production |
+| `DAGScheduler_stage_runningStages` | Выполняющиеся stages | Застревают надолго |
+
+## Prometheus Scrape Configuration
+
+Prometheus нужно настроить для scraping всех компонентов Spark-кластера:
+
+```yaml
+# prometheus.yml
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'spark-master'
+    metrics_path: '/metrics/prometheus/'
+    static_configs:
+      - targets: ['spark-master:8080']
+        labels:
+          component: 'master'
+
+  - job_name: 'spark-workers'
+    metrics_path: '/metrics/prometheus/'
+    static_configs:
+      - targets: ['spark-worker-1:8081', 'spark-worker-2:8081']
+        labels:
+          component: 'worker'
+
+  - job_name: 'spark-driver'
+    metrics_path: '/metrics/prometheus/'
+    scrape_timeout: 10s
+    static_configs:
+      - targets: ['spark-driver:4040']
+        labels:
+          component: 'driver'
+```
+
+**Важные нюансы:**
+
+1. **Driver endpoint** (`port 4040`) доступен **только при активном приложении**. Когда job завершается, endpoint исчезает. Установите `scrape_timeout: 10s` чтобы Prometheus не ждал слишком долго
+2. **Workers** слушают на **порту 8081** по умолчанию. Если у вас несколько workers на одной машине, порты будут 8081, 8082, 8083...
+3. **Labels** (`component: master/worker/driver`) помогают фильтровать метрики в Grafana
+
+<KnowledgeCheck
+  question="Вы настроили Prometheus для scraping Spark-кластера, но в Grafana видите метрики только для master, а executor и driver метрики пустые. Что не так?"
+  answer="Driver metrics (порт 4040) доступны только когда Spark-приложение активно запущено. Если нет работающего job, endpoint /metrics/prometheus/ на порту 4040 вернёт connection refused. Executor метрики экспортируются через driver endpoint, поэтому без активного приложения они тоже недоступны. Для workers -- проверьте, что metrics.properties смонтирован на worker-контейнеры и порты (8081, 8082) указаны в scrape_configs."
+/>
+
+## Попробуйте сами: Docker Lab
+
+Мы подготовили Docker lab с готовым Spark + Prometheus + Grafana стеком. В нём вы сможете:
+
+1. Запустить Spark-кластер с настроенным PrometheusServlet
+2. Отправить workload и наблюдать метрики в реальном времени
+3. Исследовать Prometheus targets и PromQL запросы
+4. Увидеть, как метрики отражают проблемы (spill, skew, GC pressure)
+
+Подробности в файле `labs/monitoring/README.md` и в уроке по Grafana dashboards.
+
+## Multi-node Production Setup
+
+В production с десятками workers ручное перечисление targets непрактично. Используйте **service discovery**:
+
+```yaml
+# prometheus.yml для Kubernetes
+scrape_configs:
+  - job_name: 'spark-executors'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_spark_role]
+        action: keep
+        regex: executor
+```
+
+Для Standalone кластера -- используйте **file-based service discovery**:
+
+```yaml
+scrape_configs:
+  - job_name: 'spark-workers'
+    file_sd_configs:
+      - files:
+          - '/etc/prometheus/spark-targets.json'
+        refresh_interval: 30s
+```
+
+<KnowledgeCheck
+  question="Зачем настраивать scrape_timeout: 10s для spark-driver job, но не для spark-master и spark-workers?"
+  answer="Master и workers -- долгоживущие процессы (daemons), их metrics endpoint всегда доступен. Driver endpoint (порт 4040) существует только пока работает Spark-приложение. Между запусками jobs endpoint недоступен, и Prometheus будет получать connection timeout. Увеличенный scrape_timeout: 10s даёт больше времени на подключение, а также Prometheus помечает target как 'down' вместо hard error, что нормально для ephemeral endpoints."
+/>
+
+## Что дальше?
+
+Prometheus собирает и хранит метрики, но для визуализации и алертинга нужен **Grafana**. В следующем уроке мы построим Grafana dashboard с панелями для каждой ключевой метрики Spark.

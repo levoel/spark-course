@@ -1,0 +1,211 @@
+---
+title: "Pandas UDF: Arrow-based векторизация"
+description: "Как Pandas UDF используют Apache Arrow для батчевой передачи данных, типы Pandas UDF и сценарии применения"
+order: 3
+difficulty: "advanced"
+estimatedTime: 14
+topics: ["Pandas UDF", "Arrow", "Vectorized UDF", "pandas_udf", "Series to Series"]
+---
+
+import { ArrowBatchVsPerRowDiagram, PerRowVsColumnarDiagram } from '../../../components/diagrams/module6';
+
+# Pandas UDF: Arrow-based векторизация
+
+## Проблема, которую решает Pandas UDF
+
+Как мы выяснили в предыдущем уроке, Python UDF выполняет сериализацию **на каждую строку**. При 1 миллиарде строк это 1 миллиард циклов serialize -> socket -> deserialize.
+
+Pandas UDF решают эту проблему через **батчевую обработку**: вместо строк данные передаются **пакетами** (batches) по тысячам строк за раз, используя **Apache Arrow** columnar format.
+
+<ArrowBatchVsPerRowDiagram client:visible />
+
+Результат: Pandas UDF **в 5-20x быстрее** обычного Python UDF.
+
+## Apache Arrow: ключ к производительности
+
+**Apache Arrow** -- это in-memory columnar format, который позволяет:
+
+1. **Columnar layout**: данные одного столбца хранятся непрерывно в памяти, что оптимально для vectorized операций
+2. **Zero-copy reads**: Python может читать Arrow-данные без копирования -- JVM и Python разделяют один участок памяти
+3. **Batch transfer**: тысячи строк передаются одним блоком вместо per-row сериализации
+
+<PerRowVsColumnarDiagram client:visible />
+
+## Типы Pandas UDF
+
+### 1. Series to Series (Scalar)
+
+Самый частый тип. Принимает `pd.Series` (столбец), возвращает `pd.Series` того же размера:
+
+```python
+import pandas as pd
+
+from pyspark.sql.functions import pandas_udf
+
+@pandas_udf("double")
+def normalize_zscore(salary: pd.Series) -> pd.Series:
+    """Z-score нормализация зарплаты"""
+    return (salary - salary.mean()) / salary.std()
+
+df.withColumn("salary_z", normalize_zscore(col("salary")))
+```
+
+**Когда использовать:** поэлементные трансформации, математические вычисления, строковые операции с библиотеками Python (regex, transliterate).
+
+### 2. Iterator of Series to Iterator of Series
+
+Вариант для **stateful** обработки или когда нужно загрузить модель один раз:
+
+```python
+from typing import Iterator
+
+@pandas_udf("double")
+def predict_churn(batches: Iterator[pd.Series]) -> Iterator[pd.Series]:
+    """ML-инференс: загружаем модель один раз, применяем к каждому батчу"""
+    import joblib
+    model = joblib.load("/models/churn_model.pkl")  # загрузка один раз!
+
+    for batch in batches:
+        features = batch.values.reshape(-1, 1)
+        predictions = model.predict(features)
+        yield pd.Series(predictions)
+
+df.withColumn("churn_score", predict_churn(col("total_spent")))
+```
+
+**Когда использовать:** ML-инференс (загрузка модели один раз), соединение с внешним сервисом, любая stateful инициализация.
+
+### 3. Grouped Map (applyInPandas)
+
+Самый мощный тип. Получает **весь DataFrame группы**, возвращает DataFrame (может изменить схему):
+
+```python
+def fill_missing_by_department(df: pd.DataFrame) -> pd.DataFrame:
+    """Заполняем пропуски средним по отделу"""
+    df["salary"] = df["salary"].fillna(df["salary"].mean())
+    df["bonus"] = df["bonus"].fillna(0)
+    return df
+
+result = employees.groupBy("department").applyInPandas(
+    fill_missing_by_department,
+    schema="department string, name string, salary double, bonus double"
+)
+```
+
+**Когда использовать:** сложные pandas-операции над группами, custom aggregations, pivot/reshape внутри группы, оконные функции, недоступные в Spark.
+
+<Callout type="tip">
+**Выбор типа Pandas UDF:**
+- Нужно трансформировать столбец → **Series to Series**
+- Нужно загрузить модель/ресурс один раз → **Iterator of Series**
+- Нужно обработать группу как pandas DataFrame → **Grouped Map (applyInPandas)**
+</Callout>
+
+### 4. Grouped Aggregate
+
+Кастомные агрегации на уровне группы:
+
+```python
+@pandas_udf("double")
+def weighted_avg(values: pd.Series, weights: pd.Series) -> float:
+    """Взвешенное среднее"""
+    return (values * weights).sum() / weights.sum()
+
+df.groupBy("department").agg(
+    weighted_avg(col("salary"), col("experience_years")).alias("weighted_salary")
+)
+```
+
+## Сравнение производительности: Python UDF vs Pandas UDF
+
+```python
+# Тестовый датасет: 50 миллионов строк
+df = spark.range(50_000_000).withColumn("value", (rand() * 1000).cast("double"))
+
+# Python UDF: ~6 минут
+@udf(returnType=DoubleType())
+def py_sqrt(x):
+    import math
+    return math.sqrt(x) if x and x >= 0 else None
+
+# Pandas UDF: ~35 секунд (10x быстрее)
+@pandas_udf("double")
+def pd_sqrt(x: pd.Series) -> pd.Series:
+    import numpy as np
+    return np.sqrt(x)
+```
+
+Pandas UDF быстрее по двум причинам:
+1. **Arrow батчи** вместо per-row сериализации (сокращает transfer overhead)
+2. **NumPy vectorized** операции вместо Python for-loop (сокращает compute overhead)
+
+<VersionBadge version="4.0" />
+
+Spark 4.0 улучшает Arrow-интеграцию для Pandas UDF: оптимизированный батчинг, уменьшенный memory overhead при передаче данных между JVM и Python, и улучшенная поддержка сложных типов (StructType, ArrayType) через Arrow.
+
+## Ограничения и подводные камни
+
+### 1. Размер батча влияет на memory
+
+Spark контролирует размер батча через `spark.sql.execution.arrow.maxRecordsPerBatch` (по умолчанию 10,000). Слишком большой батч может вызвать OOM в Python worker:
+
+```python
+# Если каждая строка содержит 1KB данных:
+# 10,000 строк × 1KB = 10MB per batch (OK)
+# 1,000,000 строк × 1KB = 1GB per batch (OOM!)
+
+spark.conf.set("spark.sql.execution.arrow.maxRecordsPerBatch", "10000")
+```
+
+### 2. Schema должна быть точной
+
+Pandas UDF требует точного указания выходной схемы. Несоответствие типов вызовет runtime error:
+
+```python
+# ОШИБКА: функция возвращает int, но объявлен double
+@pandas_udf("double")
+def wrong_type(x: pd.Series) -> pd.Series:
+    return x.astype(int)  # вернёт int, а ожидается double!
+```
+
+### 3. Grouped Map может вызвать data skew
+
+`applyInPandas` собирает **все данные группы** в один executor. Если одна группа содержит 80% данных (например, город "Москва"), один executor получит несоразмерную нагрузку.
+
+## Анти-паттерн: Pandas UDF, обрабатывающий по одной строке
+
+```python
+# ПЛОХО: Pandas UDF, который не использует векторизацию
+@pandas_udf("string")
+def bad_pandas_udf(names: pd.Series) -> pd.Series:
+    results = []
+    for name in names:    # Python for-loop!
+        if name:
+            results.append(name.strip().title())
+        else:
+            results.append(None)
+    return pd.Series(results)
+```
+
+```python
+# ХОРОШО: Vectorized операция через pandas/str accessor
+@pandas_udf("string")
+def good_pandas_udf(names: pd.Series) -> pd.Series:
+    return names.str.strip().str.title()  # vectorized!
+```
+
+Первый вариант получает данные батчем через Arrow (хорошо), но обрабатывает их Python for-loop (плохо). Второй вариант использует **vectorized pandas operations**, которые выполняются на C-уровне.
+
+<KnowledgeCheck
+  question="Почему Pandas UDF с Iterator of Series предпочтительнее обычного Series-to-Series для ML-инференса?"
+  answer="Iterator of Series позволяет загрузить ML-модель ОДИН раз (в начале итерации), а затем применять её ко всем батчам данных. Обычный Series-to-Series вызывается для каждого батча заново, и если модель загружается внутри функции, она будет загружаться повторно для каждого батча (тысячи раз). С Iterator of Series: model = load_model() выполняется однократно, затем for batch in batches: yield model.predict(batch) переиспользует загруженную модель."
+/>
+
+<KnowledgeCheck
+  question="Что произойдёт, если Pandas UDF использует Python for-loop вместо vectorized pandas-операций для обработки данных в батче?"
+  answer="Pandas UDF всё равно получит данные батчем через Arrow (а не per-row как Python UDF), что сокращает overhead сериализации. Однако Python for-loop внутри функции будет в 10-100x медленнее, чем vectorized pandas/NumPy операции. Вы получите benefit от Arrow transfer, но потеряете benefit от vectorized computation. Результат: быстрее Python UDF (из-за Arrow), но значительно медленнее правильно написанного Pandas UDF (из-за for-loop)."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **Scala UDF** -- как UDF на JVM-языке обходит проблему сериализации, обеспечивая производительность ~2x от встроенных функций.

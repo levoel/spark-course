@@ -1,0 +1,118 @@
+{
+  "lessonSlug": "09-structured-streaming/07-cdc-debezium-crossref",
+  "moduleId": "09-structured-streaming",
+  "_meta": {
+    "idPrefix": "spark-m09-07",
+    "description": "Use IDs: m09-07-q1, m09-07-q2, ... (4 questions on CDC and Debezium integration)"
+  },
+  "questions": [
+    {
+      "id": "spark-m09-07-q1",
+      "type": "multiple-choice",
+      "question": "В Debezium envelope-формате, какие значения полей before и after указывают на DELETE-операцию?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оба поля before и after = null; op = \"d\""
+        },
+        {
+          "id": "b",
+          "text": "before = null, after содержит удалённые данные; op = \"d\""
+        },
+        {
+          "id": "c",
+          "text": "before содержит данные строки до удаления, after = null; op = \"d\""
+        },
+        {
+          "id": "d",
+          "text": "before и after содержат одинаковые данные; op = \"d\""
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "В Debezium envelope: для DELETE (op=\"d\") поле before содержит состояние строки до удаления, а after = null (строки больше нет). Для INSERT (op=\"c\"): before = null, after содержит новую строку. Для UPDATE (op=\"u\"): before и after содержат состояние до и после изменения.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 7: CDC и Debezium -- envelope-формат и поля before/after для разных операций"
+    },
+    {
+      "id": "spark-m09-07-q2",
+      "type": "multiple-choice",
+      "question": "CDC pipeline: Debezium -> Kafka -> Spark Structured Streaming -> Delta Lake. Какой паттерн используется для применения UPDATE и DELETE событий к Delta-таблице?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Простой append через writeStream.format(\"delta\")"
+        },
+        {
+          "id": "b",
+          "text": "Overwrite mode -- перезапись всей таблицы при каждом batch"
+        },
+        {
+          "id": "c",
+          "text": "DELETE + INSERT через два отдельных streaming pipeline"
+        },
+        {
+          "id": "d",
+          "text": "MERGE INTO через foreachBatch: для каждого micro-batch выполняется merge по primary key с условиями WHEN MATCHED/WHEN NOT MATCHED"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "MERGE INTO через foreachBatch -- стандартный паттерн для CDC -> Delta. В callback foreachBatch получается batch DataFrame с CDC-событиями. Для каждого batch выполняется DeltaTable.merge() с условием на primary key: WHEN MATCHED AND op='d' THEN DELETE; WHEN MATCHED AND op='u' THEN UPDATE; WHEN NOT MATCHED AND op='c' THEN INSERT. Простой append не обрабатывает UPDATE/DELETE.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 7: CDC и Debezium -- паттерн MERGE INTO через foreachBatch для CDC-событий"
+    },
+    {
+      "id": "spark-m09-07-q3",
+      "type": "multiple-choice",
+      "question": "Какое поле Debezium-события используется как event_time для watermark в streaming pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "source.ts_ms -- timestamp изменения в source базе данных (более точный event time)"
+        },
+        {
+          "id": "b",
+          "text": "ts_ms на верхнем уровне envelope -- timestamp обработки Debezium-коннектором"
+        },
+        {
+          "id": "c",
+          "text": "Kafka timestamp -- время записи в Kafka-топик"
+        },
+        {
+          "id": "d",
+          "text": "Любое из полей подойдёт одинаково"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "source.ts_ms -- timestamp из WAL source базы данных, отражающий момент фактического изменения. Это наиболее точный event time. ts_ms на верхнем уровне -- время обработки Debezium-коннектором (может отличаться при задержках). Kafka timestamp -- время записи в топик. Для watermark лучше использовать source.ts_ms как наиболее близкий к реальному времени события.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 7: CDC и Debezium -- выбор source.ts_ms как event time для watermark"
+    },
+    {
+      "id": "spark-m09-07-q4",
+      "type": "multiple-choice",
+      "question": "Архитектура полного CDC pipeline: Database -> Debezium -> Kafka -> Spark -> Delta Lake. Какой компонент читает WAL (Write-Ahead Log) source базы данных?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark Structured Streaming напрямую подключается к WAL"
+        },
+        {
+          "id": "b",
+          "text": "Debezium connector читает WAL через логическую репликацию (pgoutput для PostgreSQL) и публикует события в Kafka"
+        },
+        {
+          "id": "c",
+          "text": "Kafka хранит WAL и передаёт его Spark"
+        },
+        {
+          "id": "d",
+          "text": "Delta Lake connector читает WAL для обеспечения ACID"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Debezium connector -- единственный компонент, который подключается к WAL source базы. Для PostgreSQL используется плагин pgoutput для логической репликации. Debezium декодирует WAL-записи, формирует envelope-события и публикует их в Kafka-топик. Spark читает уже готовые JSON/Avro-события из Kafka, а не WAL напрямую.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 7: CDC и Debezium -- архитектура CDC pipeline и роль Debezium connector"
+    }
+  ]
+}

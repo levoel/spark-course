@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "05-aqe-deep-dive/01-aqe-overview-config",
+  "moduleId": "05-aqe-deep-dive",
+  "_meta": {
+    "idPrefix": "spark-m05-01",
+    "description": "Use IDs: m05-01-q1, m05-01-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m05-01-q1",
+      "type": "multiple-choice",
+      "question": "Какую ключевую проблему Catalyst решает AQE?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Catalyst оптимизирует план до выполнения, основываясь на потенциально устаревших статистиках; AQE корректирует план на основе реальных runtime-данных"
+        },
+        {
+          "id": "b",
+          "text": "Catalyst не поддерживает SQL-запросы"
+        },
+        {
+          "id": "c",
+          "text": "Catalyst не может выполнять join операции"
+        },
+        {
+          "id": "d",
+          "text": "AQE заменяет Catalyst полностью"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Catalyst принимает решения (стратегия join, число партиций) в compile-time на основе метаданных каталога, которые могут быть устаревшими. AQE работает поверх Catalyst в runtime: после каждого stage собирает реальные статистики и корректирует план. AQE не замена Catalyst, а его дополнение.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m05-01-q2",
+      "type": "multiple-choice",
+      "question": "Назовите три столпа AQE.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Catalyst, Tungsten, Code Generation"
+        },
+        {
+          "id": "b",
+          "text": "Coalesce Shuffle Partitions, Skew Join Optimization, Dynamic Join Strategy Selection"
+        },
+        {
+          "id": "c",
+          "text": "Predicate Pushdown, Column Pruning, Constant Folding"
+        },
+        {
+          "id": "d",
+          "text": "Hash Join, Sort-Merge Join, Broadcast Join"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Три столпа AQE: (1) Coalesce Shuffle Partitions -- объединение мелких партиций; (2) Skew Join Optimization -- разбиение перекошенных партиций; (3) Dynamic Join Strategy Selection -- смена стратегии join на основе реальных размеров. Дополнительно AQE взаимодействует с Dynamic Partition Pruning (DPP).",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m05-01-q3",
+      "type": "multiple-choice",
+      "question": "Почему AQE выполняет re-optimization между query stages, а не после каждого оператора?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Ограничение реализации -- в будущем будет после каждого оператора"
+        },
+        {
+          "id": "b",
+          "text": "Re-optimization после каждого оператора слишком медленная"
+        },
+        {
+          "id": "c",
+          "text": "Query stages разделены shuffle-границами, где данные материализуются; между операторами внутри stage данные передаются потоково, без материализации, и точные статистики собрать невозможно"
+        },
+        {
+          "id": "d",
+          "text": "AQE оптимизирует только shuffle-операции"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Внутри одного stage операторы выполняются потоково (pipelined) -- данные не материализуются. Только на shuffle-границах данные записываются на диск и перераспределяются. Именно в этот момент Spark знает реальные размеры партиций и может принять решение об оптимизации следующего stage.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-01-q4",
+      "type": "true-false",
+      "question": "AQE включён по умолчанию начиная с Spark 3.2 (spark.sql.adaptive.enabled = true).",
+      "correctAnswer": true,
+      "explanation": "Верно. AQE доступен с Spark 3.0, но был opt-in (выключен по умолчанию). Начиная со Spark 3.2, spark.sql.adaptive.enabled установлен в true по умолчанию. Для Spark 3.0-3.1 нужно включить вручную: spark.conf.set('spark.sql.adaptive.enabled', 'true').",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m05-01-q5",
+      "type": "multiple-choice",
+      "question": "Запрос SELECT * FROM table WHERE id = 1 не содержит shuffle. Будет ли AQE активирован?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- AQE оптимизирует все запросы"
+        },
+        {
+          "id": "b",
+          "text": "Зависит от формата данных"
+        },
+        {
+          "id": "c",
+          "text": "Да, если AQE включён глобально"
+        },
+        {
+          "id": "d",
+          "text": "Нет -- AQE оптимизирует план между query stages (shuffle-границами); без shuffle нет точек для re-optimization"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "AQE работает между query stages, разделёнными shuffle-границами. Простой запрос без join/groupBy/repartition не содержит shuffle -- нет точек для re-optimization. AQE не может исправить фундаментальные проблемы: отсутствие индексов, неправильную схему данных или плохой data model.",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

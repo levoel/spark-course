@@ -1,0 +1,165 @@
+{
+  "lessonSlug": "10-lakehouse-formats/02-delta-lake",
+  "moduleId": "10-lakehouse-formats",
+  "_meta": {
+    "idPrefix": "spark-m10-02",
+    "description": "Use IDs: m10-02-q1, m10-02-q2, ... (5 questions on Delta Lake)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-02-q1",
+      "type": "multiple-choice",
+      "question": "Каким образом Delta Lake обеспечивает ACID-транзакции поверх объектного хранилища?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Через блокировки файлов в S3/GCS"
+        },
+        {
+          "id": "b",
+          "text": "Через двухфазный коммит между всеми нодами кластера"
+        },
+        {
+          "id": "c",
+          "text": "Через встроенную базу данных метаданных (PostgreSQL)"
+        },
+        {
+          "id": "d",
+          "text": "Через transaction log (_delta_log/): каждая операция атомарно записывает JSON-файл с actions (add/remove файлов). При конфликте один writer получает ошибку и перезапускается (optimistic concurrency control)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Delta Lake использует _delta_log/ -- каталог с JSON-файлами, каждый из которых представляет одну версию таблицы. Каждый JSON содержит actions: add (новые файлы), remove (удалённые файлы), metaData. Запись нового JSON -- атомарная операция. При concurrent writes два writer пытаются записать следующий JSON -- выигрывает первый, второй перезапускается.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Delta Lake -- transaction log (_delta_log/) и optimistic concurrency control"
+    },
+    {
+      "id": "spark-m10-02-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет прочитать таблицу Delta на состояние вчерашнего дня. Какой API он использует?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.read.format(\"delta\").option(\"timestampAsOf\", \"2024-01-15T10:00:00\").load(\"/data/events\")"
+        },
+        {
+          "id": "b",
+          "text": "spark.read.format(\"delta\").option(\"rollback\", \"yesterday\").load(\"/data/events\")"
+        },
+        {
+          "id": "c",
+          "text": "DeltaTable.forPath(spark, \"/data/events\").history(\"yesterday\")"
+        },
+        {
+          "id": "d",
+          "text": "spark.sql(\"SELECT * FROM delta.`/data/events` BEFORE '2024-01-15'\")"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Delta Lake поддерживает time travel через два параметра: versionAsOf (по номеру версии) и timestampAsOf (по timestamp). option(\"timestampAsOf\", \"...\") читает состояние таблицы на указанный момент времени. Все предыдущие версии сохраняются в _delta_log/ до запуска VACUUM.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: Delta Lake -- time travel через versionAsOf и timestampAsOf"
+    },
+    {
+      "id": "spark-m10-02-q3",
+      "type": "multiple-choice",
+      "question": "VACUUM удаляет файлы данных, на которые не ссылается текущая версия таблицы. Почему retention period по умолчанию = 7 дней и когда его опасно уменьшать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "7 дней -- время, необходимое для репликации данных в S3"
+        },
+        {
+          "id": "b",
+          "text": "Retention период защищает concurrent readers: если длительный запрос начался 3 часа назад, VACUUM с retention < 3 часа удалит файлы, которые запрос ещё использует, вызвав FileNotFoundException"
+        },
+        {
+          "id": "c",
+          "text": "7 дней -- минимальное требование GDPR для хранения данных"
+        },
+        {
+          "id": "d",
+          "text": "Retention не влияет на работу таблицы, это только для соблюдения compliance"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "VACUUM удаляет data files, которые не входят в текущую версию таблицы. Retention period (default 7 дней) гарантирует, что файлы, используемые текущими long-running queries или time travel, не будут удалены. Уменьшение retention до 0 опасно: concurrent reader может получить FileNotFoundException при попытке прочитать удалённый файл.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 2: Delta Lake -- VACUUM retention и защита concurrent readers"
+    },
+    {
+      "id": "spark-m10-02-q4",
+      "type": "multiple-choice",
+      "question": "Что такое Delta Lake UniForm и какую проблему он решает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "UniForm -- формат сжатия данных для Delta Lake"
+        },
+        {
+          "id": "b",
+          "text": "UniForm -- единый API для чтения любого lakehouse-формата"
+        },
+        {
+          "id": "c",
+          "text": "UniForm автоматически генерирует метаданные в формате Iceberg и Hudi при записи в Delta, позволяя другим движкам (Snowflake, Trino) читать Delta-таблицу через Iceberg-интерфейс"
+        },
+        {
+          "id": "d",
+          "text": "UniForm объединяет несколько Delta-таблиц в одну"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "UniForm решает проблему interop: вы записываете данные в Delta Lake (нативная Spark-интеграция), а движки, которые не поддерживают Delta напрямую (Snowflake, Trino), читают ту же таблицу через автоматически сгенерированные Iceberg-метаданные. Это устраняет необходимость дублирования данных.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Delta Lake -- UniForm и interop с другими движками"
+    },
+    {
+      "id": "spark-m10-02-q5",
+      "type": "true-false",
+      "question": "Checkpoint-файлы в _delta_log/ создаются каждые 10 версий для ускорения чтения -- вместо чтения всех JSON-файлов Spark читает один checkpoint Parquet.",
+      "correctAnswer": true,
+      "explanation": "По умолчанию Delta Lake создаёт checkpoint-файл каждые 10 версий. Checkpoint содержит полное состояние таблицы на эту версию в формате Parquet. При чтении Spark находит последний checkpoint и читает только JSON-файлы после него, а не все с начала. Это ускоряет чтение таблиц с тысячами версий.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Delta Lake -- checkpoint-файлы для ускорения чтения transaction log"
+    },
+    {
+      "id": "spark-m10-02-code-1",
+      "type": "code-challenge",
+      "question": "Симуляция time travel в Delta Lake: создайте 'версию 1' таблицы продуктов, затем примените обновления для 'версии 2' (изменение цен). Сравните текущее состояние (v2) с историческим (v1) через join, чтобы найти продукты, у которых изменилась цена. Выведите только изменённые записи с обеими ценами.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col\n\nspark = SparkSession.builder.appName(\"time-travel-sim\").getOrCreate()\n\n# Версия 1 (исходное состояние)\nv1 = spark.createDataFrame([\n    (1, \"Laptop\",   1000),\n    (2, \"Phone\",     500),\n    (3, \"Tablet\",    300),\n    (4, \"Monitor\",   400),\n], [\"id\", \"product\", \"price\"])\n\n# Версия 2 (после обновления цен)\nv2 = spark.createDataFrame([\n    (1, \"Laptop\",   1200),\n    (2, \"Phone\",     500),\n    (3, \"Tablet\",    350),\n    (4, \"Monitor\",   400),\n], [\"id\", \"product\", \"price\"])\n\n# TODO: Join v1 и v2 по id, чтобы сравнить цены\n# comparison = v1.alias(\"old\").join(v2.alias(\"new\"), ...)\n\n# TODO: Отфильтруйте только строки, где цена изменилась\n# changed = comparison.filter(...)\n\n# TODO: Выберите product, old_price, new_price и вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col\n\nspark = SparkSession.builder.appName(\"time-travel-sim\").getOrCreate()\n\nv1 = spark.createDataFrame([\n    (1, \"Laptop\",   1000),\n    (2, \"Phone\",     500),\n    (3, \"Tablet\",    300),\n    (4, \"Monitor\",   400),\n], [\"id\", \"product\", \"price\"])\n\nv2 = spark.createDataFrame([\n    (1, \"Laptop\",   1200),\n    (2, \"Phone\",     500),\n    (3, \"Tablet\",    350),\n    (4, \"Monitor\",   400),\n], [\"id\", \"product\", \"price\"])\n\ncomparison = v1.alias(\"old\").join(v2.alias(\"new\"), col(\"old.id\") == col(\"new.id\"))\n\nchanged = comparison.filter(col(\"old.price\") != col(\"new.price\"))\n\nchanged.select(\n    col(\"old.product\").alias(\"product\"),\n    col(\"old.price\").alias(\"old_price\"),\n    col(\"new.price\").alias(\"new_price\")\n).show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Laptop изменился (1000 -> 1200)",
+          "input": "",
+          "expectedOutput": "Laptop",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Tablet изменился (300 -> 350)",
+          "input": "",
+          "expectedOutput": "Tablet",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Старая цена Laptop = 1000",
+          "input": "",
+          "expectedOutput": "1000",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Delta Lake хранит все версии данных через transaction log и позволяет читать предыдущие версии (time travel) через VERSION AS OF или TIMESTAMP AS OF. В нашей симуляции v1 и v2 — это два снимка таблицы. Join по id + filter по различию цен показывает изменённые записи: Laptop (1000→1200) и Tablet (300→350). Phone и Monitor не изменились и исключены фильтром.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

@@ -1,0 +1,336 @@
+{
+  "lessonSlug": "06-udf-performance/_exam",
+  "moduleId": "06-udf-performance",
+  "examTitle": "Экзамен: UDF Performance",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m06-exam",
+    "description": "Use IDs: m06-exam-q1, m06-exam-q2, ... (12-15 analytical questions)"
+  },
+  "questions": [
+    {
+      "id": "spark-m06-exam-q1",
+      "type": "multiple-choice",
+      "question": "Pipeline обрабатывает 2 миллиарда строк. Data engineer использует Python UDF для конкатенации first_name и last_name. Pipeline занимает 25 минут. С встроенной concat_ws -- 2 минуты. Объясните разницу.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python UDF: 2B * (pickle -> socket -> Python -> concat -> pickle -> socket -> JVM) = 2B циклов per-row сериализации. concat_ws: JVM Whole-Stage CodeGen, нулевая сериализация. Overhead = 99%+ общего времени UDF"
+        },
+        {
+          "id": "b",
+          "text": "Python медленнее JVM для строковых операций"
+        },
+        {
+          "id": "c",
+          "text": "concat_ws использует GPU-ускорение"
+        },
+        {
+          "id": "d",
+          "text": "Python UDF не может параллелить concat"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Per-row сериализация -- ключевой overhead. Для 2B строк Python UDF выполняет 2 миллиарда циклов: serialize args -> socket -> Python -> concat (5ns) -> serialize result -> socket -> JVM. Каждый цикл ~5us. Встроенная concat_ws выполняется в JVM Whole-Stage CodeGen: один скомпилированный Java-метод для всего stage, ~5ns per row.",
+      "studyHint": "Повторите урок 2: Per-row serialization -- анатомия overhead Python UDF",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q2",
+      "type": "multiple-choice",
+      "question": "ML team предлагает использовать Python UDF для scikit-learn инференса на 100M строк. Какой подход минимизирует overhead?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python UDF с @udf decorator -- модель загружается для каждой строки"
+        },
+        {
+          "id": "b",
+          "text": "Pandas UDF Iterator (Iterator[Series] -> Iterator[Series]) -- модель загружается один раз, применяется к батчам через Arrow transfer"
+        },
+        {
+          "id": "c",
+          "text": "Scala UDF -- загрузка scikit-learn модели через JVM"
+        },
+        {
+          "id": "d",
+          "text": "Встроенные функции Spark для ML-инференса"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Iterator Pandas UDF: (1) модель загружается один раз при инициализации итератора; (2) данные передаются батчами через Arrow (не per-row pickle); (3) scikit-learn нативно работает с pandas/numpy. Python UDF загружал бы модель для каждой строки. Scala UDF не имеет доступа к scikit-learn. Встроенные функции не поддерживают кастомные модели.",
+      "studyHint": "Повторите урок 3: Iterator Pandas UDF -- загрузка модели один раз для ML-инференса",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q3",
+      "type": "multiple-choice",
+      "question": "В explain() после добавления Python UDF исчез predicate pushdown для столбца, используемого в UDF. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python UDF отключает все оптимизации Catalyst"
+        },
+        {
+          "id": "b",
+          "text": "Predicate pushdown не совместим с Python worker"
+        },
+        {
+          "id": "c",
+          "text": "UDF -- чёрный ящик для Catalyst; оптимизатор не знает, зависит ли UDF от фильтруемого столбца, и не может безопасно переместить фильтр под UDF"
+        },
+        {
+          "id": "d",
+          "text": "Bug в Spark -- pushdown должен работать с UDF"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Catalyst может переставлять операторы только если знает их семантику. UDF (любой: Python, Scala, Pandas) -- чёрный ящик: Catalyst не знает, какие столбцы используются внутри. Если UDF зависит от столбца X и фильтр по X, Catalyst не может pushdown фильтр через UDF -- результат может измениться. Это одна из трёх причин, почему built-in быстрее.",
+      "studyHint": "Повторите урок 1: Catalyst и UDF как чёрный ящик -- predicate pushdown ограничения",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q4",
+      "type": "multiple-choice",
+      "question": "Benchmark: regex extraction на 100M строк. Built-in: 25 сек, Pandas UDF: 75 сек (3x), Python UDF: 12.5 мин (30x). Для simple upper(): разница 100x. Почему разрыв сократился?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Pandas UDF оптимизирован для regex"
+        },
+        {
+          "id": "b",
+          "text": "Catalyst оптимизирует regex внутри UDF"
+        },
+        {
+          "id": "c",
+          "text": "Spark кэширует результаты regex для Python UDF"
+        },
+        {
+          "id": "d",
+          "text": "Для regex полезная работа (~100us) составляет большую долю общего времени; фиксированный overhead сериализации (~5us) -- лишь 5% вместо 99.9% для simple upper()"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "total_time = overhead + work. Simple upper: 5us + 5ns ≈ 5us (overhead = 99.9%). Complex regex: 5us + 100us ≈ 105us (overhead = 5%). Чем сложнее операция, тем меньше relative impact фиксированного overhead сериализации. Но built-in ВСЕГДА быстрее: 0us overhead + 100us work = 100us vs 105us (UDF).",
+      "studyHint": "Повторите урок 5: Benchmark сравнение -- почему разрыв сокращается для сложных операций",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет валидировать ОГРН (13 цифр + контрольная сумма). Python-зависимости не нужны. Какой подход?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Попробовать built-in: length + regexp для формата; если контрольная сумма не выражается built-in -- Scala UDF (JVM-native, ~2x вместо ~100x)"
+        },
+        {
+          "id": "b",
+          "text": "Python UDF -- проще написать на Python"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF для батчевой валидации"
+        },
+        {
+          "id": "d",
+          "text": "Все подходы эквивалентны для валидации"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Чек-лист: (1) Built-in: length(col) == 13 AND regexp_extract проверяет формат -- частично работает. (2) Контрольная сумма ОГРН -- специфичный алгоритм, не выражаемый built-in. (3) Python-зависимости не нужны -> Scala UDF (~2x) вместо Python UDF (~100x). Scala UDF: JVM-native, type-safe, нет сериализации.",
+      "studyHint": "Повторите урок 4: Scala UDF -- когда нужна сложная JVM-native логика без Python",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q6",
+      "type": "multiple-choice",
+      "question": "Команда использует applyInPandas (Grouped Map) для вычисления скользящего среднего по группам. На 500M строк pipeline занимает 40 минут. Можно ли оптимизировать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет -- applyInPandas единственный способ для скользящего среднего"
+        },
+        {
+          "id": "b",
+          "text": "Да: встроенные window functions (avg() OVER PARTITION BY ... ORDER BY ... ROWS BETWEEN) решают задачу скользящего среднего без UDF, с Catalyst + CodeGen"
+        },
+        {
+          "id": "c",
+          "text": "Переключиться на Python UDF для ускорения"
+        },
+        {
+          "id": "d",
+          "text": "Увеличить maxRecordsPerBatch для Pandas UDF"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Скользящее среднее -- классическая window function задача. Spark: avg(col('value')).over(Window.partitionBy('group').orderBy('date').rowsBetween(-6, 0)). Встроенная window function с Catalyst + CodeGen: нулевой UDF overhead. applyInPandas: Arrow transfer + Python execution + groupBy overhead. Window functions всегда предпочтительнее для стандартных оконных операций.",
+      "studyHint": "Повторите урок 1: Чек-лист -- проверить встроенные функции перед UDF (включая window functions)",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q7",
+      "type": "multiple-choice",
+      "question": "Python UDF на executor потребляет 2 ГБ памяти (сверх JVM heap). spark.executor.memory=4g. Какие последствия и как контролировать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет последствий -- Python worker использует системную память"
+        },
+        {
+          "id": "b",
+          "text": "Python UDF не может использовать больше 512 МБ"
+        },
+        {
+          "id": "c",
+          "text": "Python worker memory (2 ГБ) + JVM heap (4 ГБ) = 6 ГБ на executor; container может быть убит YARN (memoryOverhead). Контролировать: spark.executor.pyspark.memory и spark.executor.memoryOverhead"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически ограничивает Python worker memory"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Python worker -- отдельный процесс с собственной памятью (не из JVM heap). Total memory on executor: JVM heap (4 ГБ) + Python worker (2 ГБ) + JVM off-heap + overhead. Если total > container memory limit (YARN), container убивается. Контроль: spark.executor.pyspark.memory ограничивает Python, spark.executor.memoryOverhead увеличивает container размер.",
+      "studyHint": "Повторите урок 2: Memory overhead Python worker -- spark.executor.pyspark.memory",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q8",
+      "type": "multiple-choice",
+      "question": "Data engineer регистрирует Scala UDF: spark.udf.register('validate', (s: String) => ...). UDF используется в SQL: SELECT validate(name) FROM users WHERE validate(name) = 'valid'. Сколько раз UDF вызывается для каждой строки?",
+      "options": [
+        {
+          "id": "a",
+          "text": "1 раз -- Spark кэширует результат UDF"
+        },
+        {
+          "id": "b",
+          "text": "1 раз в WHERE, результат переиспользуется в SELECT"
+        },
+        {
+          "id": "c",
+          "text": "0 раз -- Catalyst оптимизирует UDF-вызовы"
+        },
+        {
+          "id": "d",
+          "text": "2 раза -- один раз в SELECT и один раз в WHERE; Catalyst не может определить, что это один и тот же вызов (UDF -- чёрный ящик)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "UDF -- чёрный ящик. Catalyst не знает, является ли UDF deterministic (чистая функция) или имеет side effects. Поэтому не может кэшировать или переиспользовать результат. Каждый вызов validate() -- отдельное выполнение: один в WHERE, один в SELECT. Для детерминированных UDF можно использовать .asNondeterministic() для подсказки, но это не решает проблему полностью.",
+      "studyHint": "Повторите урок 4: Scala UDF -- Catalyst не кэширует UDF-вызовы",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q9",
+      "type": "multiple-choice",
+      "question": "Pipeline с 10 Python UDF подряд: df.withColumn('a', udf1(...)).withColumn('b', udf2(...))...withColumn('j', udf10(...)). Как оптимизировать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Объединить 10 UDF в один UDF, сократив число JVM->Python->JVM переходов с 10 до 1 на каждую строку"
+        },
+        {
+          "id": "b",
+          "text": "Переписать каждый UDF на Scala"
+        },
+        {
+          "id": "c",
+          "text": "Кэшировать DataFrame между UDF-вызовами"
+        },
+        {
+          "id": "d",
+          "text": "Нельзя оптимизировать -- 10 UDF необходимы"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "10 UDF подряд = 10 циклов JVM->Python->JVM для каждой строки. Объединение в один UDF: 1 цикл, все 10 операций выполняются в Python за один вызов. Overhead сериализации сокращается в 10 раз. Ещё лучше: проверить, какие из 10 UDF можно заменить built-in функциями (шаг 1 чек-листа).",
+      "studyHint": "Повторите урок 2: Минимизация JVM-Python переходов -- объединение UDF",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q10",
+      "type": "multiple-choice",
+      "question": "Pandas UDF с maxRecordsPerBatch=100000. DataFrame содержит строки по ~1 КБ каждая. Один батч = ~100 МБ в памяти Python worker. Executor memory = 2 ГБ. Какие риски?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет рисков -- 100 МБ батч помещается в 2 ГБ"
+        },
+        {
+          "id": "b",
+          "text": "Input (100 МБ) + output (100 МБ) + pandas intermediate objects = ~300-400 МБ пиковое потребление Python worker. Параллельные UDF на одном executor могут превысить memoryOverhead и вызвать OOM"
+        },
+        {
+          "id": "c",
+          "text": "Arrow transfer не поддерживает батчи > 50 МБ"
+        },
+        {
+          "id": "d",
+          "text": "Pandas UDF не может обрабатывать более 10000 строк на батч"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Pandas UDF memory: input Arrow batch (~100 МБ) + converted pandas Series (~100 МБ) + output pandas Series (~100 МБ) + intermediate objects = ~300-400 МБ пиковое. При нескольких concurrent UDF tasks на одном executor потребление кратно. spark.executor.pyspark.memory и memoryOverhead нужно настроить. Уменьшение maxRecordsPerBatch сокращает пиковую память.",
+      "studyHint": "Повторите урок 3: maxRecordsPerBatch -- баланс между throughput и memory",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q11",
+      "type": "multiple-choice",
+      "question": "Какой UDF-подход использовать для вычисления FFT (Fast Fourier Transform) на массиве сигналов (500M строк, каждая с массивом из 1024 float)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Built-in функции Spark поддерживают FFT"
+        },
+        {
+          "id": "b",
+          "text": "Python UDF с import numpy -- numpy ускорит вычисления"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF (Scalar) -- vectorized numpy.fft операции на Arrow-батчах; numpy C-ядро для FFT значительно быстрее per-row Python"
+        },
+        {
+          "id": "d",
+          "text": "Scala UDF с Java FFT библиотекой"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "FFT -- NumPy-вычислительная задача. Pandas UDF (Scalar): данные приходят как pandas Series -> numpy array через Arrow (zero-copy). numpy.fft использует оптимизированные C/Fortran библиотеки (FFTPACK/MKL). Python UDF загружал бы numpy per-row, теряя vectorization. Scala UDF теоретически возможен с Java FFT, но NumPy FFT оптимизированнее.",
+      "studyHint": "Повторите урок 3: Pandas UDF Scalar + numpy -- vectorized C-операции",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-exam-q12",
+      "type": "multiple-choice",
+      "question": "Data engineer утверждает: 'Pandas UDF только в 5x медленнее built-in, значит overhead приемлем для production'. Когда это утверждение неверно?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Утверждение всегда верно -- 5x приемлемо"
+        },
+        {
+          "id": "b",
+          "text": "Только при использовании Python 2"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF на самом деле в 100x медленнее"
+        },
+        {
+          "id": "d",
+          "text": "При high-volume (миллиарды строк): 5x на 10-минутном built-in pipeline = 50 минут Pandas UDF; может не уложиться в SLA. Также при цепочке Pandas UDF overhead кумулятивен"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "5x overhead приемлем для разовых аналитических запросов. Для production ETL с SLA: built-in pipeline 10 минут * 5x = 50 минут -- может превысить SLA. Цепочка Pandas UDF: 5 UDF * 5x ≈ 25x cumulative overhead. Оптимизация: заменить то, что возможно, built-in; объединить оставшиеся UDF в один.",
+      "studyHint": "Повторите урок 5: Матрица решений -- когда overhead UDF приемлем vs критичен",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

@@ -1,0 +1,118 @@
+{
+  "lessonSlug": "13-testing-data-quality/02-integration-testing",
+  "moduleId": "13-testing-data-quality",
+  "_meta": {
+    "idPrefix": "spark-m13-02",
+    "description": "Use IDs: m13-02-q1, m13-02-q2, ... (4 questions on integration vs unit, Testcontainers, markers)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-02-q1",
+      "type": "multiple-choice",
+      "question": "В чём ключевое отличие интеграционного теста от unit-теста для Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Интеграционный тест использует больше данных"
+        },
+        {
+          "id": "b",
+          "text": "Unit-тест проверяет логику трансформации изолированно (mock/fixture). Интеграционный тест проверяет связку Spark + реальная система (Kafka, PostgreSQL, Delta Lake)"
+        },
+        {
+          "id": "c",
+          "text": "Интеграционный тест запускается в production"
+        },
+        {
+          "id": "d",
+          "text": "Нет отличий -- это одно и то же"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Unit-тесты: чистые функции, mock/fixture, секунды, каждый commit. Интеграционные: реальные системы (или контейнеры), минуты, при merge/nightly. Unit проверяет логику трансформации, интеграционный -- корректность связки Spark с Kafka, PostgreSQL, Delta Lake, catalog operations.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Интеграционное тестирование -- unit vs integration граница"
+    },
+    {
+      "id": "spark-m13-02-q2",
+      "type": "multiple-choice",
+      "question": "Зачем использовать Testcontainers для интеграционных тестов Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Testcontainers быстрее реальных баз данных"
+        },
+        {
+          "id": "b",
+          "text": "Testcontainers заменяет pytest"
+        },
+        {
+          "id": "c",
+          "text": "Testcontainers поднимает реальные сервисы (Kafka, PostgreSQL) в Docker-контейнерах для тестов. Каждый тест получает изолированный экземпляр, который автоматически удаляется после теста"
+        },
+        {
+          "id": "d",
+          "text": "Testcontainers нужен только для Java-тестов"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Testcontainers программно запускает Docker-контейнеры с реальными сервисами (Kafka, PostgreSQL, Redis) для тестов. Преимущества: изолированный экземпляр для каждого теста, автоматическая очистка, reproducibility (не зависит от shared dev-сервера). Доступен для Python (testcontainers-python) и Java/Scala.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Интеграционное тестирование -- Testcontainers для Kafka/PostgreSQL"
+    },
+    {
+      "id": "spark-m13-02-q3",
+      "type": "multiple-choice",
+      "question": "Как разделить unit и интеграционные тесты в pytest для разного запуска в CI/CD?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Разные директории -- tests_unit/ и tests_integration/"
+        },
+        {
+          "id": "b",
+          "text": "Невозможно -- все тесты всегда запускаются вместе"
+        },
+        {
+          "id": "c",
+          "text": "Разные файлы conftest.py"
+        },
+        {
+          "id": "d",
+          "text": "pytest markers: @pytest.mark.integration на интеграционных тестах, запуск pytest -m 'not integration' для быстрого прогона unit-тестов при каждом commit"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "pytest markers (@pytest.mark.integration) позволяют разделить тесты: pytest -m 'not integration' -- быстрый прогон unit-тестов при каждом commit. pytest -m integration -- интеграционные при merge/nightly (требуют Docker, больше времени). Это тестовая пирамида: много быстрых unit, немного медленных integration.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: Интеграционное тестирование -- pytest markers и тестовая пирамида CI/CD"
+    },
+    {
+      "id": "spark-m13-02-q4",
+      "type": "multiple-choice",
+      "question": "Window function dense_rank() при одинаковых score у alice и bob (100) присваивает им rank 1. Какой rank получит carol (score 90)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Rank 2 -- dense_rank НЕ пропускает числа, следующий ранг после группы с rank 1 -- всегда 2"
+        },
+        {
+          "id": "b",
+          "text": "Rank 3 -- dense_rank пропускает числа"
+        },
+        {
+          "id": "c",
+          "text": "Rank 1 -- все получают одинаковый ранг"
+        },
+        {
+          "id": "d",
+          "text": "Rank 0 -- отсчёт с нуля"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "dense_rank() не пропускает числа: alice=1, bob=1 (tie), carol=2. В отличие от rank(), который пропускает: alice=1, bob=1, carol=3. Это частый источник багов в оконных функциях -- интеграционный тест с edge case (ties) помогает поймать ошибку до production.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: Интеграционное тестирование -- window functions edge cases и dense_rank vs rank"
+    }
+  ]
+}

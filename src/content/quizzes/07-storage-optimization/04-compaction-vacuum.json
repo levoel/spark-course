@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "07-storage-optimization/04-compaction-vacuum",
+  "moduleId": "07-storage-optimization",
+  "_meta": {
+    "idPrefix": "spark-m07-04",
+    "description": "Use IDs: m07-04-q1, m07-04-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m07-04-q1",
+      "type": "multiple-choice",
+      "question": "Зачем нужна compaction (OPTIMIZE) в Delta Lake/Iceberg?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Для объединения множества маленьких файлов в меньшее число оптимальных (~128-256 МБ), восстанавливая эффективность data skipping и уменьшая overhead планирования tasks"
+        },
+        {
+          "id": "b",
+          "text": "Для удаления дубликатов из таблицы"
+        },
+        {
+          "id": "c",
+          "text": "Для сжатия данных более эффективным кодеком"
+        },
+        {
+          "id": "d",
+          "text": "Для обновления schema таблицы"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Со временем streaming micro-batches и инкрементальные загрузки создают тысячи маленьких файлов. OPTIMIZE объединяет их в файлы оптимального размера (~128-256 МБ): (1) уменьшает число tasks (меньше overhead планирования); (2) восстанавливает эффективность min/max statistics для data skipping; (3) сокращает давление на NameNode.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-04-q2",
+      "type": "multiple-choice",
+      "question": "Что делает VACUUM в Delta Lake?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оптимизирует запросы к таблице"
+        },
+        {
+          "id": "b",
+          "text": "Удаляет устаревшие версии файлов (после UPDATE/DELETE), которые старше retention period (по умолчанию 7 дней), освобождая дисковое пространство"
+        },
+        {
+          "id": "c",
+          "text": "Создаёт backup таблицы"
+        },
+        {
+          "id": "d",
+          "text": "Удаляет таблицу и воссоздаёт её"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "В Delta Lake каждая операция (INSERT, UPDATE, DELETE) создаёт новую версию данных, но старые файлы остаются для time travel. VACUUM удаляет файлы старше retention period (default 7 дней). Без VACUUM таблица 100 ГБ с ежедневными UPDATE может занимать 3 ТБ через год. VACUUM освобождает 2.9 ТБ.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-04-q3",
+      "type": "true-false",
+      "question": "VACUUM с retention = 0 hours опасен, потому что удаляет файлы, которые могут быть нужны текущим активным запросам.",
+      "correctAnswer": true,
+      "explanation": "Верно. VACUUM RETAIN 0 HOURS удаляет ВСЕ устаревшие файлы немедленно. Если в этот момент выполняется долгий запрос, использующий файлы старой версии, запрос упадёт с FileNotFoundException. По умолчанию Delta Lake запрещает VACUUM с retention < 7 дней (spark.databricks.delta.retentionDurationCheck.enabled). Отключение этой проверки -- опасная операция.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-04-q4",
+      "type": "multiple-choice",
+      "question": "Таблица: 100,000 файлов по 100 КБ каждый (10 ГБ total). После OPTIMIZE: 100 файлов по 100 МБ. Какие улучшения?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только уменьшение дискового пространства"
+        },
+        {
+          "id": "b",
+          "text": "Данные сжимаются сильнее"
+        },
+        {
+          "id": "c",
+          "text": "1000x меньше tasks (100 vs 100K); улучшенный data skipping (min/max statistics в больших row groups более точные); меньше давление на NameNode; быстрее listing директории"
+        },
+        {
+          "id": "d",
+          "text": "Только ускорение чтения, запись не изменяется"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Compaction: (1) 100K tasks -> 100 tasks: 1000x меньше overhead планирования; (2) min/max statistics в файлах по 100 МБ точнее, чем в файлах по 100 КБ -- лучший data skipping; (3) NameNode хранит ~150 байт метаданных на файл: 15 МБ -> 15 КБ; (4) listing 100K файлов -- секунды, 100 файлов -- мгновенно.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-04-q5",
+      "type": "multiple-choice",
+      "question": "Как часто нужно запускать OPTIMIZE и VACUUM для production таблицы с ежедневным ETL?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Один раз в год"
+        },
+        {
+          "id": "b",
+          "text": "Никогда -- Delta Lake оптимизирует данные автоматически"
+        },
+        {
+          "id": "c",
+          "text": "Каждый час для максимальной производительности"
+        },
+        {
+          "id": "d",
+          "text": "OPTIMIZE: ежедневно или еженедельно (после накопления маленьких файлов). VACUUM: еженедельно (с retention > max query duration)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Рекомендация: OPTIMIZE после ETL batch (ежедневно) или при накоплении > 1000 маленьких файлов. VACUUM еженедельно с retention >= max query duration (если самый длинный запрос 4 часа, retention >= 4 часа). Слишком частый OPTIMIZE создаёт overhead перезаписи. Слишком редкий -- накопление маленьких файлов.",
+      "bloomLevel": "applied"
+    }
+  ]
+}

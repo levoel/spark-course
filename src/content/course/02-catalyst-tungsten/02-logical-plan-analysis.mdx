@@ -1,0 +1,176 @@
+---
+title: "Логический план: Анализ и разрешение ссылок"
+description: "Как Analyzer разрешает имена таблиц и колонок через Catalog, и как читать вывод explain(true)"
+order: 2
+difficulty: "intermediate"
+estimatedTime: 18
+topics: ["Logical Plan", "Analyzer", "Catalog", "UnresolvedRelation"]
+---
+
+# Логический план: Анализ и разрешение ссылок
+
+## От текста к дереву: Parser
+
+Когда Spark получает SQL-запрос, первый шаг -- **парсинг**. Parser (на основе ANTLR) преобразует текст SQL в дерево абстрактного синтаксиса -- **Unresolved Logical Plan**.
+
+На этом этапе Spark ещё **ничего не знает** о реальных таблицах и колонках. Все ссылки остаются "нерезолвенными":
+
+- `UnresolvedRelation('employees')` -- Spark не знает, существует ли таблица `employees`
+- `UnresolvedAttribute('age')` -- тип и принадлежность колонки `age` неизвестны
+- `UnresolvedStar(*)` -- `SELECT *` ещё не развернут в список конкретных колонок
+
+Рассмотрим конкретный SQL-запрос, который будет нашим сквозным примером:
+
+```sql
+SELECT name, dept_name
+FROM employees e
+JOIN departments d ON e.dept_id = d.dept_id
+WHERE e.age > 30
+```
+
+На стадии Parser этот запрос превращается в дерево с нерезолвенными узлами -- Spark знает **структуру** запроса, но не знает, существуют ли таблицы и каковы их схемы.
+
+## Analyzer: разрешение ссылок через Catalog
+
+**Analyzer** -- вторая стадия Catalyst pipeline. Его задача -- взять Unresolved Logical Plan и **разрешить все ссылки**, обратившись к **Catalog**.
+
+### Что такое Catalog?
+
+Catalog -- это метаданное хранилище Spark, содержащее информацию о:
+- **Базах данных** и их таблицах
+- **Схемах** таблиц (имена колонок, типы данных)
+- **Функциях** (встроенных и пользовательских)
+- **Временных представлениях** (temporary views)
+
+В Spark 3.5.x Catalog доступен через `spark.catalog`:
+
+```python
+# Список таблиц в текущей базе данных
+spark.catalog.listTables()
+
+# Колонки конкретной таблицы
+spark.catalog.listColumns("employees")
+```
+
+### Процесс разрешения
+
+Analyzer применяет набор правил для разрешения ссылок:
+
+1. **ResolveRelations** -- ищет `UnresolvedRelation('employees')` в Catalog и заменяет на `LogicalRelation` с полной схемой
+2. **ResolveReferences** -- сопоставляет `UnresolvedAttribute('age')` с конкретной колонкой `employees.age: Int`
+3. **ResolveFunctions** -- разрешает вызовы функций (`count`, `sum`, UDF)
+4. **ResolveAliases** -- обрабатывает алиасы (`e`, `d`)
+5. **TypeCoercion** -- приводит типы (например, `'30'` в SQL сравнивается с `Int`)
+
+После анализа наш запрос имеет полностью определенную схему:
+
+```
+employees.name: String
+employees.age: Int
+employees.dept_id: Int
+departments.dept_id: Int
+departments.dept_name: String
+```
+
+<Callout type="warning">
+**Что произойдёт при ошибке?** Если Analyzer не найдёт таблицу в Catalog, Spark выбросит `AnalysisException: Table or view not found: employees`. Аналогично, ссылка на несуществующую колонку вызовет `AnalysisException: cannot resolve 'salary' given input columns [name, age, dept_id]`. Эти ошибки возникают **до выполнения** запроса -- на этапе анализа.
+</Callout>
+
+## Чтение explain(true): Parsed и Analyzed планы
+
+Используем `explain(true)` для нашего сквозного примера:
+
+```python
+employees = spark.createDataFrame(
+    [(1, "Alice", 30, 100), (2, "Bob", 35, 200), (3, "Carol", 25, 100)],
+    ["id", "name", "age", "dept_id"]
+)
+departments = spark.createDataFrame(
+    [(100, "Engineering"), (200, "Marketing")],
+    ["dept_id", "dept_name"]
+)
+
+employees.createOrReplaceTempView("employees")
+departments.createOrReplaceTempView("departments")
+
+result = spark.sql("""
+    SELECT name, dept_name
+    FROM employees e
+    JOIN departments d ON e.dept_id = d.dept_id
+    WHERE e.age > 30
+""")
+
+result.explain(True)
+```
+
+Вывод содержит несколько секций. Разберем первые две:
+
+```
+== Parsed Logical Plan ==
+'Project ['name, 'dept_name]
++- 'Filter ('e.age > 30)
+   +- 'Join Inner, ('e.dept_id = 'd.dept_id)
+      :- 'SubqueryAlias e
+      :  +- 'UnresolvedRelation [employees]
+      +- 'SubqueryAlias d
+         +- 'UnresolvedRelation [departments]
+```
+
+Обратите внимание на **апострофы** (`'name`, `'dept_name`) -- это маркер нерезолвенных ссылок. Spark видит структуру запроса, но типы и таблицы ещё не разрешены.
+
+```
+== Analyzed Logical Plan ==
+name: string, dept_name: string
+Project [name#5, dept_name#12]
++- Filter (age#6 > 30)
+   +- Join Inner, (dept_id#7 = dept_id#11)
+      :- SubqueryAlias e
+      :  +- Project [id#4, name#5, age#6, dept_id#7]
+      :     +- LocalRelation [id#4, name#5, age#6, dept_id#7]
+      +- SubqueryAlias d
+         +- Project [dept_id#11, dept_name#12]
+            +- LocalRelation [dept_id#11, dept_name#12]
+```
+
+Теперь все ссылки разрешены:
+- `'UnresolvedRelation [employees]` стало `LocalRelation [id#4, name#5, age#6, dept_id#7]`
+- `'name` стало `name#5` (суффикс `#5` -- уникальный идентификатор колонки в Spark)
+- Типы указаны в заголовке: `name: string, dept_name: string`
+- `'e.age > 30` стало `age#6 > 30` с известным типом `Int`
+
+<Callout type="tip">
+**Как читать explain(true) пошагово:**
+1. Начинайте с **Parsed Logical Plan** -- это ваш запрос "как есть", в форме дерева
+2. Сравните с **Analyzed Logical Plan** -- все апострофы должны исчезнуть, типы стать явными
+3. Если видите `UnresolvedRelation` в Analyzed плане -- это баг (не должно быть)
+4. Суффиксы `#N` -- внутренние ID колонок, они уникальны в пределах запроса
+</Callout>
+
+## Роль Catalog в production-средах
+
+В production Spark обычно работает с **Hive Metastore** или **Unity Catalog** (Databricks). Catalog хранит не только схемы, но и:
+
+- **Статистики таблиц** -- количество строк, размер в байтах
+- **Статистики колонок** -- min/max, количество distinct значений, null count
+- **Информацию о партициях** -- partitioning scheme, partition values
+
+Эти статистики критически важны для Cost-Based Optimizer, который мы разберем в уроке об оптимизации правил.
+
+```python
+# Собрать статистики для CBO
+spark.sql("ANALYZE TABLE employees COMPUTE STATISTICS FOR ALL COLUMNS")
+
+# Посмотреть статистики
+spark.sql("DESCRIBE EXTENDED employees").show()
+```
+
+## Граница между Analyzer и Optimizer
+
+Analyzer гарантирует **корректность** плана -- все ссылки разрешены, типы совместимы. После анализа план является **валидным**, но ещё не **оптимальным**.
+
+Следующая стадия -- **Optimizer** -- берет Analyzed Logical Plan и трансформирует его для повышения производительности. Optimizer **не меняет семантику** запроса, он только перестраивает план так, чтобы результат был таким же, но вычислялся быстрее.
+
+<KnowledgeCheck
+  question="Что произойдёт, если Analyzer не найдёт таблицу в Catalog?"
+  answer="Spark выбросит AnalysisException: 'Table or view not found: <table_name>'. Эта ошибка возникает на этапе анализа — до запуска каких-либо вычислений. Analyzer не может создать Resolved Logical Plan без схемы таблицы, поэтому запрос отклоняется немедленно. Это одно из преимуществ многофазного подхода: ошибки ловятся рано, до затрат ресурсов кластера."
+/>

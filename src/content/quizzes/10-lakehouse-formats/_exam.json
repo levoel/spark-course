@@ -1,0 +1,444 @@
+{
+  "lessonSlug": "10-lakehouse-formats/_exam",
+  "moduleId": "10-lakehouse-formats",
+  "examTitle": "Экзамен: Lakehouse Formats",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m10-exam",
+    "description": "Use IDs: m10-exam-q1, m10-exam-q2, ... (16 questions covering all M10 lessons)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-exam-q1",
+      "type": "multiple-choice",
+      "question": "Компания использует Spark для ETL (90% workload), Trino для ad-hoc запросов, и планирует подключить Flink для streaming. Все данные в S3. Бюджет не позволяет дублирование данных. Какой lakehouse-формат рекомендуете?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Apache Iceberg -- engine-agnostic, нативно поддерживается Spark, Trino и Flink; одна копия данных для всех движков без дополнительных прослоек"
+        },
+        {
+          "id": "b",
+          "text": "Delta Lake -- нативная Spark-интеграция решает 90% нагрузки"
+        },
+        {
+          "id": "c",
+          "text": "Apache Hudi -- incremental queries для ETL"
+        },
+        {
+          "id": "d",
+          "text": "Apache Paimon -- streaming-first для Flink"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Три движка + запрет на дублирование = Iceberg. Это engine-agnostic формат с нативной поддержкой Spark, Trino и Flink. Delta + UniForm -- альтернатива, но Trino и Flink поддерживают Iceberg нативно, без UniForm-прослойки. Paimon оптимален для Flink-first, но Spark -- основной движок (90%).",
+      "studyHint": "Повторите урок 6: Сравнение форматов -- decision tree для мультидвижковых сред",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m10-exam-q2",
+      "type": "multiple-choice",
+      "question": "Delta Lake таблица с 1000 версиями в _delta_log/. Data engineer жалуется на медленный spark.read. Какой механизм Delta Lake ускоряет чтение metadata при большом числе версий?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Delta автоматически удаляет старые версии"
+        },
+        {
+          "id": "b",
+          "text": "Checkpoint-файлы (Parquet) создаются каждые 10 версий -- Spark читает последний checkpoint + только JSON-файлы после него, вместо всех 1000 JSON"
+        },
+        {
+          "id": "c",
+          "text": "Delta кэширует metadata в memory"
+        },
+        {
+          "id": "d",
+          "text": "OPTIMIZE сжимает metadata"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "При 1000 версиях без checkpoints Spark читает 1000 JSON-файлов последовательно. Checkpoint (Parquet) каждые 10 версий содержит полное состояние. Spark находит последний checkpoint (версия 1000) и читает 0 дополнительных JSON. Без checkpoints чтение metadata деградирует линейно с числом версий.",
+      "studyHint": "Повторите урок 2: Delta Lake -- checkpoint files и _delta_log/ architecture",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q3",
+      "type": "multiple-choice",
+      "question": "Iceberg-таблица партиционирована по month(order_date). Объём данных вырос, и запросы по конкретному дню стали медленными. Что делать, не перезаписывая данные?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Невозможно -- нужно пересоздать таблицу с новым партиционированием"
+        },
+        {
+          "id": "b",
+          "text": "Добавить Z-ORDER по order_date внутри месячных партиций"
+        },
+        {
+          "id": "c",
+          "text": "Использовать partition evolution: ALTER TABLE SET PARTITION SPEC (day(order_date)) -- новые данные партиционируются по дню, старые остаются по месяцу. Query planner учитывает оба spec"
+        },
+        {
+          "id": "d",
+          "text": "Увеличить число executors для параллельного чтения месячных партиций"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Partition evolution -- уникальная фича Iceberg: ALTER TABLE SET PARTITION SPEC изменяет партиционирование для новых данных без rewrite старых. Старые partition by month остаются, новые данные пишутся partition by day. Query planner знает о обоих spec и применяет partition pruning корректно. В Delta/Hudi это требует полный rewrite.",
+      "studyHint": "Повторите урок 3: Apache Iceberg -- partition evolution без rewrite",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q4",
+      "type": "multiple-choice",
+      "question": "Hudi MOR-таблица начала читаться медленно после 48 часов без compaction. Что происходит и как это исправить?",
+      "options": [
+        {
+          "id": "a",
+          "text": "MOR-таблица не деградирует без compaction"
+        },
+        {
+          "id": "b",
+          "text": "Нужно переключиться на COW-таблицу"
+        },
+        {
+          "id": "c",
+          "text": "Проблема в partition pruning -- нужно перепартиционировать"
+        },
+        {
+          "id": "d",
+          "text": "Накопились delta log файлы: каждое чтение merge base file + N delta logs. Чем больше logs, тем медленнее read. Compaction сливает delta logs в новые base files, восстанавливая read performance"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "MOR trade-off: быстрая запись (delta log append), медленное чтение (merge base + logs). За 48 часов активной записи без compaction накопились сотни delta log файлов. Каждый read merge все logs с base file. Compaction сливает delta logs в новый base file -- read performance восстанавливается. Автоматизируйте compaction по расписанию.",
+      "studyHint": "Повторите урок 4: Apache Hudi -- COW vs MOR trade-offs и compaction strategy",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q5",
+      "type": "multiple-choice",
+      "question": "Paimon changelog producer позволяет downstream consumers получать CDC-поток. Чем этот подход отличается от Debezium CDC?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Debezium читает WAL source DB (external CDC). Paimon генерирует changelog из своих собственных таблиц (internal CDC) -- не нужна внешняя СУБД, CDC-поток создаётся из самого lakehouse"
+        },
+        {
+          "id": "b",
+          "text": "Нет разницы -- оба читают WAL базы данных"
+        },
+        {
+          "id": "c",
+          "text": "Paimon changelog быстрее Debezium"
+        },
+        {
+          "id": "d",
+          "text": "Debezium поддерживает только PostgreSQL, Paimon -- любые source"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Debezium -- external CDC: читает WAL из PostgreSQL/MySQL/MongoDB. Paimon changelog -- internal CDC: таблица сама генерирует поток INSERT/UPDATE/DELETE для downstream. Не нужна СУБД-источник и Kafka Connect. Pipeline: Kafka -> Paimon -> Changelog -> Downstream -- все в рамках data lake.",
+      "studyHint": "Повторите урок 5: Apache Paimon -- changelog producer и streaming-first design",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q6",
+      "type": "multiple-choice",
+      "question": "Data engineer выполняет VACUUM с retention = 2 часа на Delta-таблице, которую одновременно читает длительный ETL-job (3 часа). Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "ETL-job продолжит работать без проблем"
+        },
+        {
+          "id": "b",
+          "text": "ETL-job может упасть с FileNotFoundException: VACUUM удалит Parquet-файлы, на которые ETL-job ссылается через snapshot 3-часовой давности"
+        },
+        {
+          "id": "c",
+          "text": "VACUUM подождёт завершения ETL-job"
+        },
+        {
+          "id": "d",
+          "text": "Delta Lake автоматически перенаправит ETL-job на новые файлы"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "ETL-job читает snapshot, созданный 3 часа назад. Этот snapshot ссылается на Parquet-файлы, которые могут быть заменены новыми версиями. VACUUM с retention = 2 часа удалит файлы старше 2 часов, включая те, которые ETL-job ещё использует. Результат: FileNotFoundException. Retention должен покрывать longest-running query.",
+      "studyHint": "Повторите урок 8: Best Practices -- VACUUM retention policy и concurrent readers",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q7",
+      "type": "multiple-choice",
+      "question": "SDP в Spark 4.1 использует два основных декоратора. Чем @dp.table отличается от @dp.materialized_view?",
+      "options": [
+        {
+          "id": "a",
+          "text": "@dp.table создаёт временную таблицу, @dp.materialized_view -- постоянную"
+        },
+        {
+          "id": "b",
+          "text": "Нет разницы -- синонимы"
+        },
+        {
+          "id": "c",
+          "text": "@dp.table -- append-only (streaming, инкрементальная обработка); @dp.materialized_view -- полный пересчёт при каждом запуске pipeline"
+        },
+        {
+          "id": "d",
+          "text": "@dp.table для batch, @dp.materialized_view для streaming"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "@dp.table -- streaming table: append-only, данные обрабатываются инкрементально (только новые строки). @dp.materialized_view -- batch: при каждом запуске pipeline результат полностью пересчитывается из source. Выбор зависит от семантики: append-only events -> table, derived aggregates -> materialized_view.",
+      "studyHint": "Повторите урок 7: SDP -- @dp.table vs @dp.materialized_view семантика",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m10-exam-q8",
+      "type": "multiple-choice",
+      "question": "Lakehouse-таблица содержит 100 000 мелких файлов (по 1 МБ каждый). Какие проблемы это создаёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет проблем -- мелкие файлы читаются быстрее"
+        },
+        {
+          "id": "b",
+          "text": "Проблема только для S3, не для HDFS"
+        },
+        {
+          "id": "c",
+          "text": "Только проблема с metadata -- данные читаются одинаково"
+        },
+        {
+          "id": "d",
+          "text": "Small files problem: (1) overhead на file listing и metadata management; (2) неэффективные I/O -- seek time dominates; (3) перегрузка Task Scheduler -- 100K tasks. Решение: OPTIMIZE / compaction для объединения в файлы 128 МБ - 1 ГБ"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Small files problem -- классическая проблема lakehouse. 100K файлов по 1 МБ: (1) metadata overhead -- обработка 100K entries в manifest/delta_log; (2) I/O: каждый read включает HTTP request к S3 (latency ~50ms), 100K requests = 83 минуты; (3) Spark создаёт 100K tasks. Compaction (OPTIMIZE, Paimon auto-compaction) объединяет в оптимальные файлы.",
+      "studyHint": "Повторите урок 8: Best Practices -- small files problem и OPTIMIZE/compaction",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q9",
+      "type": "multiple-choice",
+      "question": "Все четыре lakehouse-формата поддерживают schema evolution. Какой формат предоставляет самую полную schema evolution (add, drop, rename, reorder columns) без rewrite?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Apache Iceberg -- полная schema evolution (add, drop, rename, reorder) без rewrite данных, используя column IDs для отслеживания"
+        },
+        {
+          "id": "b",
+          "text": "Delta Lake -- полная поддержка всех операций"
+        },
+        {
+          "id": "c",
+          "text": "Apache Hudi -- лучшая schema evolution в экосистеме"
+        },
+        {
+          "id": "d",
+          "text": "Все четыре формата идентичны по schema evolution"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Iceberg предоставляет самую полную schema evolution: add, drop, rename, reorder columns -- все без rewrite данных. Iceberg использует column IDs (а не имена) для отслеживания колонок, что делает rename безопасным. Delta поддерживает add/rename/drop, Hudi рекомендует только add, Paimon -- add/drop.",
+      "studyHint": "Повторите урок 3: Iceberg schema evolution и урок 6: Decision Matrix",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q10",
+      "type": "multiple-choice",
+      "question": "Медальонная архитектура: Bronze -> Silver -> Gold. Data engineer обнаружил, что Silver-слой содержит дубликаты. На каком слое должна выполняться дедупликация и почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "На Bronze -- дедупликация при ingestion"
+        },
+        {
+          "id": "b",
+          "text": "На Silver -- Bronze хранит raw данные as-is для auditability и replay. Silver -- слой очистки, где дедупликация, type casting и validation применяются к данным"
+        },
+        {
+          "id": "c",
+          "text": "На Gold -- дедупликация в агрегатах"
+        },
+        {
+          "id": "d",
+          "text": "Дедупликация не нужна -- lakehouse-форматы гарантируют уникальность"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Bronze = raw, immutable -- данные записываются без изменений для auditability и возможности replay. Silver = cleaned -- дедупликация, schema enforcement, type casting, null handling. Gold = aggregated business metrics. Дедупликация на Bronze нарушает принцип immutable raw data. На Gold -- слишком поздно, дубликаты исказят агрегаты.",
+      "studyHint": "Повторите урок 1: Lakehouse Architecture -- медальонная архитектура и назначение каждого слоя",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m10-exam-q11",
+      "type": "multiple-choice",
+      "question": "Delta Lake vs Iceberg: в чём принципиальная разница подхода к concurrent write conflict resolution?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Delta использует pessimistic locking, Iceberg -- optimistic"
+        },
+        {
+          "id": "b",
+          "text": "Delta не поддерживает concurrent writes"
+        },
+        {
+          "id": "c",
+          "text": "Оба используют optimistic concurrency, но Delta разрешает конфликты через file-level conflict detection в transaction log, а Iceberg -- через atomic swap указателя в catalog на новый metadata file"
+        },
+        {
+          "id": "d",
+          "text": "Iceberg использует distributed lock manager"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Оба формата используют optimistic concurrency control, но механизмы различаются. Delta: два writer пытаются создать следующий JSON в _delta_log/ -- конфликт определяется по пересечению затронутых файлов. Iceberg: каждый snapshot создаёт новый metadata file, catalog атомарно обновляет указатель -- конфликт при concurrent swap.",
+      "studyHint": "Повторите урок 2: Delta Lake ACID и урок 3: Iceberg snapshot-based versioning",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q12",
+      "type": "multiple-choice",
+      "question": "Какой lakehouse-формат оптимален, если основной движок -- Flink, данные приходят непрерывно из Kafka, и downstream consumers нуждаются в CDC-потоке?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Delta Lake"
+        },
+        {
+          "id": "b",
+          "text": "Apache Iceberg"
+        },
+        {
+          "id": "c",
+          "text": "Apache Hudi"
+        },
+        {
+          "id": "d",
+          "text": "Apache Paimon -- нативная Flink-интеграция, LSM-tree для high-frequency writes, changelog producer для CDC downstream"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Три фактора указывают на Paimon: (1) Flink-first -- нативная интеграция (бывший Flink Table Store); (2) непрерывная запись -- LSM-tree оптимизирован для streaming writes; (3) CDC downstream -- changelog producer генерирует INSERT/UPDATE/DELETE поток нативно. Decision tree: streaming-first + Flink + CDC = Paimon.",
+      "studyHint": "Повторите урок 5: Paimon streaming-first design и урок 6: Decision tree",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m10-exam-q13",
+      "type": "multiple-choice",
+      "question": "Iceberg manifest files хранят column-level statistics (min, max, count) для каждого data file. Как это используется при чтении?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Для data skipping: при WHERE amount > 1000, Spark читает manifest, находит data files, где max(amount) < 1000, и пропускает их без чтения -- существенно сокращает I/O"
+        },
+        {
+          "id": "b",
+          "text": "Для сжатия данных при записи"
+        },
+        {
+          "id": "c",
+          "text": "Для автоматического партиционирования"
+        },
+        {
+          "id": "d",
+          "text": "Для мониторинга качества данных"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Column statistics в manifest files позволяют data skipping: query planner читает min/max каждого data file из manifest и пропускает файлы, которые гарантированно не содержат нужных данных. Для WHERE amount > 1000: файл с max(amount) = 500 пропускается. Это аналог Delta Lake data skipping, но реализованный через manifest-уровень.",
+      "studyHint": "Повторите урок 3: Iceberg архитектура -- manifest files и column statistics",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m10-exam-q14",
+      "type": "multiple-choice",
+      "question": "Hudi Timeline содержит instants типа commit, deltacommit, compaction, clean. Какой instant фиксирует COW-запись, а какой -- MOR-запись?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оба типа записи используют commit"
+        },
+        {
+          "id": "b",
+          "text": "COW -- commit (полная перезапись Parquet файлов); MOR -- deltacommit (append delta log). Оба атомарны и видны в timeline"
+        },
+        {
+          "id": "c",
+          "text": "COW -- deltacommit, MOR -- commit"
+        },
+        {
+          "id": "d",
+          "text": "COW и MOR не различаются на уровне timeline"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Timeline чётко различает: commit -- COW write (перезапись base Parquet files), deltacommit -- MOR write (append delta log). Compaction -- merge delta logs в base files (MOR -> COW-like). Clean -- удаление старых файлов. Timeline обеспечивает атомарность и порядок всех операций.",
+      "studyHint": "Повторите урок 4: Apache Hudi -- Timeline architecture и типы instants",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m10-exam-q15",
+      "type": "multiple-choice",
+      "question": "Z-ORDER в Delta Lake vs sort в Iceberg rewrite_data_files: оба улучшают data skipping. В чём архитектурная разница?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет разницы -- оба сортируют данные"
+        },
+        {
+          "id": "b",
+          "text": "Z-ORDER быстрее, но менее точен"
+        },
+        {
+          "id": "c",
+          "text": "Z-ORDER использует space-filling curve для мультиколоночной кластеризации. Iceberg sort -- линейная сортировка. Z-ORDER эффективнее для фильтрации по нескольким колонкам одновременно, линейная сортировка -- для одной колонки"
+        },
+        {
+          "id": "d",
+          "text": "Iceberg sort лучше Z-ORDER во всех сценариях"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Z-ORDER использует Z-кривую (space-filling curve) для интерливинга битов нескольких колонок. Это обеспечивает хорошую кластеризацию по 2-3 колонкам одновременно (например, city + date). Линейный sort оптимален для одной колонки. При WHERE city = 'Moscow' AND date = '2024-01-15' Z-ORDER эффективнее; при WHERE date = '2024-01-15' линейный sort быстрее.",
+      "studyHint": "Повторите урок 2: Delta OPTIMIZE + Z-ORDER и урок 8: Best Practices -- data skipping strategies",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m10-exam-q16",
+      "type": "multiple-choice",
+      "question": "SDP-pipeline содержит 5 таблиц с зависимостями: A -> B -> D, A -> C -> D, D -> E. Какой порядок выполнения определит SDP?",
+      "options": [
+        {
+          "id": "a",
+          "text": "A, B, C, D, E -- строго последовательно"
+        },
+        {
+          "id": "b",
+          "text": "SDP не поддерживает зависимости между таблицами"
+        },
+        {
+          "id": "c",
+          "text": "Порядок определяется порядком объявления функций в коде"
+        },
+        {
+          "id": "d",
+          "text": "SDP выполнит dependency resolution: A первым, затем B и C параллельно (оба зависят только от A), затем D (зависит от B и C), затем E (зависит от D)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "SDP автоматически строит dependency graph из объявленных таблиц и определяет оптимальный порядок выполнения. A не имеет зависимостей -- первым. B и C зависят только от A -- параллельно. D зависит от B и C -- после обоих. E зависит от D -- последним. Это ключевое преимущество декларативного подхода.",
+      "studyHint": "Повторите урок 7: SDP -- dependency resolution и автоматическое управление порядком выполнения",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "05-aqe-deep-dive/04-dynamic-partition-pruning",
+  "moduleId": "05-aqe-deep-dive",
+  "_meta": {
+    "idPrefix": "spark-m05-04",
+    "description": "Use IDs: m05-04-q1, m05-04-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m05-04-q1",
+      "type": "multiple-choice",
+      "question": "Что делает Dynamic Partition Pruning (DPP)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Автоматически внедряет runtime-фильтр из dimension-таблицы в scan fact-таблицы, пропуская партиции, не участвующие в join"
+        },
+        {
+          "id": "b",
+          "text": "Удаляет ненужные партиции из таблицы на диске"
+        },
+        {
+          "id": "c",
+          "text": "Динамически создаёт новые партиции для оптимизации запроса"
+        },
+        {
+          "id": "d",
+          "text": "Изменяет схему партиционирования таблицы в runtime"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "DPP позволяет Spark сначала выполнить фильтр на dimension-таблице (например, WHERE quarter='Q1-2024'), получить список уникальных ключей (date_key), и затем использовать эти ключи как фильтр при сканировании fact-таблицы. Это позволяет пропустить 75% данных в star schema, вместо чтения всей fact-таблицы.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m05-04-q2",
+      "type": "multiple-choice",
+      "question": "Fact-таблица sales (500M строк) партиционирована по date_key. Dimension-таблица dim_dates (365 строк) фильтруется по quarter='Q1-2024' (90 дней). Без DPP Spark читает все 500M строк. С DPP?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark читает все 500M строк -- DPP не работает с Parquet"
+        },
+        {
+          "id": "b",
+          "text": "Spark сначала фильтрует dim_dates (90 date_key), затем читает только 90 из 365 партиций sales -- ~25% данных вместо 100%"
+        },
+        {
+          "id": "c",
+          "text": "Spark кэширует dim_dates и используют её как lookup"
+        },
+        {
+          "id": "d",
+          "text": "Spark конвертирует join в broadcast и читает все данные"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "DPP: (1) фильтрует dim_dates WHERE quarter='Q1-2024' -> 90 date_key; (2) внедряет эти 90 ключей как IN-фильтр в scan sales; (3) partition pruning на sales пропускает 275 из 365 партиций. Результат: чтение ~25% данных вместо 100%. Для 500M строк это экономит ~375M строк чтения.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m05-04-q3",
+      "type": "true-false",
+      "question": "DPP работает только для fact-таблиц, партиционированных по join key. Если fact-таблица не партиционирована, DPP не применяется.",
+      "correctAnswer": true,
+      "explanation": "Верно. DPP внедряет фильтр на уровне partition pruning -- пропускает целые директории/файлы. Если fact-таблица не партиционирована по join key, нет директорий для pruning. DPP может работать с data skipping (min/max statistics), но основной эффект -- именно partition pruning на партиционированных таблицах.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-04-q4",
+      "type": "multiple-choice",
+      "question": "DPP -- это оптимизация compile-time (Catalyst) или runtime (AQE)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Чисто runtime (AQE)"
+        },
+        {
+          "id": "b",
+          "text": "Чисто compile-time (Catalyst)"
+        },
+        {
+          "id": "c",
+          "text": "DPP -- compile-time оптимизация Catalyst, которую AQE может усилить runtime-информацией"
+        },
+        {
+          "id": "d",
+          "text": "DPP не связан ни с Catalyst, ни с AQE"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "DPP -- это оптимизация Catalyst (compile-time), которая планирует runtime-фильтр. Catalyst определяет, что join key совпадает с partition key, и добавляет DynamicPruningExpression в план. AQE может усилить DPP: если после выполнения первого stage реальные данные позволяют более точный фильтр, AQE адаптирует его.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-04-q5",
+      "type": "multiple-choice",
+      "question": "Star schema: fact_orders (100 ТБ, partitioned by country_id) JOIN dim_countries (200 строк) WHERE continent='Europe' (50 стран). Какой выигрыш от DPP?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Минимальный -- DPP не работает для маленьких dimension-таблиц"
+        },
+        {
+          "id": "b",
+          "text": "DPP кэширует 50 стран и выполнит nested loop join"
+        },
+        {
+          "id": "c",
+          "text": "DPP перенаправит весь запрос на один executor"
+        },
+        {
+          "id": "d",
+          "text": "Spark прочитает ~25% fact_orders (50 из ~200 стран), экономя ~75 ТБ чтения"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "DPP: (1) фильтрует dim_countries WHERE continent='Europe' -> 50 country_id; (2) внедряет фильтр в scan fact_orders; (3) partition pruning пропускает ~150 из 200 country-партиций. Результат: чтение ~25% от 100 ТБ = ~25 ТБ вместо 100 ТБ. Для маленьких dimension-таблиц DPP особенно эффективен -- broadcast dimension + pruning fact.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-04-code-1",
+      "type": "code-challenge",
+      "question": "Создайте таблицу фактов sales (1000 строк, 12 регионов) и таблицу измерений regions. Продемонстрируйте паттерн Dynamic Partition Pruning: сначала отфильтруйте dimensions (только region='Europe'), затем join с фактами. Покажите, сколько строк в отфильтрованном результате vs общем количестве.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, sum as _sum\n\nspark = SparkSession.builder.appName(\"dpp_demo\").getOrCreate()\n\n# Факты: 1000 продаж по 12 регионам\nregions_list = [\"Europe\", \"Asia\", \"Americas\", \"Africa\",\n                \"Middle_East\", \"Oceania\", \"Nordic\", \"Baltic\",\n                \"Caribbean\", \"Central_Asia\", \"South_Pacific\", \"Arctic\"]\nsales_rows = [(i, regions_list[i % 12], (i * 13) % 1000 + 50) for i in range(1000)]\nsales = spark.createDataFrame(sales_rows, [\"sale_id\", \"region_id\", \"revenue\"])\n\n# Измерения: справочник регионов\nregion_rows = [(r, f\"{r} Region\", \"active\") for r in regions_list]\nregions = spark.createDataFrame(region_rows, [\"region_id\", \"region_name\", \"status\"])\n\n# TODO: Отфильтруйте regions только по region_id == \"Europe\"\n# filtered_regions = regions.filter(...)\n\n# TODO: Выполните join sales с filtered_regions по region_id\n# result = sales.join(...)\n\n# TODO: Покажите количество строк в результате и общее количество sales\n# print(f\"Total sales: {sales.count()}\")\n# print(f\"After DPP join: {result.count()}\")\n# result.show(5)\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, sum as _sum\n\nspark = SparkSession.builder.appName(\"dpp_demo\").getOrCreate()\n\nregions_list = [\"Europe\", \"Asia\", \"Americas\", \"Africa\",\n                \"Middle_East\", \"Oceania\", \"Nordic\", \"Baltic\",\n                \"Caribbean\", \"Central_Asia\", \"South_Pacific\", \"Arctic\"]\nsales_rows = [(i, regions_list[i % 12], (i * 13) % 1000 + 50) for i in range(1000)]\nsales = spark.createDataFrame(sales_rows, [\"sale_id\", \"region_id\", \"revenue\"])\n\nregion_rows = [(r, f\"{r} Region\", \"active\") for r in regions_list]\nregions = spark.createDataFrame(region_rows, [\"region_id\", \"region_name\", \"status\"])\n\nfiltered_regions = regions.filter(col(\"region_id\") == \"Europe\")\n\nresult = sales.join(filtered_regions, \"region_id\")\n\nprint(f\"Total sales: {sales.count()}\")\nprint(f\"After DPP join: {result.count()}\")\nresult.show(5)\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Всего 1000 продаж",
+          "input": "",
+          "expectedOutput": "Total sales: 1000",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "После DPP join ~84 строки (1000/12 ≈ 83-84)",
+          "input": "",
+          "expectedOutput": "After DPP join: 84",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Результат содержит Europe Region",
+          "input": "",
+          "expectedOutput": "Europe Region",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Dynamic Partition Pruning (DPP) — оптимизация, при которой Spark использует фильтр из dimension-стороны join для пропуска нерелевантных партиций fact-таблицы. Когда dimension мала и отфильтрована (1 из 12 регионов), Spark в runtime строит фильтр-предикат из результата dimension-запроса и применяет его к чтению fact-таблицы. Вместо чтения 1000 строк и фильтрации после join, Spark читает только ~84 строки региона Europe. Это критически важно для star-schema запросов с партиционированными fact-таблицами.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

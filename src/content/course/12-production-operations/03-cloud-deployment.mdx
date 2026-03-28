@@ -1,0 +1,250 @@
+---
+title: "Облачное развёртывание Spark"
+description: "Managed Spark на Databricks, AWS EMR и GCP Dataproc: архитектура, конфигурация и паттерны развёртывания"
+order: 3
+difficulty: "advanced"
+estimatedTime: 14
+topics: ["Databricks", "EMR", "Dataproc", "Cloud Deployment", "Managed Spark", "Spark Connect"]
+---
+
+import { DatabricksArchDiagram } from '../../../components/diagrams/module12';
+
+# Облачное развёртывание Spark
+
+## Self-Managed vs Managed Spark
+
+Запуск Spark в production требует решения: **управлять кластером самостоятельно** или использовать **managed-платформу**?
+
+| Аспект | Self-Managed (K8s/YARN) | Managed (Databricks/EMR/Dataproc) |
+|--------|------------------------|-----------------------------------|
+| **Настройка кластера** | Вы | Платформа |
+| **Обновления Spark** | Вы | Платформа (отложенные) |
+| **Мониторинг** | Grafana/Prometheus | Встроенный |
+| **Стоимость** | Только compute | Compute + platform fee |
+| **Гибкость** | Полная | Ограниченная |
+| **Time-to-production** | Недели | Часы |
+
+Для большинства команд managed-платформа -- правильный выбор: экономия на операционных расходах перевешивает platform fee.
+
+## Databricks
+
+**Databricks** -- платформа, созданная авторами Spark. Доступна на AWS, Azure и GCP:
+
+<DatabricksArchDiagram client:visible />
+
+**Ключевые возможности:**
+
+```python
+# Databricks Notebooks -- интерактивная разработка
+# %python
+df = spark.read.format("delta").load("/mnt/data/events")
+df.filter("event_date >= '2024-01-01'").display()
+
+# Unity Catalog -- централизованное управление данными
+# CREATE CATALOG analytics;
+# CREATE SCHEMA analytics.production;
+# GRANT SELECT ON SCHEMA analytics.production TO data_scientists;
+```
+
+```json
+// Databricks Jobs API -- программный запуск
+// POST /api/2.1/jobs/create
+{
+  "name": "daily-etl",
+  "tasks": [{
+    "task_key": "transform",
+    "spark_python_task": {
+      "python_file": "dbfs:/apps/etl/transform.py"
+    },
+    "new_cluster": {
+      "spark_version": "14.3.x-scala2.12",
+      "node_type_id": "i3.xlarge",
+      "num_workers": 5,
+      "spark_conf": {
+        "spark.sql.adaptive.enabled": "true"
+      }
+    }
+  }],
+  "schedule": {
+    "quartz_cron_expression": "0 0 2 * * ?",
+    "timezone_id": "UTC"
+  }
+}
+```
+
+**Когда выбирать Databricks:**
+- Команда использует notebooks для разработки
+- Нужен Unity Catalog для governance
+- Delta Lake как основной формат хранения
+- Мульти-облачная стратегия (один интерфейс на AWS/Azure/GCP)
+
+## AWS EMR (Elastic MapReduce)
+
+**EMR** -- managed Hadoop/Spark от AWS. Два варианта: **EMR on EC2** (классический) и **EMR Serverless**:
+
+```bash
+# Создание EMR-кластера через AWS CLI
+# aws emr create-cluster \
+#   --name "spark-production" \
+#   --release-label emr-7.0.0 \
+#   --applications Name=Spark \
+#   --instance-groups \
+#     InstanceGroupType=MASTER,InstanceType=m5.xlarge,InstanceCount=1 \
+#     InstanceGroupType=CORE,InstanceType=r5.2xlarge,InstanceCount=5 \
+#     InstanceGroupType=TASK,InstanceType=c5.xlarge,InstanceCount=10,\
+#       BidPrice=0.10 \
+#   --configurations file://spark-config.json \
+#   --bootstrap-actions Path=s3://bucket/bootstrap.sh \
+#   --auto-terminate \
+#   --steps Type=Spark,Args=[--class,com.app.Main,s3://bucket/app.jar]
+```
+
+```json
+// spark-config.json -- EMR Spark конфигурация
+[{
+  "Classification": "spark-defaults",
+  "Properties": {
+    "spark.dynamicAllocation.enabled": "true",
+    "spark.sql.adaptive.enabled": "true",
+    "spark.serializer": "org.apache.spark.serializer.KryoSerializer",
+    "spark.hadoop.fs.s3a.endpoint": "s3.amazonaws.com"
+  }
+}]
+```
+
+**EMR Instance Fleets** -- гибкий выбор instance types:
+
+```json
+// Instance Fleet: Spark выбирает из пула instance types
+{
+  "InstanceFleetType": "CORE",
+  "TargetOnDemandCapacity": 10,
+  "TargetSpotCapacity": 20,
+  "InstanceTypeConfigs": [
+    {"InstanceType": "r5.2xlarge", "WeightedCapacity": 4},
+    {"InstanceType": "r5.xlarge", "WeightedCapacity": 2},
+    {"InstanceType": "r5a.2xlarge", "WeightedCapacity": 4}
+  ]
+}
+```
+
+**EMR Serverless** -- запуск Spark без управления кластером:
+
+```bash
+# EMR Serverless -- submit job
+# aws emr-serverless start-job-run \
+#   --application-id app-id \
+#   --execution-role-arn arn:aws:iam::role/emr-role \
+#   --job-driver '{
+#     "sparkSubmit": {
+#       "entryPoint": "s3://bucket/app.py",
+#       "sparkSubmitParameters": "--conf spark.executor.memory=4g"
+#     }
+#   }'
+```
+
+## GCP Dataproc
+
+**Dataproc** -- managed Spark от Google Cloud с глубокой интеграцией с BigQuery и GCS:
+
+```bash
+# Создание Dataproc-кластера
+# gcloud dataproc clusters create spark-prod \
+#   --region=us-central1 \
+#   --master-machine-type=n2-standard-4 \
+#   --worker-machine-type=n2-highmem-8 \
+#   --num-workers=5 \
+#   --image-version=2.2-debian12 \
+#   --initialization-actions=gs://bucket/init.sh \
+#   --optional-components=JUPYTER \
+#   --autoscaling-policy=auto-policy \
+#   --enable-component-gateway
+```
+
+**BigQuery Connector** -- прямое чтение из BigQuery:
+
+```python
+# Чтение из BigQuery через Spark
+df = spark.read \
+    .format("bigquery") \
+    .option("table", "project.dataset.table") \
+    .option("filter", "date >= '2024-01-01'") \
+    .load()
+
+# Запись в BigQuery
+df.write \
+    .format("bigquery") \
+    .option("table", "project.dataset.output") \
+    .option("temporaryGcsBucket", "temp-bucket") \
+    .mode("overwrite") \
+    .save()
+```
+
+**Dataproc Autoscaling:**
+
+```yaml
+# autoscaling-policy.yaml
+workerConfig:
+  minInstances: 2
+  maxInstances: 20
+  weight: 1
+secondaryWorkerConfig:
+  minInstances: 0
+  maxInstances: 50
+  weight: 1
+basicAlgorithm:
+  cooldownPeriod: 120s
+  yarnConfig:
+    scaleUpFactor: 1.0
+    scaleDownFactor: 0.5
+    scaleUpMinWorkerFraction: 0.5
+    gracefulDecommissionTimeout: 3600s
+```
+
+## Сравнение платформ
+
+| Критерий | Databricks | EMR | Dataproc |
+|----------|-----------|-----|----------|
+| **Облака** | AWS, Azure, GCP | AWS | GCP |
+| **Serverless** | SQL Warehouse | EMR Serverless | Dataproc Serverless |
+| **Notebook** | Встроенный | EMR Studio | Jupyter (компонент) |
+| **Data Governance** | Unity Catalog | Lake Formation | Dataplex |
+| **Формат по умолчанию** | Delta Lake | Open (Delta/Iceberg) | Open (BigLake) |
+| **Стоимость** | Premium | Средняя | Средняя |
+| **Best for** | Мульти-облачные команды | AWS-native инфраструктура | GCP-native инфраструктура |
+
+<VersionBadge version="4.0" />
+**Spark Connect** (Spark 3.4+, GA в 4.0) меняет cloud deployment: thin client подключается к remote Spark-кластеру через gRPC. Это позволяет **отделить IDE/notebook от кластера** -- вы пишете код локально, а execution происходит на managed-платформе.
+
+```python
+# Spark Connect -- удалённое подключение
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .remote("sc://cluster-host:15002") \
+    .getOrCreate()
+
+# DataFrame API работает идентично,
+# но execution на удалённом кластере
+df = spark.read.parquet("s3://bucket/data/")
+result = df.groupBy("category").count()
+result.show()
+```
+
+<Callout type="warning">
+**Vendor lock-in.** Каждая платформа предлагает proprietary extensions: Databricks Runtime, EMR-specific configurations, Dataproc initialization actions. Минимизируйте зависимость от платформ-специфичных API -- используйте стандартные DataFrame/SQL операции и Delta Lake/Iceberg для storage. Это позволит мигрировать между платформами.
+</Callout>
+
+<KnowledgeCheck
+  question="Компания использует AWS и обрабатывает данные в Spark. Когда выбрать EMR on EC2 vs EMR Serverless vs Databricks on AWS?"
+  answer="EMR on EC2: когда нужен полный контроль над кластером (custom bootstrap, специфичные instance types, spot fleet), long-running кластеры для интерактивных workloads. EMR Serverless: для batch-задач с непредсказуемой нагрузкой (pay-per-use, автоматическое масштабирование, нет управления кластером). Databricks on AWS: когда команда использует notebooks для разработки, нужен Unity Catalog для governance, или работает мульти-облачно (Azure + AWS). Databricks дороже, но снижает операционную сложность."
+/>
+
+<KnowledgeCheck
+  question="Как Spark Connect меняет подход к облачному развёртыванию Spark-приложений?"
+  answer="Spark Connect отделяет клиент (IDE, notebook, application) от серверной части (Spark-кластер) через gRPC-протокол. Это значит: (1) разработчик пишет код локально, а execution происходит на удалённом кластере; (2) не нужно устанавливать Spark локально -- только pyspark клиент; (3) несколько пользователей могут подключаться к одному кластеру; (4) облачные платформы могут предоставлять Spark-as-a-Service endpoint. Это упрощает deployment модель: вместо 'упаковать app -> загрузить на кластер -> spark-submit' достаточно 'подключиться к endpoint -> выполнить код'."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **оптимизацию стоимости** -- как выбирать instance types, использовать spot instances и правильно масштабировать кластеры.

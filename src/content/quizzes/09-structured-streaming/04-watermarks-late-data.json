@@ -1,0 +1,165 @@
+{
+  "lessonSlug": "09-structured-streaming/04-watermarks-late-data",
+  "moduleId": "09-structured-streaming",
+  "_meta": {
+    "idPrefix": "spark-m09-04",
+    "description": "Use IDs: m09-04-q1, m09-04-q2, ... (5 questions on watermarks and late data)"
+  },
+  "questions": [
+    {
+      "id": "spark-m09-04-q1",
+      "type": "multiple-choice",
+      "question": "Формула watermark: watermark = max(event_time) - threshold. Если max(event_time) = 10:25, threshold = 10 минут, что произойдёт с событием, имеющим event_time = 10:14?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Событие будет обработано: 10:14 >= watermark (10:15)"
+        },
+        {
+          "id": "b",
+          "text": "Watermark не влияет на отдельные события, только на окна"
+        },
+        {
+          "id": "c",
+          "text": "Событие будет буферизировано до следующего batch"
+        },
+        {
+          "id": "d",
+          "text": "Событие будет отброшено: 10:14 < watermark (10:15), оно считается опоздавшим"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Watermark = max(event_time) - threshold = 10:25 - 10 мин = 10:15. Событие с event_time 10:14 < watermark 10:15, поэтому оно считается опоздавшим и отбрасывается. Все события с event_time меньше текущего watermark не включаются в обработку, что позволяет Spark очищать state store.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Watermarks и Late Data -- формула вычисления watermark и отбрасывание опоздавших событий"
+    },
+    {
+      "id": "spark-m09-04-q2",
+      "type": "multiple-choice",
+      "question": "Почему без watermark streaming агрегация постепенно приводит к OutOfMemoryError?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Без watermark Spark сохраняет в state store данные для ВСЕХ окон навсегда, ожидая потенциальные опоздавшие события -- state растёт неограниченно"
+        },
+        {
+          "id": "b",
+          "text": "Без watermark Spark не может использовать Catalyst optimizer для streaming"
+        },
+        {
+          "id": "c",
+          "text": "Без watermark каждый micro-batch пересчитывает все предыдущие результаты с нуля"
+        },
+        {
+          "id": "d",
+          "text": "Без watermark Spark буферизирует все входящие данные, а не обрабатывает инкрементально"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Без watermark Spark не знает, когда окно \"финализировано\" -- новые данные с любым event_time могут прийти в любой момент. Поэтому Spark сохраняет state (промежуточные результаты агрегаций) для всех окон навсегда. В потоке, работающем часы/дни, state store неограниченно растёт и приводит к OOM. Watermark устанавливает границу: окна старше watermark удаляются из state.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 4: Watermarks и Late Data -- неограниченный рост state store без watermark"
+    },
+    {
+      "id": "spark-m09-04-q3",
+      "type": "multiple-choice",
+      "question": "Мобильное приложение отправляет событие в 10:05, но из-за задержки сети оно приходит в Spark в 10:12. По какому времени Spark поместит его в оконную агрегацию?",
+      "options": [
+        {
+          "id": "a",
+          "text": "По processing time (10:12) -- Spark использует время прибытия"
+        },
+        {
+          "id": "b",
+          "text": "По event time (10:05) -- Structured Streaming обрабатывает по timestamp из данных, а не по времени прибытия"
+        },
+        {
+          "id": "c",
+          "text": "По среднему между event time и processing time"
+        },
+        {
+          "id": "d",
+          "text": "По processing time, если не настроен watermark; по event time, если настроен"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Structured Streaming обрабатывает по event time -- timestamp в самих данных. Событие с event_time 10:05 попадёт в окно 10:00-10:05, где ему место, а не в окно 10:10-10:15 по processing time. Это принципиальное отличие от DStream, который поддерживал только processing time.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 4: Watermarks и Late Data -- event time vs processing time"
+    },
+    {
+      "id": "spark-m09-04-q4",
+      "type": "multiple-choice",
+      "question": "Pipeline настроен с withWatermark(\"event_time\", \"15 minutes\"). Бизнес-аналитик жалуется, что точность агрегаций снижается из-за потерянных событий. Другой аналитик жалуется на высокое потребление памяти. Какой trade-off здесь проявляется?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нужно увеличить executor memory, threshold не связан с потреблением памяти"
+        },
+        {
+          "id": "b",
+          "text": "Threshold не влияет на потребление памяти, только на точность"
+        },
+        {
+          "id": "c",
+          "text": "Увеличение threshold повысит точность (меньше потерянных событий), но увеличит потребление памяти (state хранится дольше). Уменьшение -- наоборот"
+        },
+        {
+          "id": "d",
+          "text": "Оба аналитика правы, но watermark не поможет -- нужен другой механизм"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Watermark threshold -- это trade-off между полнотой данных и потреблением ресурсов. Больший threshold (например, 1 час) означает, что Spark ждёт опоздавшие данные дольше, сохраняя state для всех окон в пределах часа. Это повышает точность, но увеличивает memory. Меньший threshold (1 минута) экономит память, но теряет сильно опоздавшие события.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 4: Watermarks и Late Data -- trade-off между полнотой данных и потреблением памяти"
+    },
+    {
+      "id": "spark-m09-04-q5",
+      "type": "true-false",
+      "question": "Watermark гарантирует, что ни одно опоздавшее событие не будет потеряно, если threshold выбран достаточно большим.",
+      "correctAnswer": false,
+      "explanation": "Watermark НЕ гарантирует обработку всех событий -- он определяет максимально допустимое опоздание. События с event_time < watermark отбрасываются. Если threshold = 1 час, а событие опоздало на 2 часа, оно будет потеряно. Watermark -- это компромисс: большой threshold сохраняет больше событий, но увеличивает state и задержку финализации окон.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 4: Watermarks и Late Data -- ограничения watermark и потеря опоздавших событий"
+    },
+    {
+      "id": "spark-m09-04-code-1",
+      "type": "code-challenge",
+      "question": "Симуляция watermark-фильтрации: у вас есть поток событий с event_time. Watermark установлен как max(event_time) - 10 минут. Вычислите max event_time, определите порог watermark, отфильтруйте 'опоздавшие' события (event_time < watermark), затем агрегируйте только валидные события по sensor_id. Вызовите show() на результате.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, lit, max as spark_max\n\nspark = SparkSession.builder.appName(\"watermark-sim\").getOrCreate()\n\nevents = spark.createDataFrame([\n    (\"sensor_1\", \"2024-01-01 12:00:00\"),\n    (\"sensor_1\", \"2024-01-01 12:05:00\"),\n    (\"sensor_2\", \"2024-01-01 12:08:00\"),\n    (\"sensor_1\", \"2024-01-01 11:45:00\"),\n    (\"sensor_2\", \"2024-01-01 12:10:00\"),\n    (\"sensor_2\", \"2024-01-01 11:50:00\"),\n    (\"sensor_1\", \"2024-01-01 12:12:00\"),\n], [\"sensor_id\", \"event_time\"])\n\n# max event_time в датасете: 12:12:00\n# watermark threshold: 12:12:00 - 10 min = 12:02:00\nwatermark_threshold = \"2024-01-01 12:02:00\"\n\n# TODO: Отфильтруйте валидные события (event_time >= watermark_threshold)\n# valid_events = events.filter(...)\n\n# TODO: Агрегируйте по sensor_id с подсчётом количества\n# result = valid_events.groupBy(...).agg(...)\n\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, lit, max as spark_max\n\nspark = SparkSession.builder.appName(\"watermark-sim\").getOrCreate()\n\nevents = spark.createDataFrame([\n    (\"sensor_1\", \"2024-01-01 12:00:00\"),\n    (\"sensor_1\", \"2024-01-01 12:05:00\"),\n    (\"sensor_2\", \"2024-01-01 12:08:00\"),\n    (\"sensor_1\", \"2024-01-01 11:45:00\"),\n    (\"sensor_2\", \"2024-01-01 12:10:00\"),\n    (\"sensor_2\", \"2024-01-01 11:50:00\"),\n    (\"sensor_1\", \"2024-01-01 12:12:00\"),\n], [\"sensor_id\", \"event_time\"])\n\nwatermark_threshold = \"2024-01-01 12:02:00\"\n\nvalid_events = events.filter(col(\"event_time\") >= watermark_threshold)\n\nresult = valid_events.groupBy(\"sensor_id\").agg(count(\"*\").alias(\"event_count\"))\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "sensor_1 — 3 валидных события (12:05, 12:12, и нет 11:45/12:00)",
+          "input": "",
+          "expectedOutput": "sensor_1",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "sensor_2 — 2 валидных события (12:08, 12:10, без 11:50)",
+          "input": "",
+          "expectedOutput": "sensor_2",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Колонка event_count в результате",
+          "input": "",
+          "expectedOutput": "event_count",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Watermark в Structured Streaming определяет допустимую задержку данных: events с event_time < (max_event_time - watermark_delay) считаются слишком поздними и отбрасываются. В нашей симуляции max event_time = 12:12, watermark = 10 мин, порог = 12:02. События 11:45 (sensor_1) и 11:50 (sensor_2) и 12:00 (sensor_1) отброшены как опоздавшие. Остались: sensor_1 (12:05, 12:12) = 2 и sensor_2 (12:08, 12:10) = 2.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

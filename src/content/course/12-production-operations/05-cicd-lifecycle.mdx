@@ -1,0 +1,322 @@
+---
+title: "CI/CD для Spark-приложений"
+description: "Packaging, dependency management, GitHub Actions и GitLab CI pipelines для автоматизации сборки и деплоя Spark jobs"
+order: 5
+difficulty: "advanced"
+estimatedTime: 14
+topics: ["CI/CD", "GitHub Actions", "GitLab CI", "spark-submit", "Packaging", "Versioning"]
+---
+
+# CI/CD для Spark-приложений
+
+## Зачем CI/CD для Spark?
+
+Spark-приложение в production -- это не notebook. Это код, который должен:
+
+- **Версионироваться** в Git
+- **Тестироваться** автоматически при каждом PR
+- **Собираться** в deployable artifact (wheel/jar)
+- **Деплоиться** через promotion pipeline (dev -> staging -> prod)
+
+Без CI/CD pipeline изменения в Spark-коде попадают в production без тестов, без review, и без rollback-стратегии.
+
+## Packaging: подготовка Spark-приложения
+
+### Python: wheels и eggs
+
+```bash
+# Структура Python Spark-проекта
+# spark-etl/
+# ├── pyproject.toml
+# ├── src/
+# │   └── spark_etl/
+# │       ├── __init__.py
+# │       ├── transforms.py
+# │       └── validators.py
+# ├── tests/
+# │   ├── conftest.py
+# │   └── test_transforms.py
+# └── requirements.txt
+```
+
+```toml
+# pyproject.toml -- Poetry
+[tool.poetry]
+name = "spark-etl"
+version = "2.1.0"
+description = "Production ETL pipeline"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pyspark = "^4.0.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+chispa = "^0.10"  # DataFrame assertion library
+```
+
+```bash
+# Сборка wheel
+# poetry build
+# -> dist/spark_etl-2.1.0-py3-none-any.whl
+
+# spark-submit с wheel
+# spark-submit \
+#   --py-files dist/spark_etl-2.1.0-py3-none-any.whl \
+#   main.py
+```
+
+### Scala: fat-jars с sbt
+
+```scala
+// build.sbt
+name := "spark-etl"
+version := "2.1.0"
+scalaVersion := "2.13.12"
+
+libraryDependencies ++= Seq(
+  "org.apache.spark" %% "spark-sql" % "4.0.0" % "provided",
+  "org.apache.spark" %% "spark-core" % "4.0.0" % "provided",
+  "io.delta" %% "delta-spark" % "4.0.0"
+)
+
+// Assembly plugin для fat-jar
+assembly / assemblyMergeStrategy := {
+  case PathList("META-INF", _*) => MergeStrategy.discard
+  case _ => MergeStrategy.first
+}
+```
+
+```bash
+# Сборка fat-jar
+# sbt assembly
+# -> target/scala-2.13/spark-etl-assembly-2.1.0.jar
+
+# spark-submit с jar
+# spark-submit \
+#   --class com.company.SparkETL \
+#   --master k8s://https://k8s-api:6443 \
+#   target/scala-2.13/spark-etl-assembly-2.1.0.jar
+```
+
+## Dependency Management
+
+spark-submit предлагает несколько способов передачи зависимостей:
+
+```bash
+# spark-submit dependency flags
+# --py-files       Python files (.py, .zip, .egg, .whl)
+# --jars           Java/Scala JARs
+# --packages       Maven coordinates (скачивает из Maven Central)
+# --repositories   Custom Maven repositories
+# --files          Arbitrary files (configs, data)
+
+# Пример: полный набор зависимостей
+# spark-submit \
+#   --master k8s://https://k8s-api:6443 \
+#   --deploy-mode cluster \
+#   --py-files deps/spark_etl-2.1.0.whl,deps/utils-1.0.0.whl \
+#   --packages io.delta:delta-spark_2.13:4.0.0 \
+#   --files configs/production.conf \
+#   --conf spark.kubernetes.container.image=company/spark:4.0-etl \
+#   main.py
+```
+
+<Callout type="warning">
+**Anti-pattern: `--packages` в production.** `--packages` скачивает зависимости из Maven Central при каждом запуске. Это добавляет startup time и создаёт зависимость от внешнего registry. В production **запекайте зависимости** в Docker image или fat-jar.
+</Callout>
+
+## GitHub Actions Pipeline
+
+```yaml
+# .github/workflows/spark-ci.yml
+name: Spark CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff mypy
+      - run: ruff check src/
+      - run: mypy src/ --ignore-missing-imports
+
+  test:
+    runs-on: ubuntu-latest
+    needs: lint
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          pip install pyspark==4.0.0 pytest chispa
+          pip install -e .
+      - name: Run tests
+        run: pytest tests/ -v --tb=short
+        env:
+          SPARK_LOCAL_IP: 127.0.0.1
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install build
+      - run: python -m build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spark-etl-wheel
+          path: dist/*.whl
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: spark-etl-wheel
+      - name: Deploy to S3
+        run: aws s3 cp *.whl s3://spark-artifacts/etl/
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET }}
+      - name: Trigger Spark job
+        run: |
+          aws emr add-steps \
+            --cluster-id ${{ vars.EMR_CLUSTER_ID }} \
+            --steps Type=Spark,Args=[--py-files,s3://spark-artifacts/etl/spark_etl-*.whl,main.py]
+```
+
+## GitLab CI Pipeline
+
+```yaml
+# .gitlab-ci.yml
+stages:
+  - lint
+  - test
+  - build
+  - deploy
+
+variables:
+  PIP_CACHE_DIR: "$CI_PROJECT_DIR/.pip-cache"
+
+lint:
+  stage: lint
+  image: python:3.11-slim
+  script:
+    - pip install ruff
+    - ruff check src/
+
+test:
+  stage: test
+  image: python:3.11
+  script:
+    - pip install pyspark==4.0.0 pytest chispa
+    - pip install -e .
+    - pytest tests/ -v
+  variables:
+    SPARK_LOCAL_IP: "127.0.0.1"
+
+build:
+  stage: build
+  image: python:3.11-slim
+  script:
+    - pip install build
+    - python -m build
+  artifacts:
+    paths:
+      - dist/*.whl
+    expire_in: 30 days
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+deploy:production:
+  stage: deploy
+  image: amazon/aws-cli:latest
+  script:
+    - aws s3 cp dist/*.whl s3://spark-artifacts/etl/
+  environment:
+    name: production
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+```
+
+## Versioning и Environment Promotion
+
+```
+Version Strategy:
+  v2.1.0   = major.minor.patch
+  ├── major: breaking schema changes
+  ├── minor: new transforms, features
+  └── patch: bug fixes, config changes
+
+Environment Promotion:
+  develop  ──→  staging  ──→  production
+  (auto)       (auto)       (manual approval)
+
+  spark-defaults-dev.conf    (small cluster, sample data)
+  spark-defaults-staging.conf (medium cluster, full data)
+  spark-defaults-prod.conf   (full cluster, production config)
+```
+
+```python
+# config.py -- environment-aware configuration
+import os
+
+ENV = os.getenv("SPARK_ENV", "dev")
+
+CONFIGS = {
+    "dev": {
+        "master": "local[4]",
+        "executor_memory": "2g",
+        "input_path": "/data/sample/",
+    },
+    "staging": {
+        "master": "k8s://https://staging-k8s:6443",
+        "executor_memory": "8g",
+        "input_path": "s3://staging-data/",
+    },
+    "production": {
+        "master": "k8s://https://prod-k8s:6443",
+        "executor_memory": "16g",
+        "input_path": "s3://production-data/",
+    },
+}
+
+config = CONFIGS[ENV]
+```
+
+<VersionBadge version="4.1" />
+**Spark Declarative Pipelines (SDP)** в Spark 4.1 упрощают CI/CD: pipeline определяется декларативно, и Spark сам управляет execution order и incremental processing. Это снижает сложность CI/CD -- вместо spark-submit с десятками параметров вы деплоите pipeline definition.
+
+<KnowledgeCheck
+  question="Почему --packages не рекомендуется для production spark-submit? Какая альтернатива лучше?"
+  answer="--packages скачивает зависимости из Maven Central при каждом запуске задачи. Проблемы: (1) увеличивает startup time на 30-60 секунд; (2) создаёт зависимость от внешнего registry (если Maven Central недоступен -- job не запустится); (3) нет гарантии воспроизводимости (transitive dependencies могут измениться). Альтернативы: для Python -- запечь зависимости в Docker image или wheel; для Scala -- использовать sbt assembly для fat-jar. Все зависимости должны быть resolved и зафиксированы на этапе build."
+/>
+
+<KnowledgeCheck
+  question="Опишите 4 стадии CI/CD pipeline для Spark-приложения. Какие инструменты используются на каждой?"
+  answer="(1) Lint: статический анализ кода -- ruff/flake8 для Python, scalafmt/wartremover для Scala, mypy для type checking. (2) Test: unit-тесты с локальным SparkSession -- pytest + chispa (DataFrame assertions) для Python, scalatest для Scala. (3) Build: сборка deployable artifact -- poetry build/python -m build для wheel, sbt assembly для fat-jar. (4) Deploy: загрузка artifact в storage (S3/GCS) и запуск job -- через AWS CLI, gcloud, или Databricks API. Dev и staging деплоятся автоматически, production -- через manual approval."
+/>
+
+## Что дальше?
+
+CI/CD автоматизирует сборку и деплой. Но кто **запускает** Spark jobs по расписанию? В следующем уроке -- **Airflow-оркестрация** для Spark jobs.

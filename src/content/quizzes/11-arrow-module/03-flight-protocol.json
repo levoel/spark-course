@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "11-arrow-module/03-flight-protocol",
+  "moduleId": "11-arrow-module",
+  "_meta": {
+    "idPrefix": "spark-m11-03",
+    "description": "Use IDs: m11-03-q1, m11-03-q2, ... (4 questions on Arrow Flight protocol)"
+  },
+  "questions": [
+    {
+      "id": "spark-m11-03-q1",
+      "type": "multiple-choice",
+      "question": "Почему JDBC/ODBC не подходят для передачи больших аналитических результатов (1+ ГБ)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "JDBC/ODBC: (1) row-oriented serialization -- двойная конвертация columnar->rows->columnar; (2) text encoding чисел; (3) однопоточность -- один TCP stream; (4) полная буферизация результата перед отправкой"
+        },
+        {
+          "id": "b",
+          "text": "JDBC/ODBC не поддерживают SQL"
+        },
+        {
+          "id": "c",
+          "text": "JDBC/ODBC медленные из-за устаревшего протокола TCP"
+        },
+        {
+          "id": "d",
+          "text": "JDBC/ODBC ограничены размером результата в 100 МБ"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Четыре фундаментальных ограничения JDBC/ODBC: (1) row-oriented -- данные из колоночного хранилища конвертируются в строки, клиент собирает обратно в колонки; (2) text encoding -- числа конвертируются в строки и обратно; (3) один TCP stream, невозможно параллелизировать; (4) полная буферизация. Flight решает все четыре: columnar end-to-end, zero-deserialization, parallel streams, streaming.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: Протокол Arrow Flight -- ограничения JDBC/ODBC для больших данных"
+    },
+    {
+      "id": "spark-m11-03-q2",
+      "type": "multiple-choice",
+      "question": "Arrow Flight строится поверх gRPC. Какие 4 ключевых RPC-метода определяет Flight?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SELECT, INSERT, UPDATE, DELETE"
+        },
+        {
+          "id": "b",
+          "text": "GetFlightInfo (метаданные), DoGet (чтение RecordBatch stream), DoPut (запись RecordBatch stream), DoAction (произвольные действия)"
+        },
+        {
+          "id": "c",
+          "text": "Connect, Query, Fetch, Close"
+        },
+        {
+          "id": "d",
+          "text": "Open, Read, Write, Close"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Flight API: GetFlightInfo -- запрос метаданных (schema, endpoints, total records); DoGet -- streaming чтение RecordBatch; DoPut -- streaming запись RecordBatch; DoAction -- произвольные действия (например, create table). GetFlightInfo возвращает endpoints для параллельного DoGet с разных серверов.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: Протокол Arrow Flight -- четыре RPC-метода Flight API"
+    },
+    {
+      "id": "spark-m11-03-q3",
+      "type": "multiple-choice",
+      "question": "Flight передаёт 1 ГБ за ~0.3 сек, JDBC -- за ~30 сек. Почему такая разница (100x)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Flight использует более быстрый сетевой протокол"
+        },
+        {
+          "id": "b",
+          "text": "Flight сжимает данные в 100 раз"
+        },
+        {
+          "id": "c",
+          "text": "Flight стримит Arrow RecordBatch в columnar format напрямую: zero-serialization (данные уже в Arrow формате), zero-deserialization (клиент получает готовые RecordBatch), parallel gRPC streams. JDBC тратит 90% времени на row-by-row serialization/deserialization"
+        },
+        {
+          "id": "d",
+          "text": "Flight работает только в локальной сети, JDBC -- через интернет"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "JDBC: CPU-bound на serialize/deserialize (~30 сек для 1 ГБ). Flight: данные уже в Arrow columnar format -- нет serialize/deserialize overhead. RecordBatch на клиенте готов к обработке немедленно. Parallel gRPC streams дополнительно ускоряют передачу. Разница ~100x = устранение CPU overhead сериализации.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 3: Протокол Arrow Flight -- 100x ускорение за счёт устранения сериализации"
+    },
+    {
+      "id": "spark-m11-03-q4",
+      "type": "true-false",
+      "question": "Arrow Flight поддерживает параллельные gRPC streams, позволяя клиенту получать данные с нескольких серверов одновременно.",
+      "correctAnswer": true,
+      "explanation": "GetFlightInfo возвращает список endpoints (серверов, хранящих части данных). Клиент может отправить DoGet к каждому endpoint параллельно, получая RecordBatch streams одновременно. Это horizontal scaling -- данные распределены по серверам и читаются параллельно, в отличие от JDBC с одним TCP stream.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 3: Протокол Arrow Flight -- параллельные gRPC streams и horizontal scaling"
+    }
+  ]
+}

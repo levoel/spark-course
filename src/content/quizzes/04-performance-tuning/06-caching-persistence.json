@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "04-performance-tuning/06-caching-persistence",
+  "moduleId": "04-performance-tuning",
+  "_meta": {
+    "idPrefix": "spark-m04-06",
+    "description": "Use IDs: m04-06-q1, m04-06-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m04-06-q1",
+      "type": "multiple-choice",
+      "question": "В чём разница между cache() и persist()?",
+      "options": [
+        {
+          "id": "a",
+          "text": "cache() хранит данные только в памяти, persist() -- на диске"
+        },
+        {
+          "id": "b",
+          "text": "cache() -- это shortcut для persist(StorageLevel.MEMORY_AND_DISK); persist() позволяет выбрать другой StorageLevel"
+        },
+        {
+          "id": "c",
+          "text": "cache() быстрее persist() благодаря оптимизации JVM"
+        },
+        {
+          "id": "d",
+          "text": "cache() кэширует весь DataFrame, persist() -- только часть"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "cache() -- это просто alias для persist(StorageLevel.MEMORY_AND_DISK). Единственное отличие: persist() позволяет выбрать другой StorageLevel: MEMORY_ONLY, DISK_ONLY, MEMORY_AND_DISK_SER и т.д. Для большинства случаев cache() (= MEMORY_AND_DISK) -- оптимальный выбор.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m04-06-q2",
+      "type": "multiple-choice",
+      "question": "DataFrame используется в pipeline один раз (только для записи в одну таблицу). Стоит ли его кэшировать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- кэширование всегда ускоряет обработку"
+        },
+        {
+          "id": "b",
+          "text": "Зависит от размера DataFrame"
+        },
+        {
+          "id": "c",
+          "text": "Нет -- кэширование полезно только для DataFrame, используемых более одного раза; для single-use кэш занимает memory без пользы"
+        },
+        {
+          "id": "d",
+          "text": "Да, если DataFrame > 1 ГБ"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Кэширование имеет смысл только для DataFrame, используемых многократно (несколько action: count, write, show). Для single-use DataFrame кэш занимает storage memory, вытесняя execution memory, что может замедлить обработку. Всегда вызывайте unpersist() когда кэш больше не нужен.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m04-06-q3",
+      "type": "multiple-choice",
+      "question": "В Storage Tab Spark UI показано Fraction Cached = 60%. Что это означает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark кэширует только 60% DataFrame для экономии ресурсов"
+        },
+        {
+          "id": "b",
+          "text": "Кэширование ещё не завершено (в процессе)"
+        },
+        {
+          "id": "c",
+          "text": "60% данных кэшированы на диске, 40% -- в памяти"
+        },
+        {
+          "id": "d",
+          "text": "Только 60% данных поместились в memory; 40% были вытеснены (evicted) -- недостаточно storage memory"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Fraction Cached < 100% означает, что часть кэшированных данных была вытеснена из памяти. При MEMORY_AND_DISK вытесненные данные записываются на диск. При MEMORY_ONLY они пересчитываются при следующем доступе. Решение: увеличить spark.executor.memory, уменьшить объём кэша, или использовать MEMORY_AND_DISK_SER для лучшего сжатия.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-06-q4",
+      "type": "true-false",
+      "question": "При конфликте execution memory и storage memory в Unified Memory Manager, execution может вытеснять кэшированные данные, но storage не может забирать память у execution.",
+      "correctAnswer": true,
+      "explanation": "Верно. В Unified Memory Manager действует асимметричное правило: execution memory может evict (вытеснять) кэшированные данные из storage, потому что execution критичнее (без неё task не завершится). Storage не может забрать память, уже занятую execution. Это означает, что чрезмерное кэширование может быть безопасно вытеснено, но не заблокирует execution.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-06-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer кэширует DataFrame с помощью cache() и сразу вызывает count(). Зачем нужен count() после cache()?",
+      "options": [
+        {
+          "id": "a",
+          "text": "cache() -- lazy; данные фактически кэшируются только при выполнении action (count, show). count() запускает материализацию кэша"
+        },
+        {
+          "id": "b",
+          "text": "count() проверяет корректность данных"
+        },
+        {
+          "id": "c",
+          "text": "count() необходим для определения размера кэша"
+        },
+        {
+          "id": "d",
+          "text": "Без count() кэш будет автоматически удалён через 30 секунд"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "cache() (как и все трансформации в Spark) -- lazy. Он помечает DataFrame для кэширования, но данные не материализуются до первого action. Вызов count() (или другого action) заставляет Spark выполнить все трансформации и сохранить результат в кэше. Последующие action будут читать из кэша, а не пересчитывать.",
+      "bloomLevel": "applied"
+    }
+  ]
+}

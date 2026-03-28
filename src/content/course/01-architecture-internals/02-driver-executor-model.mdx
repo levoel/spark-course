@@ -1,0 +1,134 @@
+---
+title: "Driver и Executor: Архитектура распределённых вычислений"
+description: "Как Spark разделяет работу между driver-процессом и executor-процессами"
+order: 2
+difficulty: "beginner"
+estimatedTime: 15
+topics: ["Driver", "Executor", "Cluster Manager", "Architecture"]
+---
+
+import { ExecutorLifecycleDiagram, ClientModeDiagram, ClusterModeDiagram } from '../../../components/diagrams/module1';
+
+# Driver и Executor: Архитектура распределённых вычислений
+
+Каждое Spark-приложение состоит из двух типов процессов: **driver** и **executors**. Понимание их ролей -- фундамент для всей дальнейшей работы со Spark.
+
+## Driver Process
+
+**Driver** -- это главный процесс вашего Spark-приложения. Он выполняет функцию `main()` и отвечает за:
+
+- **Создание SparkContext/SparkSession** -- точка входа в Spark API
+- **Построение DAG** -- граф трансформаций из вашего кода
+- **Планирование задач** -- разбиение DAG на stages и tasks через DAG Scheduler
+- **Координация executors** -- отправка tasks, сбор результатов, мониторинг heartbeats
+- **Хранение метаданных** -- план выполнения, broadcast-переменные, результаты агрегаций
+
+```python
+# Этот код выполняется на driver
+spark = SparkSession.builder.appName("MyApp").getOrCreate()
+
+# Трансформации определяются на driver, но выполняются на executors
+df = spark.read.parquet("/data/users/")
+result = df.filter(df.age > 25).groupBy("country").count()
+
+# collect() тянет результат обратно в driver
+result.show()
+```
+
+**Критически важно:** driver **не обрабатывает данные**. Он только планирует и координирует. Все вычисления над партициями данных происходят на executors.
+
+## Executor Process
+
+**Executor** -- это рабочий процесс, запущенный на узлах кластера. Каждый executor:
+
+- **Получает tasks** от driver через TaskScheduler
+- **Выполняет вычисления** над партициями данных (filter, map, join)
+- **Хранит данные в памяти** -- кэшированные RDD/DataFrame, shuffle buffers
+- **Отправляет результаты** обратно driver (для actions типа count, collect)
+- **Посылает heartbeats** -- каждые `spark.executor.heartbeatInterval` (10 секунд по умолчанию)
+
+Типичное Spark-приложение имеет 2-200 executors, каждый с 1-8 cores и 1-64 ГБ памяти.
+
+## Жизненный цикл Executor
+
+<ExecutorLifecycleDiagram client:load />
+
+## Cluster Manager
+
+Driver и executors не запускаются сами по себе -- ими управляет **Cluster Manager**:
+
+| Cluster Manager | Когда использовать | Особенности |
+|----------------|-------------------|-------------|
+| **Standalone** | Тестирование, небольшие кластеры | Простая настройка, нет внешних зависимостей |
+| **YARN** | Hadoop-экосистема | Динамическое выделение ресурсов, интеграция с Hadoop |
+| **Kubernetes** | Cloud-native среда | Контейнеризация, auto-scaling, изоляция |
+| **Mesos** | Legacy-системы | Устаревший, не рекомендуется для новых проектов |
+
+## Deploy Mode: Client vs Cluster
+
+Режим развёртывания определяет, **где запускается driver**:
+
+### Client Mode (по умолчанию)
+
+<ClientModeDiagram client:visible />
+
+Driver работает **на вашей машине** (ноутбук, edge-node). Подходит для интерактивной работы: `spark-shell`, `pyspark`, Jupyter notebooks. Вы видите логи и результаты прямо в консоли.
+
+**Проблема:** если ваша машина потеряет сетевое соединение с кластером -- приложение упадёт.
+
+### Cluster Mode
+
+<ClusterModeDiagram client:visible />
+
+Driver работает **внутри кластера**, рядом с executors. Подходит для production jobs: `spark-submit --deploy-mode cluster`. Приложение живёт независимо от вашей машины.
+
+**Выбор прост:** интерактивная работа -- client mode, production -- cluster mode.
+
+<KnowledgeCheck
+  question="Почему driver не выполняет вычисления над данными напрямую?"
+  answer="Driver координирует задачи и хранит метаданные (план выполнения, результаты агрегации, broadcast-переменные). Если бы driver обрабатывал данные, он стал бы узким местом -- один процесс не может параллельно обработать терабайты. Executors распределяют вычисления по кластеру, обрабатывая данные параллельно на десятках или сотнях узлов."
+/>
+
+## Память Driver vs Executor
+
+Одна из частых ошибок -- путать конфигурацию памяти driver и executor:
+
+| Параметр | Что контролирует | Типичное значение |
+|----------|-----------------|-------------------|
+| `spark.driver.memory` | Память для метаданных, broadcast, collect() | 1-4 ГБ |
+| `spark.executor.memory` | Память для данных, shuffle, кэш | 4-64 ГБ |
+| `spark.driver.cores` | CPU для driver | 1-2 |
+| `spark.executor.cores` | CPU для параллельных tasks | 2-8 |
+
+**Driver memory** хранит SparkContext, DAG metadata, broadcast-переменные и результаты `collect()`. **Executor memory** хранит партиции данных (storage), shuffle buffers (execution) и пользовательские объекты (user memory). Unified Memory Manager управляет только памятью executors -- к driver он не применяется.
+
+```python
+spark = (
+    SparkSession.builder
+    .appName("MemoryConfig")
+    .config("spark.driver.memory", "2g")
+    .config("spark.executor.memory", "8g")
+    .config("spark.executor.cores", "4")
+    .config("spark.executor.instances", "10")
+    .getOrCreate()
+)
+```
+
+## Spark Connect <VersionBadge version="4.0" />
+
+Начиная со Spark 3.4 и особенно в Spark 4.0, **Spark Connect** становится основной моделью взаимодействия. Вместо запуска driver в том же процессе, Spark Connect использует **клиент-серверную архитектуру**:
+
+```
+Ваш код (thin client) ──gRPC──> Spark Connect Server ──> Executors
+```
+
+Преимущества: изоляция клиента от кластера, поддержка нескольких языков, стабильное API. Это изменение не меняет архитектуру driver/executor, но меняет способ взаимодействия с ними.
+
+<KnowledgeCheck
+  question="В чём практическая разница между client и cluster deploy modes для production-задач?"
+  answer="В client mode driver работает на машине, откуда запущен spark-submit. Если эта машина выключится или потеряет сеть -- всё приложение упадёт, потому что executors потеряют связь с driver. В cluster mode driver запускается внутри кластера (как обычный container/process), что обеспечивает отказоустойчивость: приложение продолжит работу независимо от вашей машины. Для production всегда используйте cluster mode."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **SparkSession и SparkContext** -- точки входа в Spark API, через которые driver создаёт и управляет вычислениями.

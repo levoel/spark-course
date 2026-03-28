@@ -1,0 +1,155 @@
+---
+title: "Сравнение форматов: выбор технологии"
+description: "Decision matrix всех 4 lakehouse-форматов, decision tree для выбора, миграция между форматами, UniForm как мост"
+order: 6
+difficulty: "intermediate"
+estimatedTime: 14
+topics: ["Format Comparison", "Decision Matrix", "Delta Lake", "Apache Iceberg", "Apache Hudi", "Apache Paimon", "Migration"]
+---
+
+# Сравнение форматов: выбор технологии
+
+## Decision Matrix
+
+В предыдущих уроках мы детально разобрали каждый формат. Теперь сведём все характеристики в одну таблицу для принятия решения:
+
+| Dimension | Delta Lake | Apache Iceberg | Apache Hudi | Apache Paimon |
+|-----------|------------|----------------|-------------|---------------|
+| **Разработчик** | Databricks (2019) | Netflix (2017) | Uber (2016) | Alibaba/Flink (2022) |
+| **Архитектура** | Transaction log | Catalog + snapshots | Timeline + base files | LSM-tree |
+| **ACID** | Да | Да | Да | Да |
+| **Time travel** | Version numbers + timestamps | Snapshot IDs + timestamps | Instant times | Snapshot IDs |
+| **Schema evolution** | Add / rename / drop | Полная (add/drop/rename/reorder) | Ограничена (add recommended) | Add / drop |
+| **Partition evolution** | Требует rewrite | In-place, без rewrite | Требует rewrite | In-place |
+| **Streaming** | Хорошая (Structured Streaming) | Хорошая (Structured Streaming) | Хорошая (incremental pull) | Native (streaming-first) |
+| **Compaction** | OPTIMIZE, Z-ORDER | Sort + compact (rewrite_data_files) | Compaction service | Auto-compaction (LSM) |
+| **Поддержка движков** | Spark-centric, растёт | Engine-agnostic (самая широкая) | Spark, Flink, Presto | Flink-centric, Spark растёт |
+| **Cloud adoption** | Databricks, Azure, AWS | Snowflake, AWS, GCP, все облака | AWS EMR, ограничен | Alibaba Cloud, растёт |
+| **Уникальная фича** | UniForm (read as Iceberg/Hudi) | Partition evolution | Incremental queries, MOR | Changelog streaming CDC |
+| **Best for** | Databricks, Delta ecosystem | Multi-engine, vendor-neutral | Upsert-heavy, real-time | Streaming-first, CDC |
+
+<Callout type="tip">
+**Ключевой инсайт**
+
+Все четыре формата решают **одну и ту же фундаментальную проблему**: ACID-транзакции поверх объектного хранилища. Разница -- в **архитектурных trade-offs**: Delta оптимизирован для Spark-экосистемы, Iceberg -- для мультиdвижковости, Hudi -- для upserts, Paimon -- для streaming.
+</Callout>
+
+## Decision Tree: выбор формата
+
+Используйте этот decision tree для быстрого определения подходящего формата:
+
+```
+Какой ваш основной сценарий?
+│
+├── Streaming-first (непрерывная запись из Kafka/Flink)?
+│   └── → Apache Paimon
+│       Причина: LSM-tree + native changelog CDC
+│
+├── ACID + Spark-centric (Databricks/Delta ecosystem)?
+│   └── → Delta Lake
+│       Причина: нативная интеграция Spark 4.0, UniForm
+│
+├── Multi-engine / vendor-neutral?
+│   └── → Apache Iceberg
+│       Причина: самая широкая поддержка движков,
+│                partition evolution без rewrite
+│
+└── Upsert-heavy (CDC, real-time обновления)?
+    └── → Apache Hudi
+        Причина: COW/MOR table types, incremental queries
+```
+
+### Нюансы выбора
+
+Выбор не всегда однозначен. Вот дополнительные факторы:
+
+**Если вы уже в Databricks:**
+- Delta Lake -- безусловный выбор. Нативная интеграция, UniForm для interop с другими форматами.
+
+**Если нужна мультиdвижковая среда:**
+- Iceberg -- Snowflake, Trino, Presto, Spark, Flink, Dremio. Самая широкая поддержка.
+- Delta + UniForm -- пишете в Delta, другие движки читают через Iceberg-интерфейс.
+
+**Если Flink -- основной движок:**
+- Paimon -- нативная интеграция с Flink, streaming-first.
+- Iceberg -- хорошая Flink-поддержка, шире экосистема.
+
+**Если нужны CDC-пайплайны:**
+- Paimon changelog -- native CDC без дополнительной инфраструктуры.
+- Hudi incremental queries -- pull-based CDC.
+- Iceberg + Spark Structured Streaming -- generic streaming.
+
+<KnowledgeCheck
+  question="Какой формат выбрать для мультиdвижковой среды (Spark + Trino + Snowflake) и почему?"
+  answer="Apache Iceberg -- самый vendor-neutral формат с поддержкой наибольшего количества вычислительных движков: Spark, Flink, Trino, Presto, Snowflake, Dremio, AWS Athena. Альтернатива -- Delta Lake с UniForm, который автоматически генерирует Iceberg-совместимые metadata, но это добавляет зависимость от Delta. Iceberg также предлагает partition evolution без rewrite данных, что важно для эволюционирующих схем партиционирования."
+/>
+
+## Миграция между форматами
+
+### Delta -> Iceberg
+
+Delta Lake с UniForm делает этот переход прозрачным:
+
+```python
+# Включаем UniForm на существующей Delta-таблице
+spark.sql("""
+    ALTER TABLE delta.`/data/events`
+    SET TBLPROPERTIES (
+        'delta.universalFormat.enabledFormats' = 'iceberg'
+    )
+""")
+# Теперь Iceberg-движки могут читать эту таблицу
+```
+
+### Iceberg -> Delta
+
+Нет автоматической миграции. Варианты:
+1. **CTAS (Create Table As Select)** -- перезапись всех данных:
+```python
+iceberg_df = spark.read.format("iceberg").load("iceberg_catalog.db.events")
+iceberg_df.write.format("delta").save("/data/events_delta")
+```
+2. **Incremental migration** -- streaming-чтение Iceberg + streaming-запись Delta.
+
+### Hudi -> Delta/Iceberg
+
+Аналогично -- через CTAS. Hudi не имеет аналога UniForm.
+
+### Любой формат -> Paimon
+
+Paimon поддерживает **migrate action** для Hive-таблиц:
+```python
+spark.sql("""
+    CALL sys.migrate_table(
+        source_type => 'hive',
+        table => 'hive_db.events',
+        options => 'changelog-producer=input'
+    )
+""")
+```
+
+<Callout type="note">
+**UniForm как мост**
+
+UniForm в Delta Lake 4.0 -- самый практичный подход к мультиформатности: вы пишете в Delta (нативная Spark-интеграция), а другие движки читают через Iceberg/Hudi-интерфейс. Это проще, чем поддерживать две отдельные таблицы.
+</Callout>
+
+## Adoption и тренды
+
+| Формат | Зрелость | Темп роста | Главный драйвер |
+|--------|----------|------------|-----------------|
+| Delta Lake | Высокая | Стабильный | Databricks + Spark 4.0 native |
+| Apache Iceberg | Высокая | Самый быстрый | Snowflake + multi-cloud |
+| Apache Hudi | Средняя | Умеренный | AWS EMR + Uber origin |
+| Apache Paimon | Ранняя | Быстрый | Flink ecosystem + Alibaba |
+
+**Тренд 2024-2026:** конвергенция форматов. UniForm (Delta), Iceberg V3, Hudi 1.x -- все движутся к большей interoperability. Возможно, через 2-3 года границы между форматами станут менее значимыми.
+
+<KnowledgeCheck
+  question="Как UniForm в Delta Lake решает проблему vendor lock-in?"
+  answer="UniForm (Universal Format) автоматически генерирует metadata в формате Iceberg и Hudi при каждой записи в Delta-таблицу. Данные физически хранятся в Delta (Parquet файлы + transaction log), но другие вычислительные движки (Trino, Presto, Snowflake) могут читать их через Iceberg-интерфейс. Это позволяет использовать нативную Spark/Delta интеграцию для записи и любой движок для чтения -- без дублирования данных."
+/>
+
+## Что дальше?
+
+В следующем уроке мы познакомимся со **Spark Declarative Pipelines (SDP)** -- новой системой декларативного ETL в Spark 4.1, которая объединяет lakehouse-форматы с автоматическим управлением пайплайнами.

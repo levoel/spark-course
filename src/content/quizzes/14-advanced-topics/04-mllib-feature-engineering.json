@@ -1,0 +1,183 @@
+{
+  "lessonSlug": "14-advanced-topics/04-mllib-feature-engineering",
+  "moduleId": "14-advanced-topics",
+  "_meta": {
+    "idPrefix": "spark-m14-04",
+    "description": "Use IDs: m14-04-q1, m14-04-q2, ... (5 questions on VectorAssembler, StandardScaler, StringIndexer, CrossValidator, ParamGridBuilder)"
+  },
+  "questions": [
+    {
+      "id": "spark-m14-04-q1",
+      "type": "multiple-choice",
+      "question": "Зачем нужен StandardScaler для LogisticRegression, но НЕ нужен для RandomForest?",
+      "options": [
+        {
+          "id": "a",
+          "text": "StandardScaler улучшает точность только для линейных моделей"
+        },
+        {
+          "id": "b",
+          "text": "RandomForest автоматически нормализует features внутри"
+        },
+        {
+          "id": "c",
+          "text": "LogisticRegression использует градиентный спуск, где feature с большим диапазоном доминирует. RandomForest принимает решения по порогам отдельных features -- масштаб не влияет"
+        },
+        {
+          "id": "d",
+          "text": "StandardScaler несовместим с tree-based моделями"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "LogisticRegression, LinearSVM, KMeans чувствительны к масштабу: используют расстояния или градиентный спуск, где feature с диапазоном 0-500 (fare) доминирует над 1-3 (pclass). StandardScaler нормализует к mean=0, std=1. RandomForest/GBT принимают решения по порогам (if fare > 50), масштаб не влияет на порог -- нормализация не нужна.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Feature engineering -- StandardScaler и алгоритмы, чувствительные к масштабу"
+    },
+    {
+      "id": "spark-m14-04-q2",
+      "type": "multiple-choice",
+      "question": "StringIndexer c handleInvalid=\"keep\" обрабатывает новые категории (unseen в train данных). Что происходит с такими значениями?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Они вызывают ошибку и прерывают transform"
+        },
+        {
+          "id": "b",
+          "text": "Новые категории маппятся на самую частую категорию"
+        },
+        {
+          "id": "c",
+          "text": "Новые категории заменяются на null"
+        },
+        {
+          "id": "d",
+          "text": "Новые категории получают отдельный индекс (numCategories), позволяя модели обработать их без ошибки"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "handleInvalid=\"keep\" добавляет дополнительный индекс для unseen категорий. Если train данные содержали 3 категории (0, 1, 2), unseen значения получат индекс 3. handleInvalid=\"error\" (default) -- выбросит ошибку. handleInvalid=\"skip\" -- пропустит строки с unseen категориями.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Feature engineering -- StringIndexer и handleInvalid для новых категорий"
+    },
+    {
+      "id": "spark-m14-04-q3",
+      "type": "multiple-choice",
+      "question": "CrossValidator настроен: ParamGrid из 18 комбинаций, numFolds=3, parallelism=4. Сколько полных обучений Pipeline будет выполнено?",
+      "options": [
+        {
+          "id": "a",
+          "text": "54 обучения (18 комбинаций x 3 фолда), но до 4 обучений параллельно"
+        },
+        {
+          "id": "b",
+          "text": "18 обучений -- по одному на комбинацию"
+        },
+        {
+          "id": "c",
+          "text": "72 обучения (18 x 4 parallelism)"
+        },
+        {
+          "id": "d",
+          "text": "12 обучений (18 / 3 x 2)"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "CrossValidator выполняет k-fold cross-validation для каждой комбинации параметров: 18 комбинаций x 3 фолда = 54 полных обучения Pipeline. parallelism=4 означает, что Spark обучает до 4 моделей одновременно, ускоряя процесс в ~4 раза, но общее количество обучений остаётся 54.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: CrossValidator -- вычислительная стоимость (комбинации x фолды) и parallelism"
+    },
+    {
+      "id": "spark-m14-04-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer хочет уменьшить время CrossValidator без значительной потери качества оценки. Какие 3 стратегии подойдут?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Уменьшить данные, убрать Pipeline, использовать только 1 параметр"
+        },
+        {
+          "id": "b",
+          "text": "Увеличить parallelism, использовать TrainValidationSplit (1 split vs k фолдов), начать с грубой сетки параметров"
+        },
+        {
+          "id": "c",
+          "text": "Переключиться на scikit-learn, уменьшить numTrees до 1, убрать feature engineering"
+        },
+        {
+          "id": "d",
+          "text": "Использовать GPU, увеличить numFolds до 10, добавить больше features"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Стратегии оптимизации: (1) parallelism -- параллельное обучение нескольких моделей; (2) TrainValidationSplit вместо CrossValidator -- один split (например 80/20) вместо k фолдов, в 3 раза быстрее при numFolds=3; (3) грубая сетка -> уточнение -- сначала широкий диапазон с крупным шагом, затем узкий вокруг лучших значений.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 4: CrossValidator -- оптимизация времени (parallelism, TrainValidationSplit, грубая сетка)"
+    },
+    {
+      "id": "spark-m14-04-q5",
+      "type": "multiple-choice",
+      "question": "Когда MLlib предпочтительнее scikit-learn?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Всегда -- MLlib быстрее и имеет больше алгоритмов"
+        },
+        {
+          "id": "b",
+          "text": "Только для deep learning задач (NLP, Computer Vision)"
+        },
+        {
+          "id": "c",
+          "text": "Когда данные >10GB и не помещаются в память одной машины. MLlib распределяет обучение по executor кластера. Для <10GB scikit-learn быстрее для прототипирования"
+        },
+        {
+          "id": "d",
+          "text": "Когда нужно использовать Python -- scikit-learn поддерживает только R"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Ключевой критерий -- размер данных. MLlib распределяет обучение по executor кластера, когда данные >10GB. Для <10GB scikit-learn быстрее в прототипировании и имеет ~200+ алгоритмов vs ~30 в MLlib. Второй критерий -- интеграция: если данные уже в Spark (ETL), MLlib объединяет preprocessing и training в один Pipeline. Для deep learning -- PyTorch/TensorFlow.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 4: Decision matrix -- MLlib vs scikit-learn vs PyTorch (критерий размера данных)"
+    },
+    {
+      "id": "spark-m14-04-code-1",
+      "type": "code-challenge",
+      "question": "Выполните feature engineering: добавьте age_bucket (young/middle/senior), income_per_year_exp, binary-флаги is_high_income и is_premium_city, и interaction feature city_income_flag. Покажите итоговый feature-набор.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit, round as spark_round\n\nspark = SparkSession.builder.appName(\"feature_engineering\").getOrCreate()\n\nusers = spark.createDataFrame([\n    (1, 25, 45000, 2, \"Moscow\"),\n    (2, 42, 95000, 15, \"SPb\"),\n    (3, 55, 120000, 25, \"Kazan\"),\n    (4, 30, 60000, 5, \"Moscow\"),\n    (5, 48, 85000, 20, \"Novosibirsk\"),\n    (6, 22, 35000, 1, \"SPb\"),\n], [\"id\", \"age\", \"income\", \"experience\", \"city\"])\n\n# TODO: age_bucket: <30 -> young, 30-50 -> middle, >50 -> senior\n# TODO: income_per_year_exp = round(income / experience, 0); if exp==0 use income\n# TODO: is_high_income = 1 если income >= 80000\n# TODO: is_premium_city = 1 если city in (Moscow, SPb)\n# TODO: city_income_flag = is_high_income * is_premium_city\n# TODO: Покажите (id, age_bucket, income_per_year_exp, is_high_income, is_premium_city, city_income_flag)\n# TODO: print(f\"High-income premium city users: {count}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit, round as spark_round\n\nspark = SparkSession.builder.appName(\"feature_engineering\").getOrCreate()\n\nusers = spark.createDataFrame([\n    (1, 25, 45000, 2, \"Moscow\"),\n    (2, 42, 95000, 15, \"SPb\"),\n    (3, 55, 120000, 25, \"Kazan\"),\n    (4, 30, 60000, 5, \"Moscow\"),\n    (5, 48, 85000, 20, \"Novosibirsk\"),\n    (6, 22, 35000, 1, \"SPb\"),\n], [\"id\", \"age\", \"income\", \"experience\", \"city\"])\n\nresult = users.withColumn(\"age_bucket\",\n    when(col(\"age\") < 30, lit(\"young\")).when(col(\"age\") <= 50, lit(\"middle\")).otherwise(lit(\"senior\")))\nresult = result.withColumn(\"income_per_year_exp\",\n    spark_round(when(col(\"experience\") > 0, col(\"income\") / col(\"experience\")).otherwise(col(\"income\")), 0))\nresult = result.withColumn(\"is_high_income\", when(col(\"income\") >= 80000, lit(1)).otherwise(lit(0)))\nresult = result.withColumn(\"is_premium_city\", when(col(\"city\").isin(\"Moscow\", \"SPb\"), lit(1)).otherwise(lit(0)))\nresult = result.withColumn(\"city_income_flag\", col(\"is_high_income\") * col(\"is_premium_city\"))\n\nresult.select(\"id\", \"age_bucket\", \"income_per_year_exp\", \"is_high_income\", \"is_premium_city\", \"city_income_flag\").show()\nprint(f\"High-income premium city users: {result.filter(col('city_income_flag') == 1).count()}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Подсчёт high-income premium users",
+          "input": "",
+          "expectedOutput": "High-income premium city users:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит age_bucket",
+          "input": "",
+          "expectedOutput": "age_bucket",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит city_income_flag",
+          "input": "",
+          "expectedOutput": "city_income_flag",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Feature engineering — создание производных признаков. Бакетизация (age_bucket) превращает непрерывную переменную в категориальную. Ratio-фичи (income_per_year_exp) нормализуют зависимые величины. Binary-флаги создают интерпретируемые сигналы. Interaction features (city_income_flag) ловят совместное влияние факторов.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "10-lakehouse-formats/01-lakehouse-architecture",
+  "moduleId": "10-lakehouse-formats",
+  "_meta": {
+    "idPrefix": "spark-m10-01",
+    "description": "Use IDs: m10-01-q1, m10-01-q2, ... (4 questions on lakehouse architecture)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-01-q1",
+      "type": "multiple-choice",
+      "question": "Какую фундаментальную проблему Data Lake решает архитектура Lakehouse?",
+      "options": [
+        {
+          "id": "a",
+          "text": "ACID-транзакции поверх дешёвого объектного хранилища (S3, GCS, ADLS), добавляя контроль схемы, time travel и изоляцию concurrent writes"
+        },
+        {
+          "id": "b",
+          "text": "Ускорение аналитических запросов через GPU-вычисления"
+        },
+        {
+          "id": "c",
+          "text": "Автоматическое масштабирование вычислительных ресурсов"
+        },
+        {
+          "id": "d",
+          "text": "Замена SQL-движков на MapReduce для обработки неструктурированных данных"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Data Lake на объектном хранилище дешёв и масштабируем, но не имеет ACID-транзакций, контроля схемы и time travel. Concurrent writers могут испортить данные. Lakehouse добавляет метаданный слой (Delta Lake, Iceberg, Hudi, Paimon), который обеспечивает ACID, schema enforcement и time travel поверх того же дешёвого хранилища.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Архитектура Lakehouse -- ACID-транзакции поверх объектного хранилища"
+    },
+    {
+      "id": "spark-m10-01-q2",
+      "type": "multiple-choice",
+      "question": "В медальонной архитектуре (Bronze -> Silver -> Gold) что содержит слой Silver?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Сырые данные без изменений (raw ingestion)"
+        },
+        {
+          "id": "b",
+          "text": "Очищенные, дедуплицированные данные с применённой схемой -- промежуточный слой между сырыми данными и бизнес-агрегатами"
+        },
+        {
+          "id": "c",
+          "text": "Агрегированные бизнес-метрики и отчёты"
+        },
+        {
+          "id": "d",
+          "text": "Резервные копии данных из Bronze"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Bronze = raw ingestion (сырые данные as-is). Silver = cleaned, deduplicated, schema-applied (очищенные данные с валидацией). Gold = aggregated business metrics (агрегаты для отчётности). Silver -- промежуточный слой, где происходит основная трансформация: дедупликация, type casting, null handling, join с reference data.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Архитектура Lakehouse -- медальонная архитектура Bronze/Silver/Gold"
+    },
+    {
+      "id": "spark-m10-01-q3",
+      "type": "multiple-choice",
+      "question": "Два writer одновременно записывают данные в Data Lake (без lakehouse-формата). Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оба writer запишут данные корректно -- объектное хранилище поддерживает concurrent writes"
+        },
+        {
+          "id": "b",
+          "text": "Объектное хранилище автоматически заблокирует второй write"
+        },
+        {
+          "id": "c",
+          "text": "Возможна потеря данных: без ACID один writer может перезаписать файлы другого, или оба прочитают одно состояние и запишут конфликтующие результаты"
+        },
+        {
+          "id": "d",
+          "text": "Оба write сольются в один результат автоматически"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Объектное хранилище (S3, GCS) не поддерживает транзакции. Два concurrent writer могут: (1) оба прочитать одно состояние, трансформировать и записать -- второй перезаписывает результат первого (lost update); (2) один удалит файл, который другой ещё использует. Lakehouse-форматы решают это через optimistic concurrency control.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 1: Архитектура Lakehouse -- проблемы concurrent writes без ACID"
+    },
+    {
+      "id": "spark-m10-01-q4",
+      "type": "true-false",
+      "question": "Lakehouse -- это конкретный программный продукт, а не архитектурный паттерн.",
+      "correctAnswer": false,
+      "explanation": "Lakehouse -- это архитектурный паттерн, а не конкретный продукт. Он реализуется через lakehouse-форматы: Delta Lake (Databricks), Apache Iceberg (Netflix), Apache Hudi (Uber), Apache Paimon (Alibaba). Каждый формат по-своему добавляет ACID, time travel и schema evolution поверх объектного хранилища.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Архитектура Lakehouse -- Lakehouse как архитектурный паттерн"
+    }
+  ]
+}

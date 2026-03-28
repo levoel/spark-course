@@ -1,0 +1,417 @@
+{
+  "lessonSlug": "04-performance-tuning/_exam",
+  "moduleId": "04-performance-tuning",
+  "examTitle": "Экзамен: Performance Tuning",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m04-exam",
+    "description": "Use IDs: m04-exam-q1, m04-exam-q2, ... (15-20 analytical questions)"
+  },
+  "questions": [
+    {
+      "id": "spark-m04-exam-q1",
+      "type": "multiple-choice",
+      "question": "Production pipeline: join двух таблиц (orders 500 ГБ + customers 200 МБ), затем groupBy('city').agg(sum('amount')). В explain() три Exchange оператора. Как минимизировать количество shuffle?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить spark.sql.shuffle.partitions до 1000"
+        },
+        {
+          "id": "b",
+          "text": "Использовать broadcast(customers) для устранения shuffle join, что оставит только один Exchange для groupBy"
+        },
+        {
+          "id": "c",
+          "text": "Применить coalesce() перед join"
+        },
+        {
+          "id": "d",
+          "text": "Кэшировать обе таблицы перед join"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "customers (200 МБ) достаточно мала для broadcast. broadcast(customers) устраняет два Exchange (по одному для каждой стороны join), оставляя только один Exchange для groupBy. Это сокращает shuffle с ~500 ГБ + 200 МБ до объёма, пропорционального результату groupBy. Увеличение partitions не уменьшает число shuffle.",
+      "studyHint": "Повторите урок 4: Broadcast join -- broadcast() hint и autoBroadcastJoinThreshold",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q2",
+      "type": "multiple-choice",
+      "question": "ETL pipeline с spark.sql.shuffle.partitions=200 обрабатывает 50 МБ данных после фильтрации. Вы видите 200 tasks, из которых 190 обрабатывают 0 байт. Как оптимизировать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Использовать repartition(200) для равномерного распределения"
+        },
+        {
+          "id": "b",
+          "text": "Увеличить executor memory для обработки пустых партиций быстрее"
+        },
+        {
+          "id": "c",
+          "text": "Уменьшить shuffle.partitions до 4-8 или включить AQE для автоматического coalesce пустых партиций"
+        },
+        {
+          "id": "d",
+          "text": "Кэшировать данные перед shuffle"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "50 МБ / 200 партиций = 0.25 МБ на партицию -- слишком мелко. 190 пустых партиций создают overhead планирования 190 tasks без полезной работы. Решение: уменьшить shuffle.partitions до 4-8 (по 6-12 МБ) или включить AQE coalescePartitions, который автоматически объединит пустые/мелкие партиции.",
+      "studyHint": "Повторите урок 1: spark.sql.shuffle.partitions и рекомендуемые 128-256 МБ на партицию",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q3",
+      "type": "multiple-choice",
+      "question": "Два DataFrame используются в pipeline: df_enriched (результат тяжёлого join + filter) используется для: (1) записи в таблицу A, (2) join с другой таблицей для записи в B, (3) агрегации для дашборда. Что оптимизирует этот pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Выполнить три отдельных job для каждой операции"
+        },
+        {
+          "id": "b",
+          "text": "Увеличить число executor для параллелизма"
+        },
+        {
+          "id": "c",
+          "text": "Использовать broadcast для df_enriched"
+        },
+        {
+          "id": "d",
+          "text": "df_enriched.cache() + count() для материализации, затем три операции из кэша; df_enriched.unpersist() по завершении"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "df_enriched используется 3 раза -- без кэширования Spark пересчитает join+filter трижды. cache() + count() материализует результат в памяти. Три последующие операции читают из кэша без пересчёта. unpersist() освобождает memory для следующих pipeline. Это классический паттерн кэширования промежуточных результатов.",
+      "studyHint": "Повторите урок 6: Кэширование -- cache() lazy, нужен action для материализации",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q4",
+      "type": "multiple-choice",
+      "question": "Spark UI Summary Metrics для Stage 5: Min Duration=0.2s, Median=0.5s, Max=8min. GC Time Max=2min. Shuffle Read Max=4.5 ГБ, Median=45 МБ. Какова причина и решение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Data skew: один ключ содержит 4.5 ГБ (100x median). Решение: AQE skew join или salting для горячего ключа"
+        },
+        {
+          "id": "b",
+          "text": "Медленный node; перезапустить executor"
+        },
+        {
+          "id": "c",
+          "text": "Недостаточно партиций; увеличить shuffle.partitions"
+        },
+        {
+          "id": "d",
+          "text": "GC проблема; увеличить executor memory"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Shuffle Read Max (4.5 ГБ) в 100 раз больше Median (45 МБ) -- классический data skew. Один ключ доминирует. Высокий GC Time (2 мин) -- следствие: executor обрабатывает 4.5 ГБ в одном task. Решение: (1) AQE skew join (автоматическое разбиение); (2) salting горячего ключа; (3) если join -- проверить, можно ли broadcast маленькую сторону.",
+      "studyHint": "Повторите урок 5: Data Skew -- диагностика через Spark UI Summary Metrics",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q5",
+      "type": "multiple-choice",
+      "question": "Две таблицы orders и products используют bucketBy(32, 'product_id'). Data engineer добавляет новую таблицу returns с bucketBy(48, 'product_id'). Join orders с returns по product_id. Будет ли shuffle устранён?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- Spark автоматически согласует 32 и 48 buckets"
+        },
+        {
+          "id": "b",
+          "text": "Нет -- 48 не кратно 32, Spark выполнит shuffle для одной или обеих таблиц"
+        },
+        {
+          "id": "c",
+          "text": "Shuffle устранён для orders, но не для returns"
+        },
+        {
+          "id": "d",
+          "text": "Bucketing не влияет на join -- shuffle всегда выполняется"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Для shuffle-free bucketed join число buckets должно совпадать или быть кратным. 48 не кратно 32 (48/32 = 1.5). Spark не может сопоставить bucket-файлы без перераспределения. Решение: перезаписать returns с bucketBy(32, 'product_id') для согласования с orders и products.",
+      "studyHint": "Повторите урок 3: Bucketing -- правило кратности числа buckets",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q6",
+      "type": "multiple-choice",
+      "question": "Pipeline: df.repartition(1000).groupBy('key').count().coalesce(10).write.parquet('/output/'). Сколько shuffle-операций в этом pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "1 -- только groupBy"
+        },
+        {
+          "id": "b",
+          "text": "3 -- repartition + groupBy + coalesce"
+        },
+        {
+          "id": "c",
+          "text": "2 -- repartition (полный shuffle) + groupBy (Exchange hashpartitioning). coalesce не создаёт shuffle"
+        },
+        {
+          "id": "d",
+          "text": "0 -- Spark оптимизирует pipeline без shuffle"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "repartition(1000) создаёт полный shuffle для перераспределения данных на 1000 партиций. groupBy('key') создаёт второй shuffle (Exchange hashpartitioning) для агрегации по ключу. coalesce(10) использует narrow dependency -- объединяет партиции БЕЗ shuffle. Итого: 2 shuffle. repartition перед groupBy часто избыточен.",
+      "studyHint": "Повторите урок 1: repartition() vs coalesce() -- один создаёт shuffle, другой нет",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q7",
+      "type": "multiple-choice",
+      "question": "Таблица заказов содержит 80% записей с city='Москва'. Нужно выполнить groupBy('city').agg(sum('amount')). AQE не помогает (AQE обрабатывает skew только для join). Какое решение оптимально?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить число executors для параллелизма"
+        },
+        {
+          "id": "b",
+          "text": "Использовать broadcast для таблицы заказов"
+        },
+        {
+          "id": "c",
+          "text": "Отфильтровать Москву и обработать отдельно"
+        },
+        {
+          "id": "d",
+          "text": "Salting: добавить случайный суффикс к city, выполнить partial aggregate, удалить salt, выполнить final aggregate (двухпроходная агрегация)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Для skewed groupBy AQE не помогает -- нужен ручной salting. Шаг 1: добавить salt (0-N) к city, groupBy(salted_city).agg(sum('amount')). Шаг 2: удалить salt, groupBy(city).agg(sum(partial_sum)). Вместо одной партиции с 80% данных получаем N равных партиций. Двухпроходная агрегация добавляет один extra shuffle, но устраняет straggler.",
+      "studyHint": "Повторите урок 5: Salting -- двухпроходная агрегация для skewed groupBy",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q8",
+      "type": "multiple-choice",
+      "question": "50 executors, spark.executor.memory=8g. Pipeline кэширует 3 DataFrame общим объёмом 250 ГБ и одновременно выполняет SortMergeJoin. Executors начинают падать. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Кэш занимает ~5 ГБ на executor (250/50). Execution memory для join вытесняет кэш, вытесненные DataFrame пересчитываются, создавая дополнительную нагрузку. GC паузы вызывают потерю heartbeat"
+        },
+        {
+          "id": "b",
+          "text": "SortMergeJoin не совместим с кэшированными DataFrame"
+        },
+        {
+          "id": "c",
+          "text": "50 executors недостаточно для 250 ГБ данных"
+        },
+        {
+          "id": "d",
+          "text": "SortMergeJoin требует больше executor memory, чем 8 ГБ"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "С spark.memory.fraction=0.6, каждый executor имеет ~4.8 ГБ Spark Memory. 250 ГБ кэша / 50 executors = 5 ГБ на executor -- кэш уже превышает доступный Spark Memory. При join execution memory вытесняет кэш (execution может evict storage). Вытесненные DataFrame пересчитываются, что создаёт дополнительную нагрузку. GC на переполненном heap вызывает паузы, executor пропускает heartbeat.",
+      "studyHint": "Повторите урок 6: Кэширование -- Storage vs Execution Memory, правила вытеснения",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q9",
+      "type": "multiple-choice",
+      "question": "В explain() вы видите Filter ПОД Exchange. Затем вы добавляете UDF-фильтр. В новом explain() Filter UDF -- НАД Exchange. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "UDF-фильтр слишком медленный для pushdown"
+        },
+        {
+          "id": "b",
+          "text": "Catalyst не может выполнить Predicate Pushdown через UDF, потому что UDF -- чёрный ящик; фильтр применяется после shuffle"
+        },
+        {
+          "id": "c",
+          "text": "Exchange всегда выполняется последним"
+        },
+        {
+          "id": "d",
+          "text": "Spark случайно выбирает порядок Filter и Exchange"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Catalyst выполняет Predicate Pushdown для встроенных функций, перемещая Filter под Exchange (до shuffle). Но UDF -- чёрный ящик, Catalyst не может определить, от каких столбцов зависит результат и какие данные можно отфильтровать до shuffle. Поэтому UDF-фильтр остаётся над Exchange -- все данные проходят через shuffle, затем фильтруются.",
+      "studyHint": "Повторите урок 1: Predicate Pushdown и его ограничения для UDF",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q10",
+      "type": "multiple-choice",
+      "question": "Таблица partitioned by (year, month, day) содержит 5 лет данных. Запрос: SELECT * FROM events WHERE year=2024 AND day=15. Какие партиции будут прочитаны?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Все 5 лет данных -- фильтр по двум несмежным уровням не поддерживается"
+        },
+        {
+          "id": "b",
+          "text": "Все year=2024/* -- partition pruning по year работает, но day-фильтр НЕ может быть применён для pruning без указания промежуточного month"
+        },
+        {
+          "id": "c",
+          "text": "Только year=2024/month=*/day=15 -- 12 партиций"
+        },
+        {
+          "id": "d",
+          "text": "Только year=2024/day=15 -- 1 партиция"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Spark поддерживает partition pruning по любому уровню иерархии независимо. Фильтр year=2024 отсекает 4 года данных. Фильтр day=15 отсекает дни != 15 внутри каждого месяца. Spark прочитает только year=2024/month=*/day=15 -- 12 партиций (по одной на месяц). Каждый уровень иерархии pruning работает независимо.",
+      "studyHint": "Повторите урок 2: Partition pruning -- фильтрация по нескольким уровням",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q11",
+      "type": "multiple-choice",
+      "question": "Data engineer выбирает StorageLevel для кэширования 50 ГБ DataFrame на кластере с 10 executors по 8 ГБ каждый. Какой StorageLevel оптимален?",
+      "options": [
+        {
+          "id": "a",
+          "text": "MEMORY_ONLY -- самый быстрый доступ"
+        },
+        {
+          "id": "b",
+          "text": "MEMORY_AND_DISK -- данные не помещаются полностью в memory (50 ГБ > ~48 ГБ usable), излишки безопасно записываются на диск"
+        },
+        {
+          "id": "c",
+          "text": "DISK_ONLY -- данные слишком велики для памяти"
+        },
+        {
+          "id": "d",
+          "text": "MEMORY_AND_DISK_SER -- сериализованное хранение для экономии памяти"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "10 executors * 8 ГБ * 0.6 (spark.memory.fraction) = ~48 ГБ Spark Memory, из которых часть нужна для execution. 50 ГБ десериализованных данных не поместятся полностью. MEMORY_AND_DISK_SER использует сериализованное хранение, что сжимает данные в ~2-3 раза (50 ГБ -> ~20 ГБ), позволяя разместить больше в memory. Излишки -- на диск.",
+      "studyHint": "Повторите урок 6: StorageLevel -- MEMORY_AND_DISK_SER для больших DataFrame",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q12",
+      "type": "multiple-choice",
+      "question": "Ежедневный ETL: 200 ГБ данных, join с 5 ГБ dimension-таблицей. Dimension-таблица обновляется еженедельно. Какая стратегия оптимальна?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Broadcast dimension-таблицу (5 ГБ) с увеличенным autoBroadcastJoinThreshold, потому что broadcast устраняет shuffle для 200 ГБ fact-таблицы"
+        },
+        {
+          "id": "b",
+          "text": "SortMergeJoin с bucketing обеих таблиц по join key"
+        },
+        {
+          "id": "c",
+          "text": "Использовать repartition для обеих таблиц"
+        },
+        {
+          "id": "d",
+          "text": "Кэшировать обе таблицы перед join"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "5 ГБ dimension-таблица может быть broadcast (увеличить threshold до 5g). Это устраняет shuffle для 200 ГБ fact-таблицы -- вместо перемещения 200 ГБ по сети, перемещается только 5 ГБ (один раз на каждый executor). Bucketing подходит для join двух больших таблиц. Кэширование не устраняет shuffle.",
+      "studyHint": "Повторите урок 4: Broadcast join -- autoBroadcastJoinThreshold для dimension-таблиц",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q13",
+      "type": "multiple-choice",
+      "question": "Pipeline записывает 100 ГБ результата. Data engineer использует df.repartition(10).write.parquet('/output/'). Что неоптимально?",
+      "options": [
+        {
+          "id": "a",
+          "text": "10 файлов слишком мало для 100 ГБ"
+        },
+        {
+          "id": "b",
+          "text": "repartition(10) создаёт полный shuffle 100 ГБ данных для получения 10 файлов; coalesce(10) достигнет того же без shuffle"
+        },
+        {
+          "id": "c",
+          "text": "Parquet формат не подходит для больших файлов"
+        },
+        {
+          "id": "d",
+          "text": "Нужно использовать partitionBy вместо repartition"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "repartition(10) выполняет полный shuffle 100 ГБ данных -- десятки ГБ передаются по сети. coalesce(10) объединяет партиции через narrow dependency (без shuffle), хотя результат может быть немного неравномерным. Для простого уменьшения числа файлов перед записью coalesce всегда предпочтительнее.",
+      "studyHint": "Повторите урок 1: repartition() vs coalesce() -- coalesce без shuffle",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q14",
+      "type": "multiple-choice",
+      "question": "Data engineer применяет salting с 32 buckets для join, где горячий ключ в 8 раз больше медианы. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оптимальный результат -- 32 buckets хорошо распределят нагрузку"
+        },
+        {
+          "id": "b",
+          "text": "32 buckets невозможно -- максимум 16"
+        },
+        {
+          "id": "c",
+          "text": "Избыточное число buckets: dimension-таблица реплицируется 32 раза, overhead репликации превышает выигрыш от параллелизма при skew всего 8x"
+        },
+        {
+          "id": "d",
+          "text": "Salting с 32 buckets устранит skew, но создаст проблему маленьких файлов"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Формула: buckets = ceil(skewed_key_size / median_key_size). Для skew 8x оптимально 4-8 buckets. 32 buckets при skew 8x: горячий ключ разбивается на 32 части по ~0.25x median -- слишком мелко. Dimension-таблица реплицируется 32 раза, создавая значительный overhead. Правило: число buckets должно соответствовать степени skew.",
+      "studyHint": "Повторите урок 5: Salting -- выбор числа salt buckets",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-exam-q15",
+      "type": "multiple-choice",
+      "question": "В explain() присутствует Exchange hashpartitioning(customer_id, 200) для обеих таблиц. Вы знаете, что обе таблицы ежедневно join-ятся по customer_id. Какое долгосрочное решение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Кэшировать обе таблицы для устранения повторного shuffle"
+        },
+        {
+          "id": "b",
+          "text": "Уменьшить shuffle.partitions для ускорения Exchange"
+        },
+        {
+          "id": "c",
+          "text": "Создать view с broadcast hint"
+        },
+        {
+          "id": "d",
+          "text": "Перезаписать обе таблицы с bucketBy(N, 'customer_id') для устранения shuffle при всех последующих join"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Если таблицы регулярно join-ятся по одному ключу, bucketing -- оптимальное долгосрочное решение. bucketBy(N, 'customer_id') выполняет shuffle один раз при записи, после чего все последующие join по customer_id выполняются без Exchange. Стоимость однократного shuffle при записи амортизируется сотнями join-ов при чтении.",
+      "studyHint": "Повторите урок 3: Bucketing -- shuffle один раз при записи, устранение при чтении",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "lessonSlug": "11-arrow-module/02-zero-copy-transfer",
+  "moduleId": "11-arrow-module",
+  "_meta": {
+    "idPrefix": "spark-m11-02",
+    "description": "Use IDs: m11-02-q1, m11-02-q2, ... (4 questions on zero-copy transfer)"
+  },
+  "questions": [
+    {
+      "id": "spark-m11-02-q1",
+      "type": "multiple-choice",
+      "question": "Традиционная передача 1 ГБ данных между процессами: serialize -> copy -> deserialize. Какова стоимость?",
+      "options": [
+        {
+          "id": "a",
+          "text": "~5.5 сек (сериализация + копирование + десериализация), 2x memory (оригинал + копия)"
+        },
+        {
+          "id": "b",
+          "text": "~0.5 сек, 1x memory"
+        },
+        {
+          "id": "c",
+          "text": "Мгновенно -- процессоры оптимизированы для копирования"
+        },
+        {
+          "id": "d",
+          "text": "~1 сек, 1x memory"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Традиционная передача: serialize (~2.5 сек), memcpy/socket (~0.5 сек), deserialize (~2.5 сек). Итого ~5.5 сек для 1 ГБ. Memory: оригинал (1 ГБ) + копия (1 ГБ) = 2 ГБ. Для 10 ГБ DataFrame: 55 секунд и 20 ГБ RAM. Zero-copy устраняет serialize + deserialize.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Zero-Copy Transfer -- стоимость традиционной сериализации"
+    },
+    {
+      "id": "spark-m11-02-q2",
+      "type": "multiple-choice",
+      "question": "Что означает zero-copy в контексте Arrow?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Данные никогда не копируются на диск"
+        },
+        {
+          "id": "b",
+          "text": "Вместо сериализации + копирования + десериализации передаётся указатель на ту же область памяти (shared memory). Получатель работает с теми же байтами без создания копии"
+        },
+        {
+          "id": "c",
+          "text": "Данные автоматически дублируются для надёжности"
+        },
+        {
+          "id": "d",
+          "text": "Zero-copy работает только между потоками одного процесса"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Zero-copy: данные в формате Arrow уже имеют стандартизированный byte layout. При передаче между процессами (или языками) достаточно передать указатель на shared memory. Получатель интерпретирует те же байты как Arrow RecordBatch -- никакой сериализации, десериализации или копирования. Время: ~0 вместо ~5.5 сек/ГБ.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Zero-Copy Transfer -- передача через shared memory без сериализации"
+    },
+    {
+      "id": "spark-m11-02-q3",
+      "type": "multiple-choice",
+      "question": "PySpark передаёт данные между Python-процессом и JVM. Как Arrow ускоряет эту передачу?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Arrow заменяет JVM на Python-native обработку"
+        },
+        {
+          "id": "b",
+          "text": "Arrow кэширует данные в GPU-памяти"
+        },
+        {
+          "id": "c",
+          "text": "Без Arrow: row-by-row pickle serialization через Py4J socket. С Arrow: данные передаются как Arrow RecordBatch (columnar, стандартный byte layout), что в 10-100x быстрее за счёт устранения row-by-row сериализации"
+        },
+        {
+          "id": "d",
+          "text": "Arrow не влияет на передачу данных в PySpark"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Без Arrow: JVM -> pickle serialize row-by-row -> Py4J socket -> Python -> pickle deserialize. Каждая строка сериализуется отдельно. С Arrow: JVM -> Arrow RecordBatch (columnar batch) -> shared memory или socket -> Python PyArrow (zero-deserialization). Батчевая передача в 10-100x быстрее.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: Zero-Copy Transfer -- Arrow RecordBatch вместо pickle в PySpark"
+    },
+    {
+      "id": "spark-m11-02-q4",
+      "type": "multiple-choice",
+      "question": "RecordBatch -- основная единица данных в Arrow. Что он содержит?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Одну строку данных с метаданными"
+        },
+        {
+          "id": "b",
+          "text": "Сжатый блок данных для передачи по сети"
+        },
+        {
+          "id": "c",
+          "text": "Индекс для быстрого поиска строк"
+        },
+        {
+          "id": "d",
+          "text": "Набор колоночных буферов одинаковой длины + schema (типы колонок) -- это chunk табличных данных в колоночном формате"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "RecordBatch = schema (имена и типы колонок) + набор колоночных arrays одинаковой длины. Например, RecordBatch с 1000 строк и 3 колонками содержит 3 массива по 1000 элементов каждый. RecordBatch -- единица передачи в Arrow Flight и между процессами.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Zero-Copy Transfer -- структура RecordBatch"
+    },
+    {
+      "id": "spark-m11-02-code-1",
+      "type": "code-challenge",
+      "question": "Паттерн projection pushdown для минимизации передачи данных: у вас есть большой DataFrame с 6 колонками. Для отчёта нужны только 2 колонки. Сравните два подхода: (1) агрегация на полном DataFrame, (2) сначала select нужных колонок, затем агрегация. Выведите количество колонок в каждом промежуточном DataFrame, чтобы показать разницу в объёме данных.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import sum as spark_sum, col\n\nspark = SparkSession.builder.appName(\"zero-copy-demo\").getOrCreate()\n\ntransactions = spark.createDataFrame([\n    (1, \"2024-01-01\", \"US\", \"credit\", \"electronics\", 500),\n    (2, \"2024-01-01\", \"DE\", \"debit\",  \"clothing\",    200),\n    (3, \"2024-01-02\", \"US\", \"credit\", \"electronics\", 300),\n    (4, \"2024-01-02\", \"FR\", \"credit\", \"food\",        150),\n    (5, \"2024-01-03\", \"DE\", \"debit\",  \"electronics\", 400),\n], [\"tx_id\", \"date\", \"country\", \"payment_type\", \"category\", \"amount\"])\n\n# Подход 1: Все колонки при обработке\nfull_cols = len(transactions.columns)\n\n# TODO: Подход 2: Projection pushdown — выберите только category и amount\n# projected = transactions.select(...)\n# proj_cols = len(projected.columns)\n\n# TODO: Агрегируйте projected по category с sum(amount)\n# result = projected.groupBy(...).agg(...)\n\nprint(f\"Full DataFrame columns: {full_cols}\")\n# print(f\"Projected columns: {proj_cols}\")\n# print(f\"Data reduction: {full_cols - proj_cols} columns skipped\")\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import sum as spark_sum, col\n\nspark = SparkSession.builder.appName(\"zero-copy-demo\").getOrCreate()\n\ntransactions = spark.createDataFrame([\n    (1, \"2024-01-01\", \"US\", \"credit\", \"electronics\", 500),\n    (2, \"2024-01-01\", \"DE\", \"debit\",  \"clothing\",    200),\n    (3, \"2024-01-02\", \"US\", \"credit\", \"electronics\", 300),\n    (4, \"2024-01-02\", \"FR\", \"credit\", \"food\",        150),\n    (5, \"2024-01-03\", \"DE\", \"debit\",  \"electronics\", 400),\n], [\"tx_id\", \"date\", \"country\", \"payment_type\", \"category\", \"amount\"])\n\nfull_cols = len(transactions.columns)\n\nprojected = transactions.select(\"category\", \"amount\")\nproj_cols = len(projected.columns)\n\nresult = projected.groupBy(\"category\").agg(spark_sum(\"amount\").alias(\"total_amount\"))\n\nprint(f\"Full DataFrame columns: {full_cols}\")\nprint(f\"Projected columns: {proj_cols}\")\nprint(f\"Data reduction: {full_cols - proj_cols} columns skipped\")\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "electronics total = 1200",
+          "input": "",
+          "expectedOutput": "1200",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "4 колонки пропущены при projection",
+          "input": "",
+          "expectedOutput": "4 columns skipped",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Zero-copy transfer в Arrow позволяет передавать только нужные колонки между JVM и Python без копирования. Projection pushdown — это оптимизация, при которой ненужные колонки не читаются и не передаются. В нашем примере из 6 колонок передаются только 2 (category, amount) — экономия 67% данных. Arrow делает эту передачу без сериализации/десериализации, используя общую memory layout.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

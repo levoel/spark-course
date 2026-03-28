@@ -1,0 +1,165 @@
+{
+  "lessonSlug": "11-arrow-module/01-arrow-columnar-format",
+  "moduleId": "11-arrow-module",
+  "_meta": {
+    "idPrefix": "spark-m11-01",
+    "description": "Use IDs: m11-01-q1, m11-01-q2, ... (5 questions on Arrow columnar format)"
+  },
+  "questions": [
+    {
+      "id": "spark-m11-01-q1",
+      "type": "multiple-choice",
+      "question": "Аналитический запрос SELECT AVG(salary) FROM employees (6 колонок, 10 млн строк). Почему колоночное хранение эффективнее строчного?",
+      "options": [
+        {
+          "id": "a",
+          "text": "При строчном хранении читаются все 6 колонок (83% лишних данных). При колоночном читается только salary -- column pruning исключает ненужные колонки из I/O"
+        },
+        {
+          "id": "b",
+          "text": "Колоночное хранение сжимает данные лучше, но читает столько же"
+        },
+        {
+          "id": "c",
+          "text": "Колоночное хранение быстрее записывает данные"
+        },
+        {
+          "id": "d",
+          "text": "Нет разницы для агрегатных запросов"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Column pruning: при колоночном хранении читается только буфер salary (1 из 6 колонок = 17% данных). При строчном хранении с диска/из памяти читаются все строки целиком (6 колонок = 100% данных). Для широких таблиц с десятками колонок экономия ещё больше.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 1: Колоночный формат Arrow -- column pruning и эффективность аналитических запросов"
+    },
+    {
+      "id": "spark-m11-01-q2",
+      "type": "multiple-choice",
+      "question": "Чем Apache Arrow отличается от Apache Parquet?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Arrow -- формат хранения на диске, Parquet -- формат в памяти"
+        },
+        {
+          "id": "b",
+          "text": "Arrow -- колоночный формат для оперативной памяти (in-memory) с точным byte layout; Parquet -- колоночный формат для хранения на диске с компрессией. Arrow оптимизирован для обработки, Parquet -- для хранения"
+        },
+        {
+          "id": "c",
+          "text": "Arrow и Parquet -- синонимы"
+        },
+        {
+          "id": "d",
+          "text": "Arrow поддерживает только числовые данные, Parquet -- любые"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Arrow = in-memory columnar format: определяет точный byte layout для обработки данных в RAM. Parquet = on-disk columnar format: оптимизирован для хранения с компрессией (Snappy, Zstd). Типичный flow: Parquet на диске -> десериализация -> Arrow в памяти -> обработка. Arrow устраняет десериализацию между языками.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 1: Колоночный формат Arrow -- Arrow (in-memory) vs Parquet (on-disk)"
+    },
+    {
+      "id": "spark-m11-01-q3",
+      "type": "multiple-choice",
+      "question": "Почему Arrow определяет точный byte layout, а не просто API?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Для совместимости со старыми процессорами"
+        },
+        {
+          "id": "b",
+          "text": "Для SIMD-оптимизации и лучшего сжатия"
+        },
+        {
+          "id": "c",
+          "text": "Одинаковый byte layout в Python, Java, C++, Rust и Go позволяет передавать данные между языками без сериализации -- просто передаётся указатель на ту же память (cross-language zero-copy)"
+        },
+        {
+          "id": "d",
+          "text": "Byte layout нужен только для записи на диск"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Стандартизированный byte layout -- ключевая инновация Arrow. Данные в формате Arrow в Python и Java занимают одни и те же байты в памяти. При передаче между Python-процессом и JVM (PySpark) достаточно передать указатель -- никакой сериализации/десериализации. Это cross-language zero-copy, невозможный с произвольными форматами.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 1: Колоночный формат Arrow -- стандартизированный byte layout для cross-language zero-copy"
+    },
+    {
+      "id": "spark-m11-01-q4",
+      "type": "multiple-choice",
+      "question": "Arrow использует SIMD-векторизацию для обработки колоночных данных. Почему это невозможно для строчных данных?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SIMD работает только с числами, а строчные данные содержат строки"
+        },
+        {
+          "id": "b",
+          "text": "Строчные данные слишком большие для SIMD-регистров"
+        },
+        {
+          "id": "c",
+          "text": "SIMD не поддерживается современными процессорами"
+        },
+        {
+          "id": "d",
+          "text": "SIMD (AVX2/AVX-512) обрабатывает 4-8 значений за одну инструкцию, но требует contiguous (последовательные) данные одного типа. В колоночном формате все salary лежат рядом; в строчном -- разбросаны через всю строку (cache miss на каждом значении)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "SIMD (Single Instruction Multiple Data) загружает несколько последовательных значений в регистр и обрабатывает за одну инструкцию. AVX-512 = 8 int64 за раз. Колоночные данные: все salary лежат contiguous, SIMD загружает 8 salary за раз. Строчные данные: следующий salary через 48+ байт (после name, age, dept...) -- SIMD невозможен, cache miss.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 1: Колоночный формат Arrow -- SIMD-векторизация и contiguous данные"
+    },
+    {
+      "id": "spark-m11-01-q5",
+      "type": "true-false",
+      "question": "Arrow validity bitmap использует 1 бит на элемент для отслеживания NULL-значений: 1 = валидное значение, 0 = NULL.",
+      "correctAnswer": true,
+      "explanation": "Arrow хранит NULL-информацию в отдельном validity bitmap: 1 бит на элемент. Для колонки [28, 34, 41, NULL] bitmap = [1, 1, 1, 0]. Это эффективнее, чем sentinel values (NaN, -1) или nullable wrapper объекты (Java Optional). 10 млн элементов = ~1.2 МБ bitmap.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Колоночный формат Arrow -- validity bitmap для NULL-значений"
+    },
+    {
+      "id": "spark-m11-01-code-1",
+      "type": "code-challenge",
+      "question": "Демонстрация преимущества колоночного доступа: у вас есть таблица с 5 колонками. Для аналитического запроса 'средняя зарплата по отделу' нужны только 2 колонки (department, salary). Покажите разницу: сначала выполните агрегацию на полном DataFrame (все 5 колонок), затем — после select только нужных колонок. Оба подхода дают одинаковый результат, но второй обрабатывает меньше данных — как при колоночном хранении Arrow.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import avg, col, round as spark_round, lit\n\nspark = SparkSession.builder.appName(\"columnar-demo\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Alice\",   \"Engineering\", 120000, \"2020-01-15\"),\n    (2, \"Bob\",     \"Marketing\",    85000, \"2019-06-01\"),\n    (3, \"Carol\",   \"Engineering\", 150000, \"2018-03-20\"),\n    (4, \"Dave\",    \"Marketing\",    95000, \"2021-09-10\"),\n    (5, \"Eve\",     \"Engineering\", 110000, \"2022-02-28\"),\n], [\"id\", \"name\", \"department\", \"salary\", \"hire_date\"])\n\n# Подход 1: Row-oriented — агрегация на полном DataFrame\n# TODO: Группировка по department, avg(salary) на полном employees DataFrame\n# row_approach = employees.groupBy(...).agg(...)\n\n# Подход 2: Column-oriented — сначала выбираем только нужные колонки\n# TODO: select только department и salary, затем та же агрегация\n# col_approach = employees.select(...).groupBy(...).agg(...)\n\nprint(\"=== ROW-ORIENTED (all columns) ===\")\n# row_approach.show()\nprint(f\"Columns processed: {len(employees.columns)}\")\n\nprint(\"=== COLUMN-ORIENTED (selected) ===\")\n# col_approach.show()\nprint(f\"Columns processed: 2\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import avg, col, round as spark_round, lit\n\nspark = SparkSession.builder.appName(\"columnar-demo\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Alice\",   \"Engineering\", 120000, \"2020-01-15\"),\n    (2, \"Bob\",     \"Marketing\",    85000, \"2019-06-01\"),\n    (3, \"Carol\",   \"Engineering\", 150000, \"2018-03-20\"),\n    (4, \"Dave\",    \"Marketing\",    95000, \"2021-09-10\"),\n    (5, \"Eve\",     \"Engineering\", 110000, \"2022-02-28\"),\n], [\"id\", \"name\", \"department\", \"salary\", \"hire_date\"])\n\nrow_approach = employees.groupBy(\"department\").agg(spark_round(avg(\"salary\"), 2).alias(\"avg_salary\"))\n\ncol_approach = employees.select(\"department\", \"salary\").groupBy(\"department\").agg(spark_round(avg(\"salary\"), 2).alias(\"avg_salary\"))\n\nprint(\"=== ROW-ORIENTED (all columns) ===\")\nrow_approach.show()\nprint(f\"Columns processed: {len(employees.columns)}\")\n\nprint(\"=== COLUMN-ORIENTED (selected) ===\")\ncol_approach.show()\nprint(f\"Columns processed: 2\")",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Engineering avg salary рассчитана",
+          "input": "",
+          "expectedOutput": "Engineering",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Marketing avg salary рассчитана",
+          "input": "",
+          "expectedOutput": "Marketing",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Колоночный подход обрабатывает 2 колонки",
+          "input": "",
+          "expectedOutput": "Columns processed: 2",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Apache Arrow использует колоночный формат: данные хранятся по колонкам, а не по строкам. Для аналитических запросов, которым нужны только 2 из 5 колонок, колоночное хранение читает на 60% меньше данных. В Spark это реализуется через column pruning (Catalyst optimizer), а Arrow обеспечивает zero-copy доступ к нужным колонкам при передаче между JVM и Python.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

@@ -1,0 +1,148 @@
+{
+  "lessonSlug": "09-structured-streaming/05-windowing",
+  "moduleId": "09-structured-streaming",
+  "_meta": {
+    "idPrefix": "spark-m09-05",
+    "description": "Use IDs: m09-05-q1, m09-05-q2, ... (4 questions on windowing)"
+  },
+  "questions": [
+    {
+      "id": "spark-m09-05-q1",
+      "type": "multiple-choice",
+      "question": "Чем отличается tumbling window от sliding window в Structured Streaming?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет разницы -- это синонимы для оконной функции"
+        },
+        {
+          "id": "b",
+          "text": "Tumbling window основан на processing time, sliding -- на event time"
+        },
+        {
+          "id": "c",
+          "text": "Tumbling window используется только с complete mode, sliding -- только с append mode"
+        },
+        {
+          "id": "d",
+          "text": "Tumbling window имеет фиксированный размер без перекрытия (каждое событие в одном окне); sliding window перекрывается -- одно событие может попасть в несколько окон"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Tumbling window: фиксированные непересекающиеся окна (window(\"event_time\", \"5 minutes\")). Каждое событие попадает ровно в одно окно. Sliding window: перекрывающиеся окна (window(\"event_time\", \"10 minutes\", \"5 minutes\")) с размером 10 мин и сдвигом 5 мин. Одно событие может попасть в 2 окна. Sliding window полезен для скользящих средних.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: Оконные операции -- различия tumbling и sliding window"
+    },
+    {
+      "id": "spark-m09-05-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer использует window(\"event_time\", \"10 minutes\", \"2 minutes\") в groupBy. Сколько окон породит одно событие с event_time = 10:07?",
+      "options": [
+        {
+          "id": "a",
+          "text": "5 окон: событие попадает во все окна, чьи границы [start, start+10min) содержат 10:07"
+        },
+        {
+          "id": "b",
+          "text": "1 окно"
+        },
+        {
+          "id": "c",
+          "text": "2 окна"
+        },
+        {
+          "id": "d",
+          "text": "10 окон"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "При размере окна 10 минут и сдвиге 2 минуты, окна создаются каждые 2 минуты. Событие с event_time 10:07 попадает в окна: [10:00-10:10), [09:58-10:08), [10:02-10:12), [10:04-10:14), [10:06-10:16) -- всего 5 окон (10 мин / 2 мин = 5). Чем меньше slide interval относительно window size, тем больше окон на одно событие.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 5: Оконные операции -- расчёт количества окон для sliding window"
+    },
+    {
+      "id": "spark-m09-05-q3",
+      "type": "multiple-choice",
+      "question": "Session window в Spark (session_window(), Spark 3.2+) группирует события по gap timeout. Чем session window принципиально отличается от tumbling и sliding?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Session window имеет фиксированный размер, как tumbling, но без сдвига"
+        },
+        {
+          "id": "b",
+          "text": "Session window определяется динамически: окно продолжается, пока интервал между событиями одного ключа не превышает gap -- размер окна не фиксирован"
+        },
+        {
+          "id": "c",
+          "text": "Session window работает только с processing time"
+        },
+        {
+          "id": "d",
+          "text": "Session window -- это sliding window со slide = 1 секунда"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Session window -- единственный тип окна с динамическим размером. Окно начинается с первого события и продолжается, пока интервал между последовательными событиями одного ключа не превышает gap timeout. Размер окна зависит от данных: активный пользователь создаёт длинные сессии, неактивный -- короткие. Tumbling и sliding имеют фиксированный размер.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: Оконные операции -- session window и динамический размер окна"
+    },
+    {
+      "id": "spark-m09-05-q4",
+      "type": "multiple-choice",
+      "question": "Почему оконная колонка (window) включается в groupBy, а не в agg?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Окно должно быть в groupBy для совместимости с batch DataFrame API"
+        },
+        {
+          "id": "b",
+          "text": "Это ограничение Spark SQL -- окно не может быть в agg"
+        },
+        {
+          "id": "c",
+          "text": "window() генерирует struct-колонку (start, end), по которой группируются данные -- это ключ группировки, а не агрегатная функция"
+        },
+        {
+          "id": "d",
+          "text": "Окно может быть как в groupBy, так и в agg -- это вопрос стиля"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Функция window() создаёт struct-колонку с полями start и end. Эта колонка используется как ключ группировки в groupBy, потому что мы хотим агрегировать данные ВНУТРИ каждого окна. Агрегатные функции (count, sum) применяются к данным в каждой группе (окне). Окно определяет границы группы, а не вычисляет агрегат.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: Оконные операции -- window() как struct-колонка и ключ группировки"
+    },
+    {
+      "id": "spark-m09-05-code-1",
+      "type": "code-challenge",
+      "question": "Симуляция tumbling window: разбейте временные события на фиксированные 5-минутные окна и подсчитайте количество событий в каждом окне. Вычислите номер окна на основе минут event_time (window = floor(minute / 5)), сгруппируйте по номеру окна и посчитайте количество. Отсортируйте по номеру окна. Вызовите show().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, floor, lit, substring\n\nspark = SparkSession.builder.appName(\"tumbling-window\").getOrCreate()\n\nevents = spark.createDataFrame([\n    (\"click\", \"2024-01-01 12:01:00\"),\n    (\"view\",  \"2024-01-01 12:03:00\"),\n    (\"click\", \"2024-01-01 12:06:00\"),\n    (\"click\", \"2024-01-01 12:07:00\"),\n    (\"view\",  \"2024-01-01 12:11:00\"),\n    (\"click\", \"2024-01-01 12:14:00\"),\n    (\"view\",  \"2024-01-01 12:14:30\"),\n], [\"event_type\", \"event_time\"])\n\n# TODO: Извлеките минуты из event_time (символы 15-16 строки timestamp)\n# и вычислите номер окна = floor(minutes / 5)\n# events_with_window = events.withColumn(\n#     \"minute\", substring(\"event_time\", 15, 2).cast(\"int\")\n# ).withColumn(\n#     \"window_id\", floor(col(\"minute\") / 5)\n# )\n\n# TODO: Сгруппируйте по window_id и подсчитайте количество событий\n# result = events_with_window.groupBy(...).agg(...).orderBy(\"window_id\")\n\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, floor, lit, substring\n\nspark = SparkSession.builder.appName(\"tumbling-window\").getOrCreate()\n\nevents = spark.createDataFrame([\n    (\"click\", \"2024-01-01 12:01:00\"),\n    (\"view\",  \"2024-01-01 12:03:00\"),\n    (\"click\", \"2024-01-01 12:06:00\"),\n    (\"click\", \"2024-01-01 12:07:00\"),\n    (\"view\",  \"2024-01-01 12:11:00\"),\n    (\"click\", \"2024-01-01 12:14:00\"),\n    (\"view\",  \"2024-01-01 12:14:30\"),\n], [\"event_type\", \"event_time\"])\n\nevents_with_window = events.withColumn(\n    \"minute\", substring(\"event_time\", 15, 2).cast(\"int\")\n).withColumn(\n    \"window_id\", floor(col(\"minute\") / 5)\n)\n\nresult = events_with_window.groupBy(\"window_id\").agg(count(\"*\").alias(\"event_count\")).orderBy(\"window_id\")\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Окно 0 (00-04 мин) содержит 2 события",
+          "input": "",
+          "expectedOutput": "window_id",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Три окна в результате",
+          "input": "",
+          "expectedOutput": "event_count",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Tumbling window разбивает поток на непересекающиеся фиксированные интервалы. В нашей симуляции 5-минутные окна: window_0 (минуты 0-4): 12:01, 12:03 = 2 события. window_1 (минуты 5-9): 12:06, 12:07 = 2 события. window_2 (минуты 10-14): 12:11, 12:14, 12:14:30 = 3 события. В реальном Structured Streaming это достигается через window() функцию с группировкой по временному столбцу.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

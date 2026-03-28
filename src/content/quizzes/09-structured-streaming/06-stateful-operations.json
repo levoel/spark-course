@@ -1,0 +1,100 @@
+{
+  "lessonSlug": "09-structured-streaming/06-stateful-operations",
+  "moduleId": "09-structured-streaming",
+  "_meta": {
+    "idPrefix": "spark-m09-06",
+    "description": "Use IDs: m09-06-q1, m09-06-q2, ... (4 questions on stateful operations)"
+  },
+  "questions": [
+    {
+      "id": "spark-m09-06-q1",
+      "type": "multiple-choice",
+      "question": "Когда следует использовать mapGroupsWithState вместо встроенных агрегаций (groupBy + count/sum)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "mapGroupsWithState всегда быстрее встроенных агрегаций"
+        },
+        {
+          "id": "b",
+          "text": "mapGroupsWithState используется только для session windows"
+        },
+        {
+          "id": "c",
+          "text": "Когда данных больше 1 ТБ -- встроенные агрегации не масштабируются"
+        },
+        {
+          "id": "d",
+          "text": "Когда нужна произвольная stateful-логика, невозможная через groupBy: кастомный state per key, сложные условия обновления, произвольный output"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "mapGroupsWithState -- низкоуровневый API для произвольной stateful-логики. Примеры: отслеживание последовательности событий пользователя, детекция аномалий с кастомным state, реализация бизнес-правил с таймерами. Встроенные агрегации (count, sum, avg) покрывают стандартные случаи; mapGroupsWithState -- для кастомных.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Stateful-операции -- mapGroupsWithState для произвольной stateful-логики"
+    },
+    {
+      "id": "spark-m09-06-q2",
+      "type": "multiple-choice",
+      "question": "GroupState в mapGroupsWithState имеет два типа timeout: ProcessingTimeTimeout и EventTimeTimeout. В чём ключевое различие?",
+      "options": [
+        {
+          "id": "a",
+          "text": "ProcessingTimeTimeout срабатывает по wall-clock времени (время обработки); EventTimeTimeout срабатывает когда watermark проходит указанный timestamp -- привязан к event time потока"
+        },
+        {
+          "id": "b",
+          "text": "ProcessingTimeTimeout быстрее, EventTimeTimeout точнее"
+        },
+        {
+          "id": "c",
+          "text": "Нет различия -- оба работают по processing time"
+        },
+        {
+          "id": "d",
+          "text": "ProcessingTimeTimeout используется с append mode, EventTimeTimeout -- с update mode"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "ProcessingTimeTimeout привязан к wall-clock: state считается expired через N секунд реального времени после последнего обновления. EventTimeTimeout привязан к watermark: state expires, когда watermark потока проходит timestamp, установленный через state.setTimeoutTimestamp(). EventTimeTimeout точнее для event-time семантики, но требует настроенный watermark.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 6: Stateful-операции -- ProcessingTimeTimeout vs EventTimeTimeout"
+    },
+    {
+      "id": "spark-m09-06-q3",
+      "type": "multiple-choice",
+      "question": "В production streaming pipeline с mapGroupsWithState инженер выбирает state backend. Какой backend рекомендуется для production и почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "HDFS state store -- данные сохраняются на распределённом хранилище"
+        },
+        {
+          "id": "b",
+          "text": "RocksDB state store -- поддерживает state размером больше JVM heap, хранит данные на локальном SSD с асинхронным checkpoint"
+        },
+        {
+          "id": "c",
+          "text": "In-memory state store (по умолчанию) -- самый быстрый вариант"
+        },
+        {
+          "id": "d",
+          "text": "Redis state store -- отдельный сервис для хранения state"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "RocksDB state backend рекомендуется для production, потому что: (1) поддерживает state размером больше JVM heap -- данные хранятся на локальном диске; (2) использует LSM-tree для эффективной записи; (3) выполняет асинхронный checkpoint в фоне. Дефолтный in-memory backend хранит весь state в JVM heap и подвержен OOM при большом state.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Stateful-операции -- RocksDB state backend для production"
+    },
+    {
+      "id": "spark-m09-06-q4",
+      "type": "true-false",
+      "question": "flatMapGroupsWithState отличается от mapGroupsWithState тем, что может возвращать 0 или несколько записей на каждую группу, а mapGroupsWithState -- ровно одну.",
+      "correctAnswer": true,
+      "explanation": "mapGroupsWithState возвращает ровно одну запись на каждый вызов update (одна группа -> один output). flatMapGroupsWithState возвращает Iterator, позволяя вернуть 0, 1 или несколько записей. Это полезно, когда state accumulates данные и output генерируется только при определённых условиях (например, при обнаружении паттерна).",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 6: Stateful-операции -- различие mapGroupsWithState и flatMapGroupsWithState"
+    }
+  ]
+}

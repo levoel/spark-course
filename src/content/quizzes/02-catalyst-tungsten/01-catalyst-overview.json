@@ -1,0 +1,152 @@
+{
+  "lessonSlug": "02-catalyst-tungsten/01-catalyst-overview",
+  "moduleId": "02-catalyst-tungsten",
+  "_meta": {
+    "idPrefix": "spark-m02-01",
+    "description": "Use IDs: m02-01-q1, m02-01-q2, ... for MC/TF; m02-01-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m02-01-q1",
+      "type": "multiple-choice",
+      "question": "Какова правильная последовательность стадий Catalyst pipeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SQL/DataFrame -> Physical Plan -> Logical Plan -> Optimized Plan -> Execution"
+        },
+        {
+          "id": "b",
+          "text": "SQL/DataFrame -> Analyzed Plan -> Unresolved Plan -> Physical Plan -> Optimized Plan"
+        },
+        {
+          "id": "c",
+          "text": "SQL/DataFrame -> Optimizer -> Analyzer -> Parser -> Physical Plan"
+        },
+        {
+          "id": "d",
+          "text": "SQL/DataFrame -> Unresolved Logical Plan (Parser) -> Analyzed Logical Plan (Analyzer) -> Optimized Logical Plan (Optimizer) -> Physical Plan (SparkPlanner)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Catalyst -- многофазный конвейер из 5 стадий. Parser создаёт Unresolved Logical Plan с нерезолвенными ссылками. Analyzer разрешает имена таблиц и колонок через Catalog. Optimizer применяет правила трансформации (predicate pushdown, column pruning). SparkPlanner выбирает конкретные физические стратегии (BroadcastHashJoin vs SortMergeJoin). Порядок принципиален: нельзя оптимизировать нерезолвенный план.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m02-01-q2",
+      "type": "multiple-choice",
+      "question": "Почему Catalyst использует многофазный конвейер (Parser -> Analyzer -> Optimizer -> Planner) вместо однопроходной оптимизации?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Разделение на фазы позволяет каждой стадии работать на своём уровне абстракции: сначала понять структуру запроса, затем проверить корректность, затем оптимизировать, затем выбрать реализацию"
+        },
+        {
+          "id": "b",
+          "text": "Это историческое наследие -- современные оптимизаторы используют один проход"
+        },
+        {
+          "id": "c",
+          "text": "Многофазный подход работает быстрее, потому что каждая фаза выполняется параллельно"
+        },
+        {
+          "id": "d",
+          "text": "Многофазный подход нужен только для SQL -- DataFrame API использует один проход"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Разделение ответственности -- ключевой принцип. Parser работает только со структурой текста. Analyzer проверяет существование таблиц и типы. Optimizer трансформирует план, не меняя семантику. SparkPlanner выбирает физические стратегии на основе статистик. Каждая стадия имеет чёткий контракт и может тестироваться независимо. DataFrame API проходит тот же конвейер -- API и SQL преобразуются в одинаковый Logical Plan.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-01-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer пишет одинаковый запрос двумя способами: через SQL (spark.sql('SELECT ...')) и через DataFrame API (df.filter().select()). Будет ли результат оптимизации одинаковым?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет, SQL-запросы оптимизируются лучше, потому что SQL-парсер понимает структуру запроса"
+        },
+        {
+          "id": "b",
+          "text": "Да, оба API генерируют одинаковый Logical Plan, который проходит через один и тот же Catalyst pipeline с теми же правилами оптимизации"
+        },
+        {
+          "id": "c",
+          "text": "Нет, DataFrame API использует отдельный оптимизатор без CBO"
+        },
+        {
+          "id": "d",
+          "text": "Зависит от версии Spark -- в 3.x да, в 2.x нет"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "DataFrame API и SQL -- два синтаксических варианта, которые конвертируются в один и тот же Logical Plan. Catalyst Optimizer применяет одинаковые правила к обоим. Это одно из ключевых преимуществ архитектуры Spark: независимо от API, план оптимизируется идентично. explain(True) покажет одинаковый Analyzed, Optimized и Physical Plan для эквивалентных запросов.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-01-q4",
+      "type": "multiple-choice",
+      "question": "В чём разница между Rule-Based Optimization (RBO) и Cost-Based Optimization (CBO) в Catalyst?",
+      "options": [
+        {
+          "id": "a",
+          "text": "RBO работает только с SQL, CBO -- только с DataFrame API"
+        },
+        {
+          "id": "b",
+          "text": "RBO быстрее CBO, поэтому используется для маленьких таблиц"
+        },
+        {
+          "id": "c",
+          "text": "RBO применяет детерминированные правила трансформации (predicate pushdown, column pruning), которые всегда улучшают план; CBO использует статистику таблиц для выбора оптимальных стратегий (порядок join)"
+        },
+        {
+          "id": "d",
+          "text": "CBO полностью заменил RBO в Spark 3.x"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "RBO -- набор правил, применяемых безусловно: PushDownPredicate, ColumnPruning, ConstantFolding. Эти правила гарантированно не ухудшают план. CBO принимает решения на основе статистик: если таблица A (1 ГБ) joinится с таблицей B (10 МБ), CBO предпочтёт BroadcastHashJoin. Без статистик CBO не может помочь. Оба механизма работают в Optimizer, но RBO применяется всегда, а CBO -- только при наличии статистик (ANALYZE TABLE).",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m02-01-code-1",
+      "type": "code-challenge",
+      "question": "Постройте запрос, проходящий через весь Catalyst pipeline: создайте DataFrame сотрудников, примените цепочку filter (age > 30) -> select (name, salary) -> groupBy (name) -> agg (sum salary). Вызовите show(). Catalyst оптимизирует этот запрос одинаково независимо от того, написан он через DataFrame API или SQL.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import sum\n\nspark = SparkSession.builder.appName(\"catalyst-pipeline\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(\"Alice\", 35, \"Engineering\", 120000),\n     (\"Bob\", 28, \"Marketing\", 85000),\n     (\"Carol\", 42, \"Engineering\", 150000),\n     (\"Dave\", 31, \"Marketing\", 95000),\n     (\"Eve\", 25, \"Engineering\", 110000)],\n    [\"name\", \"age\", \"department\", \"salary\"]\n)\n\n# TODO: Отфильтруйте сотрудников с age > 30\n# step1 = employees.filter(...)\n\n# TODO: Выберите только name и salary\n# step2 = step1.select(...)\n\n# TODO: Сгруппируйте по name и посчитайте sum(salary)\n# result = step2.groupBy(...).agg(...)\n\n# TODO: Вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import sum\n\nspark = SparkSession.builder.appName(\"catalyst-pipeline\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(\"Alice\", 35, \"Engineering\", 120000),\n     (\"Bob\", 28, \"Marketing\", 85000),\n     (\"Carol\", 42, \"Engineering\", 150000),\n     (\"Dave\", 31, \"Marketing\", 95000),\n     (\"Eve\", 25, \"Engineering\", 110000)],\n    [\"name\", \"age\", \"department\", \"salary\"]\n)\n\nstep1 = employees.filter(employees[\"age\"] > 30)\n\nstep2 = step1.select(\"name\", \"salary\")\n\nresult = step2.groupBy(\"name\").agg(sum(\"salary\").alias(\"total_salary\"))\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Alice (age 35) в результате",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Carol (age 42) в результате",
+          "input": "",
+          "expectedOutput": "Carol",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Bob (age 28) отфильтрован",
+          "input": "",
+          "expectedOutput": "Bob",
+          "matchMode": "not_contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Этот запрос проходит весь Catalyst pipeline: Parser создаёт Unresolved Logical Plan из цепочки DataFrame API. Analyzer разрешает имена колонок. Optimizer применяет ColumnPruning (колонки age и department не нужны после select), PushDownPredicate (filter age > 30 опускается к source). SparkPlanner выбирает физические операторы. Результат: Bob (28) и Eve (25) отфильтрованы, остались Alice (35), Carol (42), Dave (31).",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

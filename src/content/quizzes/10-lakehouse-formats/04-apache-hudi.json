@@ -1,0 +1,138 @@
+{
+  "lessonSlug": "10-lakehouse-formats/04-apache-hudi",
+  "moduleId": "10-lakehouse-formats",
+  "_meta": {
+    "idPrefix": "spark-m10-04",
+    "description": "Use IDs: m10-04-q1, m10-04-q2, ... (4 questions on Apache Hudi)"
+  },
+  "questions": [
+    {
+      "id": "spark-m10-04-q1",
+      "type": "multiple-choice",
+      "question": "Hudi предлагает два типа таблиц: Copy-on-Write (COW) и Merge-on-Read (MOR). Какой trade-off между ними?",
+      "options": [
+        {
+          "id": "a",
+          "text": "COW быстрее для записи, MOR быстрее для чтения"
+        },
+        {
+          "id": "b",
+          "text": "Нет trade-off -- MOR лучше COW во всех сценариях"
+        },
+        {
+          "id": "c",
+          "text": "COW поддерживает ACID, MOR -- нет"
+        },
+        {
+          "id": "d",
+          "text": "COW перезаписывает весь Parquet-файл при каждом upsert (медленная запись, быстрое чтение); MOR записывает delta log (быстрая запись, медленнее чтение из-за merge при запросе)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "COW при upsert: читает base Parquet file, merge с обновлениями, записывает новый файл полностью. Write amplification высокий, но чтение -- просто scan Parquet. MOR при upsert: записывает только delta log (append-only, быстро). Чтение -- merge base file + delta logs (медленнее). Compaction периодически сливает delta logs в base files.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 4: Apache Hudi -- trade-off между COW и MOR типами таблиц"
+    },
+    {
+      "id": "spark-m10-04-q2",
+      "type": "multiple-choice",
+      "question": "Что такое incremental query в Hudi и для чего он используется?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Запрос, который читает только изменения (inserts, updates, deletes) с указанного instant на timeline -- позволяет строить инкрементальные ETL-пайплайны без повторной обработки всех данных"
+        },
+        {
+          "id": "b",
+          "text": "Запрос, который автоматически увеличивает число партиций"
+        },
+        {
+          "id": "c",
+          "text": "Запрос с автоматической пагинацией результатов"
+        },
+        {
+          "id": "d",
+          "text": "Запрос, который постепенно загружает данные по мере прокрутки"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Incremental query -- уникальная фича Hudi. Вместо полного scan таблицы, вы указываете beginInstantTime и получаете только изменения с этого момента. Это позволяет строить инкрементальные ETL: Silver-слой читает только новые/изменённые записи из Bronze, а не перечитывает всю таблицу.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Apache Hudi -- incremental query для инкрементальных ETL-пайплайнов"
+    },
+    {
+      "id": "spark-m10-04-q3",
+      "type": "multiple-choice",
+      "question": "Timeline в Hudi -- центральное понятие архитектуры. Из чего состоит timeline?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Из SQL-запросов, выполненных над таблицей"
+        },
+        {
+          "id": "b",
+          "text": "Из упорядоченной последовательности instants (моментов времени), каждый из которых представляет атомарную операцию: commit, deltacommit, compaction, clean"
+        },
+        {
+          "id": "c",
+          "text": "Из partition metadata файлов"
+        },
+        {
+          "id": "d",
+          "text": "Из Kafka offset для streaming ingestion"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Timeline -- упорядоченная последовательность instants в директории .hoodie/timeline/. Каждый instant имеет timestamp и тип: commit (COW write), deltacommit (MOR write), compaction (merge delta logs), clean (удаление старых файлов). Timeline обеспечивает ACID, time travel и incremental queries.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 4: Apache Hudi -- timeline и instants как основа архитектуры"
+    },
+    {
+      "id": "spark-m10-04-q4",
+      "type": "true-false",
+      "question": "Compaction в MOR-таблице Hudi сливает delta log файлы в base Parquet файлы, улучшая read performance за счёт write throughput.",
+      "correctAnswer": true,
+      "explanation": "Compaction в MOR-таблице читает base file и все его delta logs, merge их в новый base file. После compaction чтение ускоряется (один файл вместо base + N logs). Compaction запускается периодически (по расписанию или по условию) и потребляет ресурсы, уменьшая write throughput на время выполнения.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 4: Apache Hudi -- compaction в MOR-таблицах"
+    },
+    {
+      "id": "spark-m10-04-code-1",
+      "type": "code-challenge",
+      "question": "Симуляция upsert/merge-on-read паттерна Apache Hudi: у вас есть существующая таблица и порция обновлений. Объедините их (union), затем для каждого ключа оставьте только самую свежую запись (по updated_at) используя window-функцию row_number. Выведите дедуплицированный результат.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, row_number, desc\nfrom pyspark.sql.window import Window\n\nspark = SparkSession.builder.appName(\"hudi-upsert-sim\").getOrCreate()\n\n# Существующие записи\nexisting = spark.createDataFrame([\n    (1, \"Alice\",   \"alice@v1.com\",   \"2024-01-01 10:00:00\"),\n    (2, \"Bob\",     \"bob@v1.com\",     \"2024-01-01 10:00:00\"),\n    (3, \"Carol\",   \"carol@v1.com\",   \"2024-01-01 10:00:00\"),\n], [\"user_id\", \"name\", \"email\", \"updated_at\"])\n\n# Входящие обновления\nupdates = spark.createDataFrame([\n    (1, \"Alice\",   \"alice@v2.com\",   \"2024-01-02 15:00:00\"),\n    (4, \"Dave\",    \"dave@v1.com\",    \"2024-01-02 15:00:00\"),\n], [\"user_id\", \"name\", \"email\", \"updated_at\"])\n\n# TODO: Объедините existing и updates через union\n# combined = existing.union(updates)\n\n# TODO: Создайте window по user_id с сортировкой по updated_at DESC\n# w = Window.partitionBy(...).orderBy(...)\n\n# TODO: Добавьте row_number и оставьте только rn == 1\n# result = combined.withColumn(\"rn\", row_number().over(w)).filter(...).drop(\"rn\")\n\n# result.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, row_number, desc\nfrom pyspark.sql.window import Window\n\nspark = SparkSession.builder.appName(\"hudi-upsert-sim\").getOrCreate()\n\nexisting = spark.createDataFrame([\n    (1, \"Alice\",   \"alice@v1.com\",   \"2024-01-01 10:00:00\"),\n    (2, \"Bob\",     \"bob@v1.com\",     \"2024-01-01 10:00:00\"),\n    (3, \"Carol\",   \"carol@v1.com\",   \"2024-01-01 10:00:00\"),\n], [\"user_id\", \"name\", \"email\", \"updated_at\"])\n\nupdates = spark.createDataFrame([\n    (1, \"Alice\",   \"alice@v2.com\",   \"2024-01-02 15:00:00\"),\n    (4, \"Dave\",    \"dave@v1.com\",    \"2024-01-02 15:00:00\"),\n], [\"user_id\", \"name\", \"email\", \"updated_at\"])\n\ncombined = existing.union(updates)\n\nw = Window.partitionBy(\"user_id\").orderBy(desc(\"updated_at\"))\n\nresult = combined.withColumn(\"rn\", row_number().over(w)).filter(col(\"rn\") == 1).drop(\"rn\")\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Alice обновлена до v2 email",
+          "input": "",
+          "expectedOutput": "alice@v2.com",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Bob остался без изменений",
+          "input": "",
+          "expectedOutput": "bob@v1.com",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Dave добавлен как новая запись",
+          "input": "",
+          "expectedOutput": "Dave",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Apache Hudi реализует upsert через merge-on-read: новые данные записываются в delta log, а при чтении Hudi автоматически мержит base files с delta logs, оставляя последнюю версию каждой записи. В нашей симуляции union + window(row_number) воспроизводит эту логику: Alice получает обновлённый email (v2), Bob и Carol остаются без изменений, Dave — новая вставка. Результат: 4 уникальные записи с актуальными данными.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

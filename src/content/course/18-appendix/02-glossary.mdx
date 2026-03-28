@@ -1,0 +1,128 @@
+---
+title: "Глоссарий"
+description: "Словарь ключевых терминов Apache Spark, используемых в курсе"
+order: 2
+difficulty: "beginner"
+estimatedTime: 10
+topics: ["Глоссарий", "Термины", "Определения"]
+---
+
+# Глоссарий
+
+Ключевые термины, используемые в курсе. Определения на русском, термины на английском (как принято в индустрии).
+
+---
+
+## Архитектура и ядро
+
+**Action** — операция, которая запускает выполнение DAG и возвращает результат driver-у. Примеры: `collect()`, `count()`, `show()`, `write()`. Без action ни один код не выполняется (lazy evaluation).
+
+**Catalyst Optimizer** — rule-based и cost-based optimizer в Spark SQL. Трансформирует логический план запроса в оптимальный физический план через 4 фазы: Analysis → Logical Optimization → Physical Planning → Code Generation.
+
+**Cluster Manager** — внешний сервис, управляющий ресурсами кластера. Поддерживаемые: YARN, Kubernetes, Mesos, Standalone.
+
+**DAG (Directed Acyclic Graph)** — граф зависимостей между RDD-партициями. DAGScheduler разбивает граф на stage-и по shuffle-границам.
+
+**DataFrame** — распределённая коллекция данных с именованными колонками, аналогичная таблице в реляционной БД. Основной API для работы с данными в Spark.
+
+**Dataset** — типизированный DataFrame (только в Scala/Java). В PySpark DataFrame = Dataset[Row].
+
+**Driver** — процесс, который координирует выполнение Spark-приложения. Запускает SparkContext, создаёт DAG, распределяет task-и по executor-ам.
+
+**Executor** — JVM-процесс на worker-ноде, выполняющий task-и и хранящий данные в памяти/на диске. Каждое приложение имеет свои executor-ы.
+
+**Job** — набор stage-ей, создаваемый при вызове action. Один action = один job.
+
+**Lazy Evaluation** — стратегия, при которой трансформации не выполняются сразу, а записываются в DAG. Выполнение начинается только при вызове action.
+
+**Partition** — логическая единица параллелизма. Каждая partition обрабатывается одним task-ом на одном ядре. Число partition-ов определяет степень параллелизма.
+
+**RDD (Resilient Distributed Dataset)** — низкоуровневая абстракция распределённых данных. Иммутабельная, партиционированная коллекция с lineage для восстановления. DataFrame строится поверх RDD.
+
+**SparkContext** — главная точка входа в Spark (до Spark 2.0). Заменён на SparkSession.
+
+**SparkSession** — унифицированная точка входа в Spark (с Spark 2.0). Объединяет SparkContext, SQLContext, HiveContext.
+
+**Stage** — набор task-ов, которые могут выполняться параллельно без shuffle. Stage-и разделяются shuffle-границами.
+
+**Task** — единица выполнения, обрабатывающая одну partition на одном ядре executor-а.
+
+**Transformation** — операция, создающая новый RDD/DataFrame из существующего. Бывает narrow (без shuffle) и wide (с shuffle).
+
+**Tungsten** — проект оптимизации Spark: off-heap memory management, cache-aware computation, whole-stage codegen. Устраняет JVM overhead.
+
+---
+
+## Performance и оптимизация
+
+**AQE (Adaptive Query Execution)** — механизм динамической оптимизации, который адаптирует план выполнения на основе runtime-статистики. Включает coalesce partitions, skew join handling, dynamic partition pruning.
+
+**Broadcast Join** — стратегия join, при которой маленькая таблица рассылается всем executor-ам, избегая shuffle большой таблицы. Порог: `spark.sql.autoBroadcastJoinThreshold`.
+
+**Codegen (Code Generation)** — генерация Java-байткода из Catalyst-плана вместо интерпретации. Whole-stage codegen объединяет цепочку операторов в один метод.
+
+**Data Skew** — неравномерное распределение данных по partition-ам. Приводит к тому, что один task обрабатывает значительно больше данных, чем остальные.
+
+**Dynamic Partition Pruning (DPP)** — оптимизация, при которой фильтр из dimension-таблицы join-а применяется к fact-таблице на этапе scan. Снижает объём чтения.
+
+**Narrow Transformation** — трансформация, при которой каждая output-partition зависит от одной input-partition (1:1). Примеры: `filter()`, `map()`, `select()`. Не вызывает shuffle.
+
+**Shuffle** — перераспределение данных между executor-ами по сети. Самая дорогая операция в Spark. Возникает при `groupBy()`, `join()`, `repartition()`.
+
+**Spill** — запись данных на диск, когда executor-у не хватает памяти для shuffle-буферов или сортировки. Сигнал нехватки памяти.
+
+**Wide Transformation** — трансформация, при которой output-partition-ы зависят от нескольких input-partition-ов. Примеры: `groupBy()`, `join()`, `distinct()`. Вызывает shuffle.
+
+---
+
+## Streaming
+
+**Checkpoint** — механизм сохранения прогресса streaming query на надёжное хранилище (HDFS, S3). Обеспечивает exactly-once семантику при перезапуске.
+
+**Micro-batch** — модель обработки в Structured Streaming: данные накапливаются за интервал (trigger) и обрабатываются как batch.
+
+**State Store** — key-value хранилище для stateful-операций (aggregation, dedup, session windows). По умолчанию — HDFS-backed, для production рекомендуется RocksDB.
+
+**Structured Streaming** — потоковый API Spark, построенный на DataFrame/Dataset. Трактует поток как бесконечную таблицу.
+
+**Trigger** — определяет, когда запускать следующий micro-batch. Варианты: processingTime, once, availableNow, continuous.
+
+**Watermark** — механизм отслеживания прогресса event time. Определяет, когда можно безопасно отбросить поздние данные.
+
+---
+
+## Форматы и хранение
+
+**Arrow (Apache Arrow)** — columnar in-memory формат данных. Используется для эффективного обмена между Spark (JVM) и Python/pandas.
+
+**Delta Lake** — open-source lakehouse формат от Databricks. ACID-транзакции, time travel, schema enforcement, Z-ordering.
+
+**Hudi (Apache Hudi)** — lakehouse формат для incremental обработки. Copy-on-Write и Merge-on-Read таблицы, compaction.
+
+**Iceberg (Apache Iceberg)** — lakehouse формат с hidden partitioning, schema evolution, time travel. Catalog-based управление таблицами.
+
+**Parquet** — columnar формат файлов. Стандарт де-факто для аналитических workload-ов. Поддерживает predicate pushdown, column pruning.
+
+**ORC (Optimized Row Columnar)** — columnar формат, популярный в Hive-экосистеме. Встроенные индексы и bloom filter-ы.
+
+---
+
+## Нативное выполнение
+
+**Comet** — Apache DataFusion backend для Spark. Заменяет JVM-операторы нативными Rust-реализациями. Неподдерживаемые операторы fallback-ят на JVM.
+
+**Gluten** — plug-in для Spark, заменяющий JVM execution layer на нативные backend-ы (Velox от Meta или ClickHouse).
+
+**Photon** — проприетарный нативный execution engine от Databricks. Написан на C++, оптимизирован для Delta Lake workload-ов.
+
+**Velox** — C++ columnar execution library от Meta. Используется как backend в Gluten и Prestissimo.
+
+---
+
+## Shuffle-сервисы
+
+**Celeborn (Apache Celeborn)** — remote shuffle service (бывший RemoteShuffleService от Alibaba). Хранит shuffle-данные на выделенных worker-нодах.
+
+**ESS (External Shuffle Service)** — встроенный в Spark сервис, позволяющий читать shuffle-данные после завершения executor-а. Запускается на каждой worker-ноде.
+
+**Uniffle (Apache Uniffle)** — remote shuffle service от Tencent. Альтернатива Celeborn с поддержкой HDFS и local disk как storage backend.

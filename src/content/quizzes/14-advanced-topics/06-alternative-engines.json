@@ -1,0 +1,118 @@
+{
+  "lessonSlug": "14-advanced-topics/06-alternative-engines",
+  "moduleId": "14-advanced-topics",
+  "_meta": {
+    "idPrefix": "spark-m14-06",
+    "description": "Use IDs: m14-06-q1, m14-06-q2, ... (4 questions on DataFusion vs Photon, push-based shuffle, external shuffle services)"
+  },
+  "questions": [
+    {
+      "id": "spark-m14-06-q1",
+      "type": "multiple-choice",
+      "question": "В чём ключевое архитектурное отличие DataFusion от Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "DataFusion -- форк Spark, переписанный на C++"
+        },
+        {
+          "id": "b",
+          "text": "DataFusion заменяет Spark для distributed processing на TB+ данных"
+        },
+        {
+          "id": "c",
+          "text": "DataFusion -- расширение Spark для GPU-ускорения"
+        },
+        {
+          "id": "d",
+          "text": "DataFusion написан на Rust, работает нативно поверх Apache Arrow без JVM. Нет GC pauses, предсказуемая производительность. Оптимален для single-node analytics <100GB и embedded сценариев"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "DataFusion -- query engine на Rust, работающий поверх Apache Arrow RecordBatch. Нет JVM, нет garbage collection, предсказуемая производительность. Может быть встроен как библиотека в Rust/Python приложение. Для distributed -- есть Ballista (ранняя стадия). Для TB-scale production Spark остаётся стандартом. DataFusion -- комплемент, не замена Spark.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 6: Альтернативные движки -- DataFusion (Rust + Arrow, single-node, embedded)"
+    },
+    {
+      "id": "spark-m14-06-q2",
+      "type": "multiple-choice",
+      "question": "Photon от Databricks ускоряет Spark SQL в 2-5x. Какой главный trade-off при его использовании?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Vendor lock-in: Photon доступен только в Databricks Runtime. Код совместим со стандартным Spark, но performance gain получают только Databricks customers"
+        },
+        {
+          "id": "b",
+          "text": "Photon требует переписать SQL-запросы в специальном синтаксе"
+        },
+        {
+          "id": "c",
+          "text": "Photon не поддерживает DataFrame API -- только SQL"
+        },
+        {
+          "id": "d",
+          "text": "Photon требует GPU на каждом executor"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Photon -- проприетарный C++ execution engine, заменяющий JVM-based Tungsten. 100% совместим с Spark SQL/DataFrame API без изменений кода. Ускорение 2-5x за счёт native execution, SIMD-оптимизаций. Главный trade-off: vendor lock-in -- доступен только на Databricks Runtime, не open-source. При оценке TCO учитывайте premium pricing.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 6: Альтернативные движки -- Photon (C++ native, vendor lock-in)"
+    },
+    {
+      "id": "spark-m14-06-q3",
+      "type": "multiple-choice",
+      "question": "Как push-based shuffle улучшает производительность по сравнению с традиционным pull-based shuffle?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Push-based shuffle использует GPU для ускорения сортировки"
+        },
+        {
+          "id": "b",
+          "text": "Mapper PUSH-ит блоки на reducer-ноды, где merge service объединяет их в один файл. Reducer читает один merged файл вместо N мелких блоков -- меньше fetch-запросов и sequential read вместо random I/O"
+        },
+        {
+          "id": "c",
+          "text": "Push-based shuffle хранит данные в памяти вместо диска"
+        },
+        {
+          "id": "d",
+          "text": "Push-based shuffle убирает необходимость в shuffle вообще"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Традиционный shuffle: reducer PULL-ит блоки от всех mapper -- N*M мелких fetch-запросов. Push-based shuffle: mapper PUSH-ит блоки на reducer-ноды, merge service объединяет в один файл. Reducer читает один крупный merged файл. Преимущества: меньше fetch-запросов (1 vs N), sequential read вместо random I/O, устойчивость (merged данные на отдельном сервисе).",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 6: Push-based shuffle -- pull vs push и merge service"
+    },
+    {
+      "id": "spark-m14-06-q4",
+      "type": "multiple-choice",
+      "question": "Компания выбирает между Spark, DataFusion и Photon. Данные: 500TB, distributed cluster, production ML pipeline + streaming. Какой выбор правильный?",
+      "options": [
+        {
+          "id": "a",
+          "text": "DataFusion -- быстрее Spark благодаря Rust"
+        },
+        {
+          "id": "b",
+          "text": "Photon -- ускоряет всё, включая ML и streaming"
+        },
+        {
+          "id": "c",
+          "text": "Spark -- единственный движок, покрывающий всю ширину: distributed SQL, MLlib, Structured Streaming, GraphFrames. DataFusion не поддерживает ML/streaming, Photon -- vendor lock-in"
+        },
+        {
+          "id": "d",
+          "text": "Использовать все три одновременно"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Для 500TB distributed с ML + streaming: только Spark покрывает полный стек -- Spark SQL, MLlib, Structured Streaming, GraphFrames, Delta Lake integration. DataFusion: single-node <100GB, без ML/streaming, Ballista в early stage. Photon: ускоряет SQL на Databricks, но vendor lock-in и premium pricing. Spark + ускорители (RAPIDS, Celeborn) -- оптимальный подход.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 6: Позиционирование движков -- Spark как экосистема vs альтернативы для узких ниш"
+    }
+  ]
+}

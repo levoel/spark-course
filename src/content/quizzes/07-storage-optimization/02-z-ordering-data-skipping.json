@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "07-storage-optimization/02-z-ordering-data-skipping",
+  "moduleId": "07-storage-optimization",
+  "_meta": {
+    "idPrefix": "spark-m07-02",
+    "description": "Use IDs: m07-02-q1, m07-02-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m07-02-q1",
+      "type": "multiple-choice",
+      "question": "Как min/max statistics в Parquet row groups обеспечивают data skipping?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Каждый row group хранит min и max значение для каждого столбца; при фильтре WHERE salary > 200000 Spark пропускает row groups с max(salary) < 200000 без чтения данных"
+        },
+        {
+          "id": "b",
+          "text": "Spark создаёт индекс для каждого row group"
+        },
+        {
+          "id": "c",
+          "text": "Min/max statistics используются только для сортировки данных"
+        },
+        {
+          "id": "d",
+          "text": "Data skipping работает только с Bloom-фильтрами"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Parquet footer содержит min/max для каждого column chunk в каждом row group. При predicate pushdown: если фильтр salary > 200000, а row group имеет max(salary) = 150000, весь row group (~128 МБ) пропускается без чтения. Для отсортированных данных data skipping особенно эффективен -- min/max не перекрываются.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-02-q2",
+      "type": "multiple-choice",
+      "question": "Данные отсортированы по date. Запрос: WHERE date BETWEEN '2024-01-01' AND '2024-01-31'. Почему data skipping эффективен?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Parquet автоматически создаёт индекс по date"
+        },
+        {
+          "id": "b",
+          "text": "При сортировке по date row groups содержат непрерывные диапазоны дат (min/max не перекрываются); большинство row groups гарантированно вне диапазона января и пропускаются"
+        },
+        {
+          "id": "c",
+          "text": "Date-столбцы имеют специальную оптимизацию в Parquet"
+        },
+        {
+          "id": "d",
+          "text": "Data skipping работает одинаково для отсортированных и неотсортированных данных"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "При сортировке по date: row group 1 содержит Jan 1-10, row group 2 -- Jan 11-20, и т.д. Диапазоны не перекрываются. Запрос за январь читает только row groups с min(date) <= Jan 31 AND max(date) >= Jan 1. Для года данных: 12 из ~365 row groups (~3% данных). Без сортировки каждый row group содержит все даты -- skipping невозможен.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-02-q3",
+      "type": "multiple-choice",
+      "question": "Что делает Z-ordering и зачем он нужен?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Сжимает данные для уменьшения размера"
+        },
+        {
+          "id": "b",
+          "text": "Создаёт индексы для быстрого поиска"
+        },
+        {
+          "id": "c",
+          "text": "Сортирует данные по нескольким столбцам одновременно (через Z-кривую), обеспечивая эффективный data skipping по любому из этих столбцов"
+        },
+        {
+          "id": "d",
+          "text": "Удаляет дубликаты из данных"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Обычная сортировка оптимизирует data skipping только по первому столбцу. Z-ordering (space-filling curve) чередует биты нескольких столбцов, располагая данные так, что row groups имеют узкие min/max диапазоны по ВСЕМ Z-ordered столбцам. Это позволяет эффективный data skipping при фильтрации по любому из них. Delta Lake: OPTIMIZE ... ZORDER BY (col1, col2).",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m07-02-q4",
+      "type": "true-false",
+      "question": "Z-ordering эффективен для столбцов с очень низкой кардинальностью (например, boolean с 2 значениями).",
+      "correctAnswer": false,
+      "explanation": "Z-ordering оптимален для столбцов со средней-высокой кардинальностью. Для boolean (2 значения) partition pruning по partitionBy('flag') эффективнее -- два раздела вместо Z-ordering overhead. Z-ordering добавляет стоимость переупорядочения данных при OPTIMIZE; для 2 значений это неоправданно. Оптимальная кардинальность для Z-order: тысячи-миллионы уникальных значений.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m07-02-q5",
+      "type": "multiple-choice",
+      "question": "Таблица не отсортирована. Запрос WHERE city = 'Москва'. Каждый row group содержит все 200 городов. Какова эффективность data skipping?",
+      "options": [
+        {
+          "id": "a",
+          "text": "~50% row groups будут пропущены"
+        },
+        {
+          "id": "b",
+          "text": "Зависит от размера Москвы в данных"
+        },
+        {
+          "id": "c",
+          "text": "100% -- Spark найдёт row group с Москвой и пропустит остальные"
+        },
+        {
+          "id": "d",
+          "text": "0% -- каждый row group содержит 'Москва' (min/max покрывают весь диапазон), data skipping невозможен; нужна сортировка или Z-ordering по city"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Без сортировки каждый row group содержит записи всех городов. min(city)='Анадырь', max(city)='Якутск' в каждом row group -- фильтр 'Москва' попадает в каждый диапазон. Data skipping = 0%. Решения: (1) sort by city перед записью; (2) Z-ordering по city; (3) partitionBy('city') для filesystem partitioning.",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

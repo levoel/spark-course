@@ -1,0 +1,114 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/08-pandas-api-on-spark",
+  "moduleId": "03-dataframes-spark-sql",
+  "_meta": {
+    "idPrefix": "spark-m03-08",
+    "description": "Use IDs: m03-08-q1, m03-08-q2, ... for MC/TF; NO code challenges (pyspark.pandas not available in spark_sim.py/Pyodide)"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-08-q1",
+      "type": "multiple-choice",
+      "question": "Чем ps.DataFrame (pyspark.pandas) отличается от pd.DataFrame (pandas)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "ps.DataFrame -- это alias для pd.DataFrame, разницы нет"
+        },
+        {
+          "id": "b",
+          "text": "ps.DataFrame поддерживает только числовые данные, pd.DataFrame -- любые"
+        },
+        {
+          "id": "c",
+          "text": "ps.DataFrame быстрее pd.DataFrame для любых объёмов данных"
+        },
+        {
+          "id": "d",
+          "text": "ps.DataFrame транслирует pandas-операции в Spark DataFrame API, выполняя их распределённо на кластере; pd.DataFrame работает только на одной машине в оперативной памяти"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "ps.DataFrame (pyspark.pandas) предоставляет pandas-совместимый API поверх Spark DataFrame. Код выглядит как pandas, но за кулисами операции транслируются в Spark DataFrame API, проходят через Catalyst optimizer и выполняются распределённо на кластере. pd.DataFrame работает в памяти одной машины. Для данных, помещающихся в RAM, обычный pandas быстрее из-за отсутствия overhead распределённых вычислений.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-08-q2",
+      "type": "multiple-choice",
+      "question": "Почему вызов .to_pandas() на большом ps.DataFrame опасен?",
+      "options": [
+        {
+          "id": "a",
+          "text": ".to_pandas() собирает все данные со всех executors в память driver (одной машины); для 100 ГБ данных и driver с 2 ГБ RAM это гарантированный OutOfMemoryError"
+        },
+        {
+          "id": "b",
+          "text": ".to_pandas() конвертирует данные в несовместимый формат, что может вызвать потерю данных"
+        },
+        {
+          "id": "c",
+          "text": ".to_pandas() удаляет исходный ps.DataFrame после конвертации"
+        },
+        {
+          "id": "d",
+          "text": ".to_pandas() не поддерживается для ps.DataFrame с более чем 10 колонками"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": ".to_pandas() -- это аналог collect() в Spark: собирает ВСЕ данные со всех executors на driver. Если ps.DataFrame содержит 100 ГБ, все 100 ГБ будут перемещены в RAM driver. Типичный driver имеет 1-8 ГБ -- результат: OOM. Правило: используйте .to_pandas() только после агрегации (groupby().sum()), когда результат содержит тысячи строк, а не миллионы.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-08-q3",
+      "type": "multiple-choice",
+      "question": "Какое утверждение верно о гарантиях порядка строк в pyspark.pandas?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Порядок строк гарантирован, как в обычном pandas"
+        },
+        {
+          "id": "b",
+          "text": "Порядок строк НЕ гарантирован без явной сортировки, потому что данные распределены по партициям -- глобальный порядок не определён"
+        },
+        {
+          "id": "c",
+          "text": "Порядок строк гарантирован только для числовых индексов"
+        },
+        {
+          "id": "d",
+          "text": "pyspark.pandas автоматически сортирует данные по первой колонке"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "В обычном pandas порядок строк детерминирован -- данные хранятся в одном массиве в памяти. В pyspark.pandas данные распределены по партициям на разных executors. Локальный порядок внутри партиции сохраняется, но глобальный порядок между партициями не определён. Для гарантированного порядка используйте sort_values() или sort_index().",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-08-q4",
+      "type": "multiple-choice",
+      "question": "Проект Koalas, разработанный Databricks, был интегрирован в PySpark как модуль pyspark.pandas. В какой версии PySpark это произошло?",
+      "options": [
+        {
+          "id": "a",
+          "text": "PySpark 2.4"
+        },
+        {
+          "id": "b",
+          "text": "PySpark 3.0"
+        },
+        {
+          "id": "c",
+          "text": "PySpark 3.2"
+        },
+        {
+          "id": "d",
+          "text": "PySpark 4.0"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Koalas был создан Databricks в 2019 как отдельная библиотека (import databricks.koalas as ks). В PySpark 3.2 (2021) Koalas был интегрирован в PySpark как модуль pyspark.pandas. Если вы встречаете код с import databricks.koalas, замените на import pyspark.pandas as ps -- API практически идентичен.",
+      "bloomLevel": "conceptual"
+    }
+  ]
+}

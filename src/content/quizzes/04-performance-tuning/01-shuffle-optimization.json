@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "04-performance-tuning/01-shuffle-optimization",
+  "moduleId": "04-performance-tuning",
+  "_meta": {
+    "idPrefix": "spark-m04-01",
+    "description": "Use IDs: m04-01-q1, m04-01-q2, ... for MC/TF; m04-01-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m04-01-q1",
+      "type": "multiple-choice",
+      "question": "Какое ключевое слово в выводе explain() указывает на shuffle-операцию?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Sort"
+        },
+        {
+          "id": "b",
+          "text": "FileScan"
+        },
+        {
+          "id": "c",
+          "text": "Exchange"
+        },
+        {
+          "id": "d",
+          "text": "HashAggregate"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Каждый оператор Exchange в физическом плане explain() означает shuffle -- полное перераспределение данных по сети. Sort, FileScan и HashAggregate -- другие операторы, которые не обязательно вызывают shuffle. Чтобы быстро посчитать shuffle в запросе, используйте grep по слову Exchange в выводе explain().",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m04-01-q2",
+      "type": "multiple-choice",
+      "question": "Датасет объёмом 1 ТБ обрабатывается с spark.sql.shuffle.partitions=10. Какой размер каждой shuffle-партиции и какие симптомы вы увидите?",
+      "options": [
+        {
+          "id": "a",
+          "text": "~100 ГБ на партицию; executors будут работать параллельно без проблем"
+        },
+        {
+          "id": "b",
+          "text": "Spark автоматически увеличит число партиций"
+        },
+        {
+          "id": "c",
+          "text": "~10 ГБ на партицию; умеренное замедление, но стабильная работа"
+        },
+        {
+          "id": "d",
+          "text": "~100 ГБ на партицию; OutOfMemoryError на executors, длинные GC паузы, straggler tasks"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "При 10 партициях для 1 ТБ каждая партиция содержит ~100 ГБ данных. Это значительно превышает рекомендуемые 128-256 МБ на партицию. Executor с типичными 4-8 ГБ памяти не сможет обработать 100 ГБ -- будет OOM, длинные GC паузы и spill на диск. Правильная формула: partitions = (data_size_gb * 1024) / target_partition_mb.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m04-01-q3",
+      "type": "multiple-choice",
+      "question": "Перед записью результата нужно уменьшить число партиций с 200 до 10. Какой метод следует использовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "coalesce(10) -- объединение без shuffle (narrow dependency)"
+        },
+        {
+          "id": "b",
+          "text": "repartition(10) -- он гарантирует равномерное распределение"
+        },
+        {
+          "id": "c",
+          "text": "repartition(10) и coalesce(10) идентичны по производительности"
+        },
+        {
+          "id": "d",
+          "text": "Использовать partitionBy(10) вместо обоих"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "coalesce(N) объединяет партиции без shuffle (narrow dependency), что значительно быстрее. repartition(N) выполняет полный shuffle для равномерного распределения. Для простого уменьшения числа файлов перед записью coalesce -- правильный выбор. repartition нужен только для увеличения числа партиций или перераспределения по конкретному столбцу.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m04-01-q4",
+      "type": "true-false",
+      "question": "Predicate Pushdown в Parquet позволяет Spark пропускать целые row groups на основе min/max статистик, не читая данные с диска.",
+      "correctAnswer": true,
+      "explanation": "Верно. Parquet хранит min/max статистику для каждого row group. Когда Spark выполняет фильтр, например WHERE salary > 200000, и row group имеет max(salary)=150000, Spark пропускает весь row group без чтения данных. Это называется Predicate Pushdown и может сократить объём чтения с 100 ГБ до нескольких ГБ.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m04-01-q5",
+      "type": "multiple-choice",
+      "question": "В explain() запроса видно, что Filter находится ПОД оператором Exchange. Что это означает для производительности?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Фильтр выполняется после shuffle -- лишние данные передаются по сети"
+        },
+        {
+          "id": "b",
+          "text": "Catalyst выполнил Predicate Pushdown -- фильтр применяется до shuffle, уменьшая объём передаваемых данных"
+        },
+        {
+          "id": "c",
+          "text": "Filter и Exchange не связаны между собой"
+        },
+        {
+          "id": "d",
+          "text": "Filter под Exchange означает ошибку планирования"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Когда Filter находится ниже Exchange в физическом плане, это означает, что Catalyst успешно применил Predicate Pushdown: данные сначала фильтруются, затем только подходящие записи участвуют в shuffle. Если бы Filter был выше Exchange, все данные прошли бы через shuffle до фильтрации -- значительно дороже.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-01-code-1",
+      "type": "code-challenge",
+      "question": "Оптимизируйте запрос: уменьшите число shuffle-партиций с 200 до 8 (данные всего 1 ГБ) и перед записью используйте coalesce(4) вместо repartition для уменьшения файлов без лишнего shuffle.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"shuffle-opt\").getOrCreate()\n\ndata = [(i, f\"user_{i}\", i * 100) for i in range(100)]\ndf = spark.createDataFrame(data, [\"id\", \"name\", \"salary\"])\n\n# TODO: Установите spark.sql.shuffle.partitions = 8\n# spark.conf.set(...)\n\n# TODO: Выполните groupBy + count\n# result = df.groupBy(...).count()\n\n# TODO: Используйте coalesce(4) и покажите результат\n# result.coalesce(...).show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"shuffle-opt\").getOrCreate()\n\ndata = [(i, f\"user_{i}\", i * 100) for i in range(100)]\ndf = spark.createDataFrame(data, [\"id\", \"name\", \"salary\"])\n\nspark.conf.set(\"spark.sql.shuffle.partitions\", \"8\")\n\nresult = df.groupBy(\"name\").count()\n\nresult.coalesce(4).show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит count",
+          "input": "",
+          "expectedOutput": "count",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Результат содержит user_0",
+          "input": "",
+          "expectedOutput": "user_0",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Данные показаны в табличном формате",
+          "input": "",
+          "expectedOutput": "+",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Для 1 ГБ данных 200 shuffle-партиций создают по ~5 МБ на партицию -- слишком мелко. Установка spark.sql.shuffle.partitions=8 даёт ~128 МБ на партицию, что оптимально. coalesce(4) перед записью/show объединяет партиции без дополнительного shuffle, в отличие от repartition(4).",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

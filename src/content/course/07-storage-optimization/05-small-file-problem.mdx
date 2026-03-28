@@ -1,0 +1,219 @@
+---
+title: "Проблема маленьких файлов"
+description: "Почему маленькие файлы убивают производительность, как они появляются и как решить проблему через repartition, coalesce, AQE и compaction"
+order: 5
+difficulty: "intermediate"
+estimatedTime: 12
+topics: ["Small File Problem", "File Consolidation", "Repartition", "maxRecordsPerFile", "Streaming Output"]
+---
+
+import { CoalesceSkewDiagram, SmallFilesBeforeAfterDiagram } from '../../../components/diagrams/module7';
+
+# Проблема маленьких файлов
+
+## Почему маленькие файлы -- это проблема
+
+Маленькие файлы (< 1MB) создают **три уровня overhead**:
+
+### 1. NameNode overhead (HDFS)
+
+HDFS хранит метаданные каждого файла в памяти NameNode. Каждый файл занимает ~150 байт метаданных. 10 миллионов маленьких файлов = **1.5GB памяти NameNode** только на метаданные.
+
+### 2. Избыточное планирование задач
+
+Spark создаёт **минимум одну задачу (task) на файл**. 10,000 файлов = 10,000 tasks. Каждая task имеет overhead запуска (~5-20ms), scheduling, serialization. На 10,000 задач это **30-200 секунд чистого overhead** до начала полезной работы.
+
+```
+10,000 файлов по 100KB:
+  Overhead: 10,000 tasks × 10ms = 100 секунд
+  Полезная работа: ~5 секунд
+  Итого: 105 секунд (95% -- overhead!)
+
+100 файлов по 10MB:
+  Overhead: 100 tasks × 10ms = 1 секунда
+  Полезная работа: ~5 секунд
+  Итого: 6 секунд (17x быстрее!)
+```
+
+### 3. Плохое сжатие и data skipping
+
+Маленькие файлы содержат мало строк → dictionary encoding и run-length encoding работают хуже. Min/max statistics охватывают узкий диапазон, но при 10,000 файлов Spark тратит больше времени на чтение metadata, чем на пропуск блоков.
+
+## Откуда берутся маленькие файлы
+
+### 1. Over-partitioning
+
+```python
+# ПЛОХО: партиционирование по высококардинальному столбцу
+df.write.partitionBy("user_id").parquet("/data/events/")
+# 10M уникальных user_id = 10M директорий по 1-2 файла!
+
+# ПЛОХО: партиционирование по timestamp с высокой гранулярностью
+df.write.partitionBy("event_timestamp").parquet("/data/events/")
+# Каждая секунда = отдельная партиция!
+```
+
+Подробнее о стратегиях партиционирования -- в модуле M04 (Performance Tuning).
+
+### 2. Streaming micro-batches
+
+```python
+# Streaming job пишет файлы каждые 10 секунд
+df_stream.writeStream \
+  .format("parquet") \
+  .trigger(processingTime="10 seconds") \
+  .start("/data/events/")
+
+# За 1 день: 8,640 micro-batches × N партиций = десятки тысяч файлов!
+```
+
+### 3. Ежедневные append-операции
+
+```python
+# Каждый день добавляется маленькая порция данных
+for day in date_range:
+    small_df = spark.read.parquet(f"/raw/{day}/")  # 50MB
+    small_df.write.mode("append").parquet("/data/aggregated/")
+    # Каждый append создаёт новые файлы (200 по 250KB)
+```
+
+### 4. Joins и filters, уменьшающие данные
+
+```python
+# После фильтрации в каждой партиции остаётся мало строк
+df = spark.read.parquet("/data/events/")  # 200 партиций по 128MB
+filtered = df.filter(col("status") == "error")  # 0.1% строк
+filtered.write.parquet("/data/errors/")  # 200 файлов по 128KB!
+```
+
+## Решения
+
+### 1. `repartition()` перед записью
+
+```python
+# Контролируем количество выходных файлов
+df.repartition(10).write.parquet("/data/output/")
+# 10 файлов оптимального размера
+```
+
+**Недостаток:** `repartition()` вызывает **full shuffle** (перемещение всех данных по сети).
+
+### 2. `coalesce()` для уменьшения партиций
+
+```python
+# Уменьшаем количество партиций БЕЗ full shuffle
+df.coalesce(10).write.parquet("/data/output/")
+```
+
+**Преимущество:** `coalesce()` объединяет партиции **без shuffle** -- просто назначает несколько партиций одному executor.
+**Недостаток:** может создать **неравномерные** файлы, если партиции имеют разный размер.
+
+<CoalesceSkewDiagram client:visible />
+
+### 3. `maxRecordsPerFile` -- ограничение строк на файл
+
+```python
+# Каждый файл содержит максимум 1 миллион строк
+df.write \
+  .option("maxRecordsPerFile", 1000000) \
+  .parquet("/data/output/")
+```
+
+**Полезно, когда:** вы не знаете заранее, сколько данных будет, но хотите предотвратить создание огромных файлов. Не решает проблему маленьких файлов напрямую, но предотвращает обратную проблему.
+
+### 4. AQE Coalesce Shuffle Partitions
+
+Adaptive Query Execution автоматически объединяет маленькие партиции после shuffle:
+
+```python
+# Включено по умолчанию в Spark 3.2+
+spark.conf.set("spark.sql.adaptive.enabled", "true")
+spark.conf.set("spark.sql.adaptive.coalescePartitions.enabled", "true")
+spark.conf.set("spark.sql.adaptive.advisoryPartitionSizeInBytes", "128MB")
+
+# AQE автоматически:
+# 1. Выполняет shuffle
+# 2. Собирает статистику о размере партиций
+# 3. Объединяет маленькие партиции до ~128MB
+```
+
+Подробнее об AQE -- в модуле M05 (AQE Deep-Dive).
+
+### 5. Scheduled compaction (Delta Lake)
+
+```sql
+-- Регулярная компактизация для streaming-таблиц
+OPTIMIZE events
+WHERE event_date >= current_date() - INTERVAL 1 DAY
+```
+
+Это **лучшее решение для streaming** -- не нужно менять streaming job, компактизация выполняется отдельно.
+
+## Before / After: решение проблемы
+
+<SmallFilesBeforeAfterDiagram client:visible />
+
+## Анти-паттерн: партиционирование по timestamp с минутной гранулярностью
+
+```python
+# ПЛОХО: создаёт 525,600 директорий в год (1 в минуту)
+df.write.partitionBy("minute_timestamp").parquet("/data/events/")
+
+# ХОРОШО: партиционируйте по дню или часу
+df.withColumn("event_date", to_date(col("event_timestamp"))) \
+  .write.partitionBy("event_date").parquet("/data/events/")
+# 365 директорий в год -- управляемо
+```
+
+**Правило:** партиция должна содержать **минимум 128MB данных**. Если дневная порция данных < 128MB, партиционируйте по неделе или месяцу.
+
+## Чек-лист диагностики
+
+Если запросы медленные, проверьте:
+
+1. **Количество файлов:** `ls -R /data/table/ | wc -l` или `hadoop fs -count /data/table/`
+2. **Средний размер:** общий размер / количество файлов (цель: 64MB-1GB)
+3. **Файлов на партицию:** если > 500 -- нужна compaction
+4. **Размер файлов:** если средний < 1MB -- критическая проблема
+
+```python
+# Проверка в Spark
+import os
+
+path = "/data/events/"
+files = spark._jvm.org.apache.hadoop.fs.FileSystem \
+  .get(spark._jsc.hadoopConfiguration()) \
+  .listStatus(spark._jvm.org.apache.hadoop.fs.Path(path))
+
+sizes = [f.getLen() for f in files]
+print(f"Файлов: {len(sizes)}")
+print(f"Средний размер: {sum(sizes)/len(sizes)/1024/1024:.1f} MB")
+print(f"Минимальный: {min(sizes)/1024:.1f} KB")
+print(f"Максимальный: {max(sizes)/1024/1024:.1f} MB")
+```
+
+<KnowledgeCheck
+  question="Streaming job пишет в Parquet каждые 10 секунд. За месяц накопилось 250,000 маленьких файлов. Какое решение оптимально и почему?"
+  answer="Оптимальное решение -- scheduled compaction (OPTIMIZE) в Delta Lake, потому что: (1) не нужно менять streaming job; (2) OPTIMIZE объединяет маленькие файлы в крупные (~128MB) без остановки streaming; (3) можно добавить Z-ordering для улучшения data skipping; (4) VACUUM затем очистит старые файлы. Альтернатива для чистого Parquet: отдельный batch job, который repartition + перезаписывает данные за прошлые дни, но это сложнее и не atomic."
+/>
+
+<KnowledgeCheck
+  question="В чём разница между repartition() и coalesce() для решения проблемы маленьких файлов?"
+  answer="repartition(N) выполняет full shuffle -- все данные перемещаются по сети и равномерно распределяются по N партициям. Результат: N файлов одинакового размера. coalesce(N) объединяет партиции без shuffle -- просто назначает несколько partition одному executor. Результат: N файлов, но размеры могут быть неравномерными (зависит от размера исходных партиций). Используйте coalesce, когда нужно уменьшить количество файлов (100 -> 10). Используйте repartition, когда нужно равномерное распределение или увеличение количества файлов."
+/>
+
+## Резюме модуля
+
+Оптимизация хранения данных включает:
+
+1. **Правильный формат** (Parquet для аналитики, Avro для streaming)
+2. **Data skipping** через min/max statistics и Z-ordering
+3. **Bloom filters** для высококардинальных столбцов
+4. **Compaction + vacuum** для обслуживания данных
+5. **Контроль размера файлов** через repartition, coalesce, AQE
+
+Все эти техники работают **вместе** -- Z-ordering эффективен только после compaction, bloom filters дополняют min/max statistics, а AQE автоматически коалесцирует маленькие партиции.
+
+## Что дальше?
+
+В следующем модуле мы перейдём к **мониторингу и наблюдаемости** -- как использовать Spark UI, History Server, Prometheus и Grafana для диагностики production-проблем.

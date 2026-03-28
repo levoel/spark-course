@@ -1,0 +1,122 @@
+{
+  "lessonSlug": "04-performance-tuning/04-broadcast-hints",
+  "moduleId": "04-performance-tuning",
+  "_meta": {
+    "idPrefix": "spark-m04-04",
+    "description": "Use IDs: m04-04-q1, m04-04-q2, ... for MC/TF; m04-04-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m04-04-q1",
+      "type": "multiple-choice",
+      "question": "Как работает Broadcast Join в Spark?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Обе таблицы передаются по сети для перераспределения по join key"
+        },
+        {
+          "id": "b",
+          "text": "Маленькая таблица целиком копируется на каждый executor через broadcast variable, join выполняется локально без shuffle"
+        },
+        {
+          "id": "c",
+          "text": "Большая таблица передаётся на driver для join с маленькой"
+        },
+        {
+          "id": "d",
+          "text": "Spark создаёт индекс по маленькой таблице на HDFS"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "При Broadcast Join маленькая таблица собирается целиком и через broadcast variable отправляется на все executors. Каждый executor выполняет hash lookup локально, без сетевого обмена. Это устраняет shuffle полностью, но работает только когда одна таблица помещается в память executor.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m04-04-q2",
+      "type": "multiple-choice",
+      "question": "spark.sql.autoBroadcastJoinThreshold по умолчанию равен 10 МБ. Таблица customers занимает 450 МБ. Как заставить Spark использовать broadcast join?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Использовать repartition() для уменьшения размера таблицы"
+        },
+        {
+          "id": "b",
+          "text": "Broadcast join невозможен для таблиц > 10 МБ"
+        },
+        {
+          "id": "c",
+          "text": "Увеличить autoBroadcastJoinThreshold до 500m или использовать broadcast() hint"
+        },
+        {
+          "id": "d",
+          "text": "Конвертировать таблицу в Parquet для автоматического broadcast"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Два способа: (1) spark.conf.set('spark.sql.autoBroadcastJoinThreshold', '500m') -- увеличить порог; (2) df.join(broadcast(df_small), 'key') -- явный hint, который игнорирует threshold. Hint надёжнее, потому что Catalyst не всегда точно знает размер таблицы после фильтрации.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m04-04-q3",
+      "type": "true-false",
+      "question": "Broadcast join всегда быстрее SortMergeJoin, поэтому следует устанавливать autoBroadcastJoinThreshold максимально большим.",
+      "correctAnswer": false,
+      "explanation": "Broadcast join быстрее только для маленьких таблиц. Если broadcast таблица слишком большая (например, 5 ГБ), то: (1) driver собирает 5 ГБ в память -- возможен OOM; (2) 5 ГБ передаётся каждому executor -- сетевой overhead; (3) каждый executor хранит полную копию -- потребление памяти. Для больших таблиц SortMergeJoin с shuffle эффективнее.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-04-q4",
+      "type": "multiple-choice",
+      "question": "В SQL Tab Spark UI вы видите BroadcastHashJoin вместо ожидаемого SortMergeJoin. Что произошло?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Произошла ошибка оптимизатора"
+        },
+        {
+          "id": "b",
+          "text": "Одна из таблиц оказалась меньше autoBroadcastJoinThreshold, и Catalyst автоматически выбрал broadcast"
+        },
+        {
+          "id": "c",
+          "text": "AQE переключил стратегию join после обнаружения маленькой таблицы"
+        },
+        {
+          "id": "d",
+          "text": "Ответы B и C оба верны -- это может произойти как на этапе Catalyst, так и при AQE"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Broadcast join может быть выбран на двух этапах: (1) Catalyst (compile-time) -- если метаданные показывают, что таблица меньше threshold; (2) AQE (runtime) -- если после выполнения stage реальный размер оказался меньше threshold. AQE может переключить SortMergeJoin на BroadcastHashJoin на основе реальных размеров.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-04-q5",
+      "type": "multiple-choice",
+      "question": "Data engineer использует broadcast hint для таблицы 8 ГБ: df.join(broadcast(big_table), 'key'). Какие проблемы возникнут?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Driver попытается собрать 8 ГБ в память и может получить OOM; если успешно, каждый executor получит 8 ГБ -- огромный сетевой и memory overhead"
+        },
+        {
+          "id": "b",
+          "text": "Spark проигнорирует hint и выберет SortMergeJoin"
+        },
+        {
+          "id": "c",
+          "text": "Join выполнится успешно, но медленнее SortMergeJoin"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически уменьшит таблицу до 10 МБ"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "broadcast() hint заставляет Spark выполнить broadcast join независимо от размера таблицы. Driver собирает 8 ГБ в свою память (OOM при типичных 2-4 ГБ driver memory). Даже если driver выдержит, 8 ГБ передаётся каждому из N executors -- N * 8 ГБ сетевого трафика. broadcast() hint следует использовать только для таблиц, которые гарантированно помещаются в память.",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

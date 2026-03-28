@@ -1,0 +1,118 @@
+{
+  "lessonSlug": "14-advanced-topics/05-rapids-gpu",
+  "moduleId": "14-advanced-topics",
+  "_meta": {
+    "idPrefix": "spark-m14-05",
+    "description": "Use IDs: m14-05-q1, m14-05-q2, ... (4 questions on spark-rapids plugin, GPU vs CPU speedups, limitations, deployment)"
+  },
+  "questions": [
+    {
+      "id": "spark-m14-05-q1",
+      "type": "multiple-choice",
+      "question": "На каком уровне RAPIDS Accelerator заменяет CPU-операции на GPU-реализации?",
+      "options": [
+        {
+          "id": "a",
+          "text": "На уровне Python API -- перехватывает DataFrame-вызовы"
+        },
+        {
+          "id": "b",
+          "text": "На уровне JVM bytecode -- компилирует Java-код под GPU"
+        },
+        {
+          "id": "c",
+          "text": "На уровне RDD -- заменяет RDD-операции на GPU-вызовы"
+        },
+        {
+          "id": "d",
+          "text": "На уровне Catalyst physical plan -- для каждой физической операции (Sort, HashAggregate, Join) плагин проверяет наличие GPU-реализации и заменяет при наличии"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "RAPIDS Accelerator работает на уровне Catalyst physical plan. После логической оптимизации (Catalyst) Spark создаёт физический план с конкретными операторами (Sort, HashAggregate, ShuffledHashJoin). RAPIDS plugin проверяет каждый оператор и заменяет CPU-реализацию на GPU (CUDA kernel). Если операция не поддерживается -- автоматический fallback на CPU. Пользовательский код не меняется.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: RAPIDS -- архитектура и замена операторов на уровне physical plan"
+    },
+    {
+      "id": "spark-m14-05-q2",
+      "type": "multiple-choice",
+      "question": "Какие операции показывают наибольшее ускорение на GPU (RAPIDS), а какие -- наименьшее?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Hash Join (5-10x) и Sort (3-5x) ускоряются больше всего. String operations (2-3x) -- меньше, потому что GPU менее эффективен для sequential string processing"
+        },
+        {
+          "id": "b",
+          "text": "Все операции ускоряются одинаково в ~5x"
+        },
+        {
+          "id": "c",
+          "text": "String operations ускоряются больше всего, join -- меньше"
+        },
+        {
+          "id": "d",
+          "text": "Только ML-задачи ускоряются, ETL -- нет"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Максимальное ускорение на операциях с высоким параллелизмом: Hash Join (5-10x), Sort (3-5x), GroupBy Aggregation (3-7x). GPU содержит тысячи ядер, оптимизированных для параллельных вычислений. String operations ускоряются меньше (2-3x) -- GPU менее эффективен для sequential string processing (UTF-8 parsing, regex). End-to-end ETL pipeline: 2-5x.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 5: RAPIDS -- таблицу ускорений по операциям (Hash Join, Sort, String)"
+    },
+    {
+      "id": "spark-m14-05-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer включил RAPIDS на кластере и запустил PySpark job с Python UDF. Что произойдёт с UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "UDF автоматически ускорится на GPU через RAPIDS"
+        },
+        {
+          "id": "b",
+          "text": "Python UDF выполнится на CPU (fallback). RAPIDS не может ускорить Python UDF -- они выполняются в Python процессе, вне Catalyst physical plan"
+        },
+        {
+          "id": "c",
+          "text": "Job упадёт с ошибкой несовместимости UDF и GPU"
+        },
+        {
+          "id": "d",
+          "text": "UDF перекомпилируется в CUDA код автоматически"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "RAPIDS заменяет физические операторы Spark (Sort, Join, Aggregate) на GPU-реализации. Python UDF выполняются в отдельном Python-процессе через Arrow, вне Catalyst physical plan -- RAPIDS не может их перехватить. При встрече неподдерживаемой операции RAPIDS автоматически делает fallback на CPU. В логах: «cannot run on GPU because ...».",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: RAPIDS -- ограничения и автоматический CPU fallback для неподдерживаемых операций"
+    },
+    {
+      "id": "spark-m14-05-q4",
+      "type": "multiple-choice",
+      "question": "Компания обрабатывает 5GB данных ежедневно. GPU-инстанс стоит ~$1.62/час, CPU -- ~$0.77/час. Стоит ли переходить на GPU-ускорение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- GPU всегда быстрее и окупается"
+        },
+        {
+          "id": "b",
+          "text": "Зависит от количества executor -- на 3+ executor GPU всегда выгоднее"
+        },
+        {
+          "id": "c",
+          "text": "Нет -- на малых данных (<10GB) overhead переноса CPU->GPU может превысить выигрыш. GPU оправдан для регулярных jobs на >100GB, где 3-5x ускорение окупает 2x разницу в цене"
+        },
+        {
+          "id": "d",
+          "text": "Да, но только если использовать spot instances"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "GPU не оправдан для 5GB: overhead переноса данных между CPU и GPU памятью, startup overhead GPU driver. GPU-инстанс в ~2x дороже CPU. GPU оправдан: регулярные ETL-jobs на >100GB (ежедневно/ежечасно), где 3-5x ускорение окупает разницу в цене. Для ad-hoc запросов и малых данных GPU -- overkill.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: RAPIDS -- cost considerations и когда GPU оправдан (>100GB, регулярные jobs)"
+    }
+  ]
+}

@@ -1,0 +1,116 @@
+---
+title: "Catalyst Optimizer: Обзор архитектуры"
+description: "Как устроен многофазный оптимизатор Catalyst -- от SQL-запроса до исполняемого DAG"
+order: 1
+difficulty: "beginner"
+estimatedTime: 15
+topics: ["Catalyst", "Query Optimizer", "Plan", "Rule-Based Optimization"]
+---
+
+import { CatalystPipelineDiagram } from '../../../components/diagrams/module2';
+
+# Catalyst Optimizer: Обзор архитектуры
+
+## Зачем нужен оптимизатор?
+
+Когда вы пишете SQL-запрос или строите цепочку DataFrame-трансформаций, Spark **не выполняет ваш код буквально**. Вместо этого каждый запрос проходит через **Catalyst Optimizer** -- многофазный оптимизатор, который перестраивает план выполнения для максимальной производительности.
+
+Рассмотрим простой пример:
+
+```sql
+SELECT name FROM users WHERE age > 30
+```
+
+Без оптимизатора Spark мог бы сначала прочитать **все колонки** таблицы `users`, затем отфильтровать строки по `age > 30`, и только потом отбросить ненужные колонки. С Catalyst тот же запрос выполнится значительно эффективнее: фильтр сдвинется ближе к источнику данных, а ненужные колонки не будут прочитаны вообще.
+
+## Что такое Catalyst?
+
+Catalyst -- это **расширяемый оптимизатор запросов**, который использует гибридный подход:
+
+- **Rule-based optimization (RBO)** -- набор детерминированных правил трансформации: predicate pushdown, column pruning, constant folding. Эти правила применяются всегда и гарантированно улучшают план.
+- **Cost-based optimization (CBO)** -- статистический подход для выбора оптимальных стратегий (например, порядок join-операций). CBO использует метаданные таблиц: размер, количество строк, распределение значений.
+
+<Callout type="warning">
+**Частая ошибка:** Catalyst -- это НЕ один этап оптимизации. Это **многофазный конвейер** из пяти последовательных стадий, каждая из которых трансформирует план запроса. Понимание этих стадий -- ключ к чтению `explain()` вывода и диагностике медленных запросов.
+</Callout>
+
+## Конвейер Catalyst: 5 стадий
+
+Каждый запрос в Spark проходит через следующие стадии:
+
+1. **SQL / DataFrame API** -- ваш код парсится в дерево выражений
+2. **Unresolved Logical Plan** -- парсер создает план с нерезолвенными ссылками (Parser)
+3. **Analyzed Logical Plan** -- Analyzer разрешает имена таблиц и колонок через Catalog
+4. **Optimized Logical Plan** -- Optimizer применяет правила трансформации (RBO + CBO)
+5. **Physical Plan** -- SparkPlanner выбирает конкретные стратегии выполнения
+
+<CatalystPipelineDiagram client:load />
+
+## Пример: путь запроса через Catalyst
+
+Проследим, как простой запрос трансформируется на каждой стадии:
+
+```python
+result = spark.sql("""
+    SELECT name FROM users WHERE age > 30
+""")
+
+# Посмотрим полный план
+result.explain(True)
+```
+
+**Стадия 1 -- Parser:** Текст SQL разбирается в дерево. Таблица `users` становится `UnresolvedRelation('users')`, колонка `age` -- `UnresolvedAttribute('age')`.
+
+**Стадия 2 -- Analyzer:** Catalyst обращается к **Catalog** (метаданному хранилищу) и узнает, что таблица `users` существует в базе `default`, колонка `age` имеет тип `Int`, а `name` -- тип `String`.
+
+**Стадия 3 -- Optimizer:** Применяются правила оптимизации:
+- **ColumnPruning** -- из таблицы читаются только `name` и `age` (без остальных колонок)
+- **PushDownPredicate** -- фильтр `age > 30` сдвигается к источнику данных
+
+**Стадия 4 -- SparkPlanner:** Логический план превращается в физический план с конкретными операторами: `FileScan parquet` вместо абстрактного `Relation`, `Filter` с конкретным predicate.
+
+**Стадия 5 -- Code Generation:** Whole-Stage CodeGen объединяет операторы в единый Java-метод, минимизируя виртуальные вызовы.
+
+## DataFrame API и SQL -- один и тот же путь
+
+Важно понимать: **DataFrame API и SQL-запросы проходят через одинаковый конвейер Catalyst**. Два эквивалентных запроса:
+
+```python
+# DataFrame API
+df.filter(df.age > 30).select("name")
+
+# SQL
+spark.sql("SELECT name FROM users WHERE age > 30")
+```
+
+оба генерируют **идентичный** Optimized Logical Plan. Spark не отдает предпочтение ни одному из API -- оптимизатор работает на уровне логического плана, который абстрагирован от синтаксиса.
+
+## Расширяемость Catalyst
+
+Catalyst построен на основе **деревьев (trees)** и **правил (rules)**. Каждый план -- это дерево узлов (nodes), а каждая оптимизация -- это правило, которое трансформирует дерево. Это архитектурное решение делает Catalyst **расширяемым**: вы можете добавлять собственные правила оптимизации через `SparkSessionExtensions`.
+
+Внутренне каждое правило реализует паттерн `TreeNode.transform`:
+
+```scala
+// Пример правила: заменяет x AND true → x
+object SimplifyBooleanExpressions extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+    case And(left, Literal(true, BooleanType)) => left
+  }
+}
+```
+
+Optimizer итеративно применяет набор правил до **фиксированной точки** (fixed point) -- пока план перестанет изменяться.
+
+<Callout type="tip">
+**Как увидеть все стадии?** Используйте `df.explain(True)` (или `df.explain("extended")` в Spark 3.0+). Вывод покажет 4 секции: Parsed Logical Plan, Analyzed Logical Plan, Optimized Logical Plan, Physical Plan. Мы детально разберем каждую секцию в следующих уроках.
+</Callout>
+
+## Что дальше?
+
+В следующем уроке мы подробно разберем первые две стадии: как Parser создает Unresolved Logical Plan и как Analyzer разрешает ссылки через Catalog. Вы научитесь читать секции `Parsed Logical Plan` и `Analyzed Logical Plan` в выводе `explain(true)`.
+
+<KnowledgeCheck
+  question="Почему Catalyst использует гибридный подход (rule-based + cost-based), а не только один из них?"
+  answer="Rule-based оптимизации (predicate pushdown, column pruning) — детерминированные и всегда улучшают план, но они не учитывают размеры данных. Cost-based оптимизации (порядок join, выбор стратегии) зависят от статистик таблиц и могут выбрать оптимальную стратегию для конкретного набора данных. Гибридный подход гарантирует базовые оптимизации (RBO) и адаптируется к реальным объемам данных (CBO)."
+/>

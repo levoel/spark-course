@@ -1,0 +1,171 @@
+---
+title: "History Server: анализ завершенных приложений"
+description: "Настройка History Server для post-mortem анализа Spark-приложений, event logs и retention policies"
+order: 2
+difficulty: "intermediate"
+estimatedTime: 10
+topics: ["History Server", "Event Logs", "spark.eventLog", "spark.history"]
+---
+
+# History Server: анализ завершённых приложений
+
+Spark UI доступен только пока приложение работает. Когда job завершается (или падает), UI исчезает вместе с процессом. **History Server** решает эту проблему -- он читает event logs и воссоздаёт UI для завершённых приложений.
+
+Это критический инструмент для production: когда ночной ETL pipeline упал в 3 часа ночи, вы приходите утром и анализируете его через History Server.
+
+## Как это работает
+
+1. **Spark-приложение** записывает все события (job started, stage completed, task metrics) в **event log** файл
+2. **Event log** сохраняется на persistent storage (HDFS, S3, локальная FS)
+3. **History Server** сканирует директорию с event logs и воссоздаёт UI для каждого приложения
+
+```
+Spark App → Event Log File → History Server → UI (порт 18080)
+             (JSON events)     (reads logs)
+```
+
+## Включение Event Logs
+
+По умолчанию event logging **отключён**. Включите его в конфигурации Spark:
+
+```python
+spark = (
+    SparkSession.builder
+    .appName("my-etl-pipeline")
+    .config("spark.eventLog.enabled", "true")
+    .config("spark.eventLog.dir", "hdfs:///spark-events/")
+    .getOrCreate()
+)
+```
+
+Или через `spark-defaults.conf`:
+
+```properties
+spark.eventLog.enabled           true
+spark.eventLog.dir               hdfs:///spark-events/
+spark.eventLog.compress          true
+spark.eventLog.rolling.enabled   true
+spark.eventLog.rolling.maxFileSize  128m
+```
+
+**Ключевые параметры:**
+
+| Параметр | Значение | Описание |
+|----------|----------|----------|
+| `spark.eventLog.enabled` | true | Включает запись event logs |
+| `spark.eventLog.dir` | hdfs:///spark-events/ | Директория для event logs |
+| `spark.eventLog.compress` | true | Сжатие логов (lz4/zstd) |
+| `spark.eventLog.rolling.enabled` | true | Rolling logs для долгих приложений |
+| `spark.eventLog.rolling.maxFileSize` | 128m | Максимальный размер одного файла |
+
+<Callout type="warning">
+**Анти-паттерн: не включать event logging в production**
+
+Без event logs вы не сможете провести post-mortem анализ упавших jobs. Это как отключить логирование на production сервере -- проблемы будут, но вы не сможете их диагностировать. Включайте `spark.eventLog.enabled=true` **всегда**.
+</Callout>
+
+## Хранение Event Logs
+
+Event logs можно сохранять на разных storage:
+
+### HDFS (on-premise)
+```properties
+spark.eventLog.dir  hdfs://namenode:8020/spark-events/
+```
+
+### Amazon S3 (cloud)
+```properties
+spark.eventLog.dir  s3a://my-bucket/spark-events/
+```
+
+### Локальная файловая система (dev/testing)
+```properties
+spark.eventLog.dir  file:///tmp/spark-events/
+```
+
+<KnowledgeCheck
+  question="Почему для production рекомендуется использовать HDFS или S3 для хранения event logs, а не локальную файловую систему?"
+  answer="Локальная файловая система привязана к конкретной машине. В кластере Spark driver может запускаться на разных узлах (особенно в cluster mode), и event logs на локальной FS будут разбросаны по разным машинам. HDFS и S3 обеспечивают centralized storage, доступный с любого узла. Кроме того, HDFS/S3 обеспечивают replication и durability -- event logs не потеряются при сбое диска."
+/>
+
+## Настройка History Server
+
+History Server -- отдельный процесс, который запускается на выделенном узле:
+
+```bash
+# Создать директорию для event logs
+hdfs dfs -mkdir -p /spark-events
+
+# Запустить History Server
+$SPARK_HOME/sbin/start-history-server.sh
+```
+
+Конфигурация в `spark-defaults.conf`:
+
+```properties
+# Директория с event logs (должна совпадать с spark.eventLog.dir)
+spark.history.fs.logDirectory          hdfs:///spark-events/
+
+# UI порт (по умолчанию 18080)
+spark.history.ui.port                  18080
+
+# Сколько приложений хранить в UI
+spark.history.retainedApplications     50
+
+# Автоматическая очистка старых логов
+spark.history.fs.cleaner.enabled       true
+spark.history.fs.cleaner.interval      1d
+spark.history.fs.cleaner.maxAge        7d
+
+# Сколько потоков для параллельного чтения логов
+spark.history.fs.numReplayThreads      4
+```
+
+**Retention и очистка:**
+
+В production event logs могут быстро занять терабайты. Настройте автоматическую очистку:
+
+- `spark.history.fs.cleaner.enabled=true` -- включить cleaner
+- `spark.history.fs.cleaner.maxAge=7d` -- удалять логи старше 7 дней
+- Для compliance-требований увеличьте до 30-90 дней
+
+## Навигация по History Server
+
+History Server UI (порт 18080) показывает:
+
+1. **Incomplete Applications** -- приложения, которые ещё работают (или упали без graceful shutdown)
+2. **Completed Applications** -- завершённые приложения с полным UI
+
+Для каждого приложения вы видите тот же UI, что и при работе приложения: Jobs, Stages, Storage, Environment, Executors.
+
+**Полезный workflow для post-mortem:**
+
+```
+1. Откройте History Server (http://host:18080)
+2. Найдите упавшее приложение по имени или времени
+3. Jobs tab → найдите FAILED job
+4. Stages tab → найдите FAILED stage
+5. Tasks tab → найдите FAILED task
+6. Кликните на task → stack trace + metrics
+```
+
+## Event Log в Spark Connect
+
+В Spark 4.0 с Spark Connect архитектурой event logging настраивается на стороне сервера:
+
+```properties
+# Spark Connect server конфигурация
+spark.eventLog.enabled    true
+spark.eventLog.dir        hdfs:///spark-events/
+```
+
+Все клиентские сессии автоматически записывают events через сервер. Это упрощает управление -- настраиваете один раз на сервере, а не на каждом клиенте.
+
+<KnowledgeCheck
+  question="ETL pipeline упал в 3:00 ночи. У вас настроен History Server с spark.history.fs.cleaner.maxAge=7d. Сегодня -- день 8. Сможете ли вы проанализировать причину падения?"
+  answer="Нет. При spark.history.fs.cleaner.maxAge=7d event logs автоматически удаляются через 7 дней. На 8-й день лог упавшего приложения уже удалён. Для production pipeline с SLA рекомендуется увеличить maxAge до 30+ дней или дополнительно архивировать event logs в долгосрочное хранилище (например, Glacier для S3)."
+/>
+
+## Что дальше?
+
+History Server даёт post-mortem анализ, но не показывает метрики в реальном времени и не позволяет настроить алерты. Для continuous monitoring вам нужна **система метрик** -- Prometheus + Grafana. В следующем уроке мы разберём, как Spark экспортирует метрики через встроенный PrometheusServlet.

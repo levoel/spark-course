@@ -1,0 +1,156 @@
+{
+  "lessonSlug": "12-production-operations/08-production-best-practices",
+  "moduleId": "12-production-operations",
+  "_meta": {
+    "idPrefix": "spark-m12-08",
+    "description": "Use IDs: m12-08-q1, m12-08-q2, ... (4 questions on logging, error handling, capacity)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-08-q1",
+      "type": "multiple-choice",
+      "question": "Зачем разделять Spark-конфигурацию на spark-defaults.conf (baseline) и per-job overrides?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark-defaults.conf не поддерживает все параметры"
+        },
+        {
+          "id": "b",
+          "text": "Per-job overrides быстрее применяются при старте"
+        },
+        {
+          "id": "c",
+          "text": "Baseline задаёт общие production-настройки (AQE, security, monitoring). Per-job overrides позволяют тюнить конкретный job (shuffle partitions, memory) без изменения кластерных defaults"
+        },
+        {
+          "id": "d",
+          "text": "Это требование Kubernetes -- YARN поддерживает только один конфиг"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "spark-defaults.conf -- production baseline для всего кластера: AQE, security (TLS, ACLs), monitoring (event log, metrics). Per-job overrides (через SparkSession.config или spark-submit --conf) позволяют тюнить конкретный job: heavy-join job увеличивает shuffle.partitions до 400 и executor.memory до 16g. Это разделение предотвращает конфигурационный хаос.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 8: Best Practices -- configuration management и per-job overrides"
+    },
+    {
+      "id": "spark-m12-08-q2",
+      "type": "multiple-choice",
+      "question": "Какой параметр обязателен для production monitoring и позволяет анализировать завершённые Spark jobs через History Server?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.ui.enabled=true"
+        },
+        {
+          "id": "b",
+          "text": "spark.driver.log.level=INFO"
+        },
+        {
+          "id": "c",
+          "text": "spark.metrics.conf -- файл конфигурации метрик"
+        },
+        {
+          "id": "d",
+          "text": "spark.eventLog.enabled=true с указанием spark.eventLog.dir для сохранения event logs"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "spark.eventLog.enabled=true сохраняет event logs каждого job на HDFS/S3. Spark History Server читает эти логи и предоставляет UI для анализа завершённых jobs -- stages, tasks, DAG, SQL plans. Без event log данные о job теряются после завершения. spark.ui.enabled -- live UI, доступен только во время работы job.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 8: Best Practices -- monitoring и spark.eventLog"
+    },
+    {
+      "id": "spark-m12-08-q3",
+      "type": "multiple-choice",
+      "question": "spark.task.maxFailures=4 в production. Что это означает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Каждый отдельный task может упасть до 4 раз -- Spark перезапустит его на другом executor. После 4 неудач task помечается как permanent failure"
+        },
+        {
+          "id": "b",
+          "text": "Job завершится ошибкой после 4 failed tasks в общей сложности"
+        },
+        {
+          "id": "c",
+          "text": "Spark перезапустит весь stage 4 раза при ошибке"
+        },
+        {
+          "id": "d",
+          "text": "После 4 ошибок Spark автоматически увеличит executor memory"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "spark.task.maxFailures определяет максимальное число retry для одного task. При каждом сбое Spark перезапускает task на другом executor (возможно, на другом worker). Это помогает при transient errors (network glitch, spot instance reclaim). После maxFailures неудач -- task и весь job помечаются failed.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 8: Best Practices -- stability settings и task retry"
+    },
+    {
+      "id": "spark-m12-08-q4",
+      "type": "multiple-choice",
+      "question": "Зачем использовать environment-specific конфигурации (spark-defaults-dev.conf, spark-defaults-prod.conf)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark не позволяет одному кластеру обслуживать несколько окружений"
+        },
+        {
+          "id": "b",
+          "text": "Dev использует local[4] и 2g memory для быстрого цикла разработки. Prod использует полный кластер с security, monitoring и production-grade ресурсами. Одна конфигурация не подходит для всех"
+        },
+        {
+          "id": "c",
+          "text": "Это требование CI/CD -- GitHub Actions не поддерживает единый конфиг"
+        },
+        {
+          "id": "d",
+          "text": "Environment-specific конфиги нужны только для Databricks"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Разные окружения имеют разные требования: dev -- local[4], spark.ui.enabled=false, минимальная memory для быстрого цикла. Staging -- small cluster с sample data для integration tests. Prod -- полный кластер с security (TLS, ACLs), monitoring (event logs, metrics), production-grade ресурсами. spark-submit --properties-file выбирает конфиг по окружению.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 8: Best Practices -- environment-specific configurations"
+    },
+    {
+      "id": "spark-m12-08-code-1",
+      "type": "code-challenge",
+      "question": "Выполните аудит конфигурации Spark-приложения. У вас есть DataFrame с параметрами (param_name, param_value, category). Обнаружьте анти-паттерны: shuffle partitions > 1000, executor memory = 1g, отключённый AQE, JavaSerializer. Выведите отчёт severity по каждому параметру.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit\n\nspark = SparkSession.builder.appName(\"config_audit\").getOrCreate()\n\nconfigs = spark.createDataFrame([\n    (\"spark.sql.shuffle.partitions\", \"2000\", \"shuffle\"),\n    (\"spark.executor.memory\", \"1g\", \"memory\"),\n    (\"spark.sql.adaptive.enabled\", \"false\", \"aqe\"),\n    (\"spark.serializer\", \"org.apache.spark.serializer.JavaSerializer\", \"serializer\"),\n    (\"spark.executor.cores\", \"4\", \"compute\"),\n    (\"spark.driver.memory\", \"4g\", \"memory\"),\n    (\"spark.sql.adaptive.coalescePartitions.enabled\", \"true\", \"aqe\"),\n    (\"spark.dynamicAllocation.enabled\", \"true\", \"compute\"),\n    (\"spark.memory.fraction\", \"0.4\", \"memory\"),\n], [\"param_name\", \"param_value\", \"category\"])\n\n# TODO: Добавьте severity:\n# CRITICAL если shuffle.partitions > 1000 или adaptive.enabled == false\n# WARNING если executor.memory содержит '1g', serializer содержит 'JavaSerializer', memory.fraction cast < 0.6\n# OK для остальных\n\n# TODO: Покажите (param_name, param_value, severity) с truncate=False\n\n# TODO: print(f\"Critical: {n}, Warning: {w}, OK: {ok}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit\n\nspark = SparkSession.builder.appName(\"config_audit\").getOrCreate()\n\nconfigs = spark.createDataFrame([\n    (\"spark.sql.shuffle.partitions\", \"2000\", \"shuffle\"),\n    (\"spark.executor.memory\", \"1g\", \"memory\"),\n    (\"spark.sql.adaptive.enabled\", \"false\", \"aqe\"),\n    (\"spark.serializer\", \"org.apache.spark.serializer.JavaSerializer\", \"serializer\"),\n    (\"spark.executor.cores\", \"4\", \"compute\"),\n    (\"spark.driver.memory\", \"4g\", \"memory\"),\n    (\"spark.sql.adaptive.coalescePartitions.enabled\", \"true\", \"aqe\"),\n    (\"spark.dynamicAllocation.enabled\", \"true\", \"compute\"),\n    (\"spark.memory.fraction\", \"0.4\", \"memory\"),\n], [\"param_name\", \"param_value\", \"category\"])\n\nresult = configs.withColumn(\"severity\",\n    when(col(\"param_name\").contains(\"shuffle.partitions\") & (col(\"param_value\").cast(\"int\") > 1000), lit(\"CRITICAL\"))\n    .when(col(\"param_name\").contains(\"adaptive.enabled\") & (col(\"param_value\") == \"false\"), lit(\"CRITICAL\"))\n    .when(col(\"param_name\").contains(\"executor.memory\") & col(\"param_value\").contains(\"1g\"), lit(\"WARNING\"))\n    .when(col(\"param_name\").contains(\"serializer\") & col(\"param_value\").contains(\"JavaSerializer\"), lit(\"WARNING\"))\n    .when(col(\"param_name\").contains(\"memory.fraction\") & (col(\"param_value\").cast(\"double\") < 0.6), lit(\"WARNING\"))\n    .otherwise(lit(\"OK\"))\n)\n\nresult.select(\"param_name\", \"param_value\", \"severity\").show(truncate=False)\n\nn = result.filter(col(\"severity\") == \"CRITICAL\").count()\nw = result.filter(col(\"severity\") == \"WARNING\").count()\nok = result.filter(col(\"severity\") == \"OK\").count()\nprint(f\"Critical: {n}, Warning: {w}, OK: {ok}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Подсчёт проблем",
+          "input": "",
+          "expectedOutput": "Critical:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит CRITICAL",
+          "input": "",
+          "expectedOutput": "CRITICAL",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит WARNING",
+          "input": "",
+          "expectedOutput": "WARNING",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Аудит конфигурации — обязательная практика для production Spark-приложений. Типичные анти-паттерны: shuffle.partitions > 1000 без AQE создаёт избыточные мелкие файлы. Отключённый AQE лишает Spark автоматической оптимизации. JavaSerializer в 2-3 раза медленнее KryoSerializer. memory.fraction < 0.6 оставляет мало памяти для вычислений.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

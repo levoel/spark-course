@@ -1,0 +1,224 @@
+---
+title: "Apache Iceberg: глубокое погружение"
+description: "Catalog-first архитектура, snapshots, полная schema evolution, partition evolution без rewrite, hidden partitioning"
+order: 3
+difficulty: "intermediate"
+estimatedTime: 16
+topics: ["Apache Iceberg", "Catalog", "Snapshots", "Schema Evolution", "Partition Evolution", "Hidden Partitioning"]
+---
+
+import { IcebergArchitectureDiagram } from '../../../components/diagrams/module10';
+
+# Apache Iceberg: глубокое погружение
+
+## Архитектура
+
+**Apache Iceberg** -- lakehouse-формат, разработанный Netflix в 2017 году. Ключевое архитектурное отличие от Delta Lake -- **catalog-first** подход. Iceberg использует трёхуровневую структуру metadata:
+
+<IcebergArchitectureDiagram client:visible />
+
+**Почему это важно?** Catalog хранит атомарный указатель на текущий metadata file. Обновление snapshot = замена одного указателя. Нет file listing при чтении (в отличие от Hive tables), что делает Iceberg быстрым на таблицах с тысячами партиций.
+
+### Snapshot-based versioning
+
+Каждая write-операция создает новый **snapshot**. Snapshot -- это неизменяемый указатель на набор manifest-файлов, которые описывают набор data-файлов. Предыдущие snapshots остаются доступны для time travel.
+
+```python
+# Просмотр истории snapshots
+spark.sql("""
+    SELECT snapshot_id, committed_at, operation
+    FROM iceberg_catalog.db.events.history
+""").show()
+
+# Time travel по snapshot ID
+spark.read \
+    .option("snapshot-id", 3843286934625875210) \
+    .table("iceberg_catalog.db.events")
+```
+
+## Настройка SparkSession
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("IcebergPipeline") \
+    .config("spark.sql.extensions",
+            "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions") \
+    .config("spark.sql.catalog.iceberg_catalog",
+            "org.apache.iceberg.spark.SparkCatalog") \
+    .config("spark.sql.catalog.iceberg_catalog.type", "hadoop") \
+    .config("spark.sql.catalog.iceberg_catalog.warehouse",
+            "s3a://warehouse/iceberg") \
+    .config("spark.jars.packages",
+            "org.apache.iceberg:iceberg-spark-runtime-4.0_2.13:1.10.1") \
+    .getOrCreate()
+```
+
+<Callout type="warning">
+**Anti-pattern: не настроить catalog**
+
+Iceberg **требует** явной конфигурации catalog. Без неё вы получите `NoSuchTableException` даже если файлы таблицы существуют. Это принципиальное отличие от Delta Lake, который работает с path-based доступом по умолчанию.
+
+Типы каталогов: `hadoop` (файловая система), `hive` (Hive Metastore), `rest` (REST API), `glue` (AWS Glue).
+</Callout>
+
+## Ключевые возможности
+
+### Полная Schema Evolution
+
+Iceberg поддерживает **полную** эволюцию схемы -- не только добавление, но и удаление, переименование и переупорядочивание колонок:
+
+```python
+# Создание таблицы
+spark.sql("""
+    CREATE TABLE iceberg_catalog.db.events (
+        event_id STRING,
+        event_time TIMESTAMP,
+        user_id STRING,
+        category STRING,
+        value DOUBLE
+    ) USING iceberg
+""")
+
+# Добавление колонки
+spark.sql("ALTER TABLE iceberg_catalog.db.events ADD COLUMN region STRING")
+
+# Переименование колонки
+spark.sql("ALTER TABLE iceberg_catalog.db.events RENAME COLUMN category TO event_category")
+
+# Удаление колонки
+spark.sql("ALTER TABLE iceberg_catalog.db.events DROP COLUMN region")
+
+# Переупорядочивание
+spark.sql("ALTER TABLE iceberg_catalog.db.events ALTER COLUMN user_id AFTER event_time")
+```
+
+Все операции со схемой -- metadata-only. Данные не перезаписываются.
+
+### Partition Evolution
+
+**Partition evolution** -- уникальная возможность Iceberg. Вы можете **изменить стратегию партиционирования без перезаписи данных**:
+
+```python
+# Начали с ежедневных партиций
+spark.sql("""
+    CREATE TABLE iceberg_catalog.db.events (
+        event_id STRING,
+        event_time TIMESTAMP,
+        category STRING,
+        value DOUBLE
+    ) USING iceberg
+    PARTITIONED BY (days(event_time))
+""")
+
+# Нагрузка выросла -- переходим на часовые партиции
+spark.sql("""
+    ALTER TABLE iceberg_catalog.db.events
+    REPLACE PARTITION FIELD days(event_time) WITH hours(event_time)
+""")
+```
+
+**Как это работает?** Новые данные записываются с новой стратегией партиционирования (hours), а старые данные остаются в дневных партициях. Iceberg хранит partition spec для каждого manifest-файла и корректно обрабатывает оба типа при чтении.
+
+В Delta Lake и Hudi аналогичная операция требует **полной перезаписи** всех данных таблицы.
+
+<KnowledgeCheck
+  question="Почему partition evolution в Iceberg не требует перезаписи данных?"
+  answer="Iceberg хранит partition spec для каждого manifest-файла отдельно. При изменении стратегии партиционирования новые данные записываются с новым partition spec, а старые данные остаются нетронутыми со старым spec. При чтении Iceberg корректно обрабатывает оба типа партиционирования через metadata, не касаясь самих data-файлов."
+/>
+
+### Hidden Partitioning
+
+В традиционных таблицах (Hive) вы указываете партицию явно:
+
+```python
+# Hive: явное партиционирование -- добавляет колонку в данные!
+df.write.partitionBy("event_date").save(...)
+# Пользователь должен знать: WHERE event_date = '2024-01-15'
+```
+
+В Iceberg партиционирование **скрытое** (hidden) -- пользователь пишет фильтр по исходной колонке, а Iceberg автоматически применяет partition pruning:
+
+```python
+# Iceberg: hidden partitioning -- трансформация в metadata
+spark.sql("""
+    CREATE TABLE iceberg_catalog.db.events (...) USING iceberg
+    PARTITIONED BY (days(event_time))
+""")
+
+# Пользователь не знает о партициях!
+# WHERE event_time > '2024-01-15' -> Iceberg pruning партиций
+spark.sql("""
+    SELECT * FROM iceberg_catalog.db.events
+    WHERE event_time > '2024-01-15T00:00:00'
+""")
+```
+
+**Partition transforms:** `year(col)`, `month(col)`, `day(col)`, `hour(col)`, `bucket(N, col)`, `truncate(width, col)`.
+
+### Snapshot History и Time Travel
+
+```python
+# История snapshots
+spark.sql("SELECT * FROM iceberg_catalog.db.events.history").show()
+
+# Текущие snapshots (для rollback)
+spark.sql("SELECT * FROM iceberg_catalog.db.events.snapshots").show()
+
+# Rollback к предыдущему snapshot
+spark.sql("""
+    CALL iceberg_catalog.system.rollback_to_snapshot(
+        'db.events', 3843286934625875210
+    )
+""")
+
+# Expire старых snapshots (аналог VACUUM в Delta)
+spark.sql("""
+    CALL iceberg_catalog.system.expire_snapshots(
+        'db.events',
+        TIMESTAMP '2024-01-08 00:00:00'
+    )
+""")
+```
+
+<KnowledgeCheck
+  question="Чем hidden partitioning в Iceberg отличается от явного partitionBy в Hive/Delta?"
+  answer="В Hive/Delta пользователь должен явно указывать partition-колонку в WHERE-условии (event_date = '2024-01-15'), и эта колонка добавляется в данные. В Iceberg партиционирование скрыто: partition transform (days, months, hours, bucket, truncate) определяется при создании таблицы, а пользователь фильтрует по исходной колонке (event_time > '2024-01-15'). Iceberg автоматически применяет partition pruning на уровне metadata."
+/>
+
+## Anti-patterns
+
+<Callout type="warning">
+**Частые ошибки при работе с Apache Iceberg**
+
+1. **Не настроить catalog** -- Iceberg не работает без явной конфигурации catalog. `NoSuchTableException` -- самая частая ошибка новичков.
+
+2. **Не expire snapshots** -- как и VACUUM в Delta, expire_snapshots удаляет старые metadata и data-файлы. Без этого хранилище растёт бесконечно.
+
+3. **Слишком много partition buckets** -- `PARTITIONED BY (bucket(1000, user_id))` создаст 1000 мелких файлов на каждую запись. Используйте bucket count, обеспечивающий файлы ~1 GB.
+
+4. **Игнорирование compact операции** -- мелкие файлы деградируют производительность чтения. Используйте `rewrite_data_files`:
+```python
+spark.sql("""
+    CALL iceberg_catalog.system.rewrite_data_files('db.events')
+""")
+```
+</Callout>
+
+## Когда использовать Apache Iceberg
+
+**Лучший выбор, когда:**
+- Нужна vendor-нейтральность (поддержка Spark, Flink, Trino, Presto, Snowflake)
+- Вы часто меняете стратегию партиционирования (partition evolution)
+- Работаете в мультиdвижковой среде (один формат для всех)
+- Нужна полная schema evolution (rename, reorder, drop)
+
+**Не лучший выбор, когда:**
+- Вы полностью в Databricks экосистеме (Delta интегрирован глубже)
+- Нужны incremental queries для CDC (рассмотрите Hudi)
+- Streaming-first с changelog (рассмотрите Paimon)
+
+## Что дальше?
+
+В следующем уроке мы разберём **Apache Hudi** -- формат, разработанный Uber для upsert-heavy нагрузок. Ключевые фичи: COW/MOR table types и incremental queries.

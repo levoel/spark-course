@@ -1,0 +1,225 @@
+---
+title: "Безопасность Spark-кластеров"
+description: "Kerberos-аутентификация, TLS/SSL шифрование, ACL авторизация, сетевая безопасность и enterprise-конфигурации для production Spark"
+order: 1
+difficulty: "advanced"
+estimatedTime: 14
+topics: ["Security", "Kerberos", "TLS", "ACL", "Encryption", "Network Security"]
+---
+
+import { RangerPolicyDiagram } from '../../../components/diagrams/module12';
+
+# Безопасность Spark-кластеров
+
+## Зачем нужна безопасность в Spark?
+
+В production Spark-кластер обрабатывает терабайты данных -- часто включая PII (personally identifiable information), финансовые транзакции и бизнес-метрики. Без правильной настройки безопасности:
+
+- **Любой пользователь в сети** может подключиться к Spark UI и видеть SQL-запросы
+- **Shuffle-данные** передаются между executor незашифрованными
+- **Credentials** (пароли БД, API-ключи) видны в Environment tab Spark UI
+- **Нет разграничения доступа** -- все пользователи имеют полные права
+
+Безопасность Spark строится на **четырёх уровнях**: аутентификация, шифрование в транзите, шифрование at rest, и авторизация.
+
+## Аутентификация: Kerberos
+
+**Kerberos** -- стандарт аутентификации в Hadoop-экосистеме. Spark интегрируется с Kerberos через механизм keytab:
+
+```properties
+# spark-defaults.conf -- Kerberos аутентификация
+spark.authenticate                    true
+spark.authenticate.secret             my-shared-secret
+
+# Kerberos principal и keytab для long-running applications
+spark.kerberos.principal              spark/hostname@REALM.COM
+spark.kerberos.keytab                 /etc/security/keytabs/spark.keytab
+
+# Автоматическое обновление Kerberos ticket
+spark.kerberos.renewal.interval       1h
+spark.kerberos.renewal.retryInterval  5m
+```
+
+```python
+# spark-submit с Kerberos
+# spark-submit \
+#   --master yarn \
+#   --principal spark/hostname@REALM.COM \
+#   --keytab /etc/security/keytabs/spark.keytab \
+#   --conf spark.authenticate=true \
+#   app.py
+```
+
+Без `spark.authenticate=true` Spark не проверяет, кто подключается к driver или executor. В production это обязательная настройка.
+
+Для защиты Spark UI от неавторизованного доступа можно настроить LDAP-фильтр:
+
+```properties
+# Spark UI аутентификация через javax.servlet фильтр
+spark.ui.filters                      org.apache.spark.SecurityFilter
+spark.org.apache.spark.SecurityFilter.params  user=admin,password=secret
+```
+
+## Шифрование в транзите (TLS/SSL)
+
+Spark передаёт данные между компонентами по нескольким каналам. Каждый требует отдельной настройки TLS:
+
+```properties
+# spark-defaults.conf -- TLS для всех каналов
+
+# SSL для Spark UI (HTTPS вместо HTTP)
+spark.ssl.enabled                     true
+spark.ssl.keyStore                    /etc/security/ssl/spark-keystore.jks
+spark.ssl.keyStorePassword            changeit
+spark.ssl.trustStore                  /etc/security/ssl/spark-truststore.jks
+spark.ssl.trustStorePassword          changeit
+spark.ssl.protocol                    TLSv1.3
+
+# Шифрование RPC (driver <-> executor коммуникация)
+spark.network.crypto.enabled          true
+spark.network.crypto.keyLength        256
+spark.network.crypto.keyFactoryAlgorithm  PBKDF2WithHmacSHA256
+
+# Шифрование shuffle данных (AES)
+spark.io.encryption.enabled           true
+spark.io.encryption.keySizeBits       256
+spark.io.encryption.keygen.algorithm  HmacSHA256
+```
+
+<VersionBadge version="4.0" />
+**Spark 4.0** усиливает TLS-настройки по умолчанию: минимальная версия протокола -- TLSv1.2, а TLSv1.3 рекомендуется для всех новых deployment.
+
+<Callout type="warning">
+**Производительность:** шифрование shuffle (`spark.io.encryption.enabled=true`) добавляет ~5-15% overhead. В security-critical окружениях это приемлемая цена. В изолированных сетях можно оставить выключенным для performance-sensitive workloads.
+</Callout>
+
+## Шифрование at Rest
+
+Данные на диске (shuffle files, cached data, spill files) также требуют защиты:
+
+**HDFS Transparent Encryption:**
+
+```xml
+<!-- hdfs-site.xml -- зона шифрования -->
+<property>
+  <name>dfs.encryption.key.provider.uri</name>
+  <value>kms://http@kms-host:16000/kms</value>
+</property>
+```
+
+```bash
+# Создание зоны шифрования в HDFS
+# hadoop key create spark-key
+# hdfs crypto -createZone -keyName spark-key -path /spark/warehouse
+```
+
+**Cloud KMS интеграция:**
+
+```properties
+# AWS S3 -- Server-Side Encryption с KMS
+spark.hadoop.fs.s3a.server-side-encryption-algorithm  SSE-KMS
+spark.hadoop.fs.s3a.server-side-encryption.key        arn:aws:kms:region:account:key/key-id
+
+# GCS -- Customer-Managed Encryption Key
+spark.hadoop.fs.gs.encryption.algorithm               AES256
+spark.hadoop.fs.gs.encryption.key                     projects/p/locations/l/keyRings/kr/cryptoKeys/k
+```
+
+## Авторизация: ACL и Policy Engines
+
+После аутентификации (кто вы?) нужна авторизация (что вам можно?).
+
+**Spark UI ACLs** ограничивают доступ к информации о приложениях:
+
+```properties
+# spark-defaults.conf -- ACL для Spark UI
+spark.acls.enable                     true
+
+# Кто может видеть приложение
+spark.ui.view.acls                    admin,data-team
+spark.ui.view.acls.groups             data-engineers,data-scientists
+
+# Кто может модифицировать (kill tasks, etc.)
+spark.modify.acls                     admin
+spark.modify.acls.groups              platform-team
+
+# Admin -- полный доступ
+spark.admin.acls                      admin
+spark.admin.acls.groups               platform-admin
+```
+
+**Apache Ranger** -- enterprise-grade policy engine для fine-grained access control:
+
+<RangerPolicyDiagram client:visible />
+
+Ranger и Apache Sentry (deprecated в пользу Ranger) интегрируются со Spark SQL через плагины авторизации.
+
+## Сетевая безопасность
+
+Spark использует множество портов. В production каждый должен быть ограничен firewall-правилами:
+
+| Порт | Компонент | Назначение |
+|------|-----------|------------|
+| 4040 | Driver | Spark UI |
+| 7077 | Master | Standalone cluster manager |
+| 8080 | Master UI | Web-интерфейс Standalone master |
+| 8081 | Worker UI | Web-интерфейс worker |
+| Random | Executor | RPC, shuffle service |
+
+```properties
+# Фиксация портов для firewall-совместимости
+spark.driver.port                     5001
+spark.blockManager.port               5002
+spark.port.maxRetries                 16
+
+# Привязка к конкретному network interface
+spark.driver.bindAddress              10.0.1.100
+spark.driver.host                     10.0.1.100
+```
+
+<Callout type="tip">
+**Docker lab как пример сетевой изоляции.** В наших Docker-лабах Spark-кластер работает в изолированной Docker-сети -- master и worker общаются только внутри `spark-net`, а внешний доступ открыт только для Spark UI (4040) и Jupyter (8888). Это модель production network isolation в миниатюре.
+</Callout>
+
+## Полная production-конфигурация
+
+Объединяя все уровни, production `spark-defaults.conf` выглядит так:
+
+```properties
+# === AUTHENTICATION ===
+spark.authenticate                    true
+spark.kerberos.principal              spark/host@REALM.COM
+spark.kerberos.keytab                 /etc/security/keytabs/spark.keytab
+
+# === ENCRYPTION IN TRANSIT ===
+spark.ssl.enabled                     true
+spark.ssl.protocol                    TLSv1.3
+spark.ssl.keyStore                    /etc/security/ssl/keystore.jks
+spark.ssl.keyStorePassword            ${KEYSTORE_PASS}
+spark.network.crypto.enabled          true
+spark.io.encryption.enabled           true
+
+# === AUTHORIZATION ===
+spark.acls.enable                     true
+spark.admin.acls                      admin
+spark.ui.view.acls.groups             data-engineers,data-scientists
+spark.modify.acls.groups              platform-team
+
+# === NETWORK ===
+spark.driver.port                     5001
+spark.blockManager.port               5002
+```
+
+<KnowledgeCheck
+  question="Какие четыре уровня безопасности необходимо настроить для production Spark-кластера? Назовите ключевую конфигурацию для каждого."
+  answer="Четыре уровня: (1) Аутентификация -- spark.authenticate=true + Kerberos keytab (spark.kerberos.principal, spark.kerberos.keytab); (2) Шифрование в транзите -- spark.ssl.enabled=true для UI, spark.network.crypto.enabled=true для RPC, spark.io.encryption.enabled=true для shuffle; (3) Шифрование at rest -- HDFS transparent encryption или cloud KMS (SSE-KMS для S3); (4) Авторизация -- spark.acls.enable=true с view/modify/admin ACL или Apache Ranger для fine-grained политик."
+/>
+
+<KnowledgeCheck
+  question="Почему spark.io.encryption.enabled важен, даже если TLS уже настроен? Какой trade-off он создаёт?"
+  answer="spark.ssl.enabled шифрует только HTTP-трафик (Spark UI, REST API). spark.io.encryption.enabled шифрует shuffle-данные, которые передаются между executor через отдельный канал (block transfer service). Без этой настройки shuffle-данные (которые могут содержать sensitive information) передаются в открытом виде. Trade-off: AES-шифрование shuffle добавляет ~5-15% overhead по CPU и latency. В security-critical окружениях это приемлемо, но в изолированных сетях можно отключить для performance."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **менеджеры кластеров** -- как Spark взаимодействует со Standalone, YARN и Kubernetes, и когда использовать каждый из них.

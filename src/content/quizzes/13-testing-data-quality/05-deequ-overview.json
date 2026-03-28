@@ -1,0 +1,118 @@
+{
+  "lessonSlug": "13-testing-data-quality/05-deequ-overview",
+  "moduleId": "13-testing-data-quality",
+  "_meta": {
+    "idPrefix": "spark-m13-05",
+    "description": "Use IDs: m13-05-q1, m13-05-q2, ... (4 questions on Analyzers, Checks, GE vs Deequ comparison)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-05-q1",
+      "type": "multiple-choice",
+      "question": "Какие четыре основных компонента составляют архитектуру Amazon Deequ?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Reader, Transformer, Writer, Reporter"
+        },
+        {
+          "id": "b",
+          "text": "Analyzers (метрики), Checks (правила валидации), ConstraintSuggestions (автогенерация правил), Metrics Repository (хранение метрик во времени)"
+        },
+        {
+          "id": "c",
+          "text": "Source, Pipeline, Validator, Dashboard"
+        },
+        {
+          "id": "d",
+          "text": "Schema, Rules, Engine, Output"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Четыре компонента Deequ: (1) Analyzers -- вычисляют метрики (completeness, uniqueness, mean, std); (2) Checks -- правила валидации, построенные на метриках Analyzers; (3) ConstraintSuggestions -- автоматическая генерация rules по профилю данных; (4) Metrics Repository -- хранение метрик во времени для trend analysis.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: Amazon Deequ -- архитектура и четыре компонента"
+    },
+    {
+      "id": "spark-m13-05-q2",
+      "type": "multiple-choice",
+      "question": "Какое ключевое отличие Deequ от Great Expectations?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Deequ поддерживает больше expectations"
+        },
+        {
+          "id": "b",
+          "text": "Deequ работает без Spark"
+        },
+        {
+          "id": "c",
+          "text": "Deequ -- Scala (JVM-native), GE -- Python. Deequ лучше для AWS Glue/EMR и Scala-команд; GE -- для Python-команд и multi-platform (Databricks, Airflow)"
+        },
+        {
+          "id": "d",
+          "text": "GE устарел -- Deequ его заменяет"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Ключевое отличие -- язык и экосистема. Deequ: Scala (JVM-native), fluent DSL, Metrics Repository для time-series, AWS Glue нативная интеграция. GE: Python, 200+ expectations, Data Docs (HTML), интеграция с Databricks/Airflow/любой Python-средой. Выбор определяется стеком команды.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: Amazon Deequ -- сравнение Deequ vs Great Expectations"
+    },
+    {
+      "id": "spark-m13-05-q3",
+      "type": "multiple-choice",
+      "question": "Что такое ConstraintSuggestionRunner в Deequ?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Инструмент для ручного создания constraints"
+        },
+        {
+          "id": "b",
+          "text": "Scheduler для периодического запуска проверок"
+        },
+        {
+          "id": "c",
+          "text": "Визуализатор constraints в виде графа"
+        },
+        {
+          "id": "d",
+          "text": "Автоматический генератор rules: профилирует данные и предлагает constraints на основе статистик (уникальность, диапазоны, completeness)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "ConstraintSuggestionRunner автоматически профилирует данные (анализирует распределения, уникальность, null-rate, типы) и предлагает constraints. Например: обнаружил, что колонка email уникальна на 100% -- предлагает isUnique('email'). Аналог GE Profiler. Это ускоряет начальную настройку data quality checks.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: Amazon Deequ -- ConstraintSuggestionRunner для автогенерации rules"
+    },
+    {
+      "id": "spark-m13-05-q4",
+      "type": "multiple-choice",
+      "question": "Команда использует Python, Airflow и Databricks. Какой DQ-фреймворк рекомендуется: Deequ или Great Expectations?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Great Expectations -- Python-native, интеграция с Airflow и Databricks, Data Docs для визуализации. Deequ -- Scala, больше подходит для AWS Glue + Scala-команд"
+        },
+        {
+          "id": "b",
+          "text": "Deequ -- он от Amazon, значит надёжнее"
+        },
+        {
+          "id": "c",
+          "text": "Оба одинаково подходят"
+        },
+        {
+          "id": "d",
+          "text": "Ни один -- Databricks имеет встроенную DQ"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Для Python-стека (Airflow, Databricks) -- Great Expectations: Python-native API, провайдер для Airflow (GreatExpectationsOperator), SparkDFExecutionEngine для Databricks, Data Docs для визуализации. Deequ требует Scala и JVM, что создаёт friction в Python-first команде. Deequ оптимален для AWS Glue + Scala.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 5: Amazon Deequ -- когда Deequ, когда Great Expectations"
+    }
+  ]
+}

@@ -1,0 +1,189 @@
+---
+title: "NVIDIA RAPIDS и GPU-ускорение Spark"
+description: "Прозрачное GPU-ускорение через spark-rapids plugin, cuDF, архитектура и ограничения GPU-обработки"
+order: 5
+difficulty: "intermediate"
+estimatedTime: 12
+topics: ["RAPIDS", "GPU", "cuDF", "cuML", "spark-rapids", "NVIDIA"]
+---
+
+import { RapidsGpuDiagram } from '../../../components/diagrams/module14';
+
+# NVIDIA RAPIDS и GPU-ускорение Spark
+
+## Зачем GPU в Spark?
+
+Spark исторически работает на **CPU**. Но GPU (Graphics Processing Unit) содержит тысячи ядер, оптимизированных для параллельных вычислений. Операции, которые Spark выполняет на CPU (сортировка, агрегация, join), можно перенести на GPU для значительного ускорения.
+
+**NVIDIA RAPIDS Accelerator for Apache Spark** -- плагин, который прозрачно заменяет CPU-операции Spark на GPU-реализации. Код PySpark **не меняется** -- ускорение происходит на уровне физического плана.
+
+## Архитектура RAPIDS Accelerator
+
+<RapidsGpuDiagram client:visible />
+
+RAPIDS Accelerator работает на уровне **Catalyst physical plan**: для каждой операции (Sort, HashAggregate, ShuffledHashJoin) плагин проверяет, есть ли GPU-реализация. Если да -- заменяет. Если нет -- оставляет CPU-реализацию.
+
+### Основные компоненты
+
+| Компонент | Назначение |
+|-----------|-----------|
+| **spark-rapids** plugin | Интеграция с Spark, замена физических операторов |
+| **cuDF** | GPU-ускоренная библиотека DataFrame (аналог pandas на GPU) |
+| **cuML** | GPU-ускоренные ML-алгоритмы (аналог scikit-learn на GPU) |
+| **UCX** | Unified Communication X -- GPU-to-GPU shuffle через RDMA/NVLink |
+
+## Настройка
+
+Подключение RAPIDS к Spark -- конфигурационное, не требует изменения кода:
+
+```properties
+# spark-defaults.conf -- включение RAPIDS
+spark.plugins                          com.nvidia.spark.SQLPlugin
+spark.rapids.sql.enabled               true
+
+# GPU resource scheduling
+spark.executor.resource.gpu.amount     1
+spark.task.resource.gpu.amount         0.5  # 2 задачи на 1 GPU
+
+# Рекомендуемые настройки памяти
+spark.rapids.memory.pinnedPool.size    2g
+spark.rapids.sql.concurrentGpuTasks    2
+```
+
+```bash
+# spark-submit с RAPIDS
+spark-submit \
+  --master yarn \
+  --conf spark.plugins=com.nvidia.spark.SQLPlugin \
+  --conf spark.rapids.sql.enabled=true \
+  --conf spark.executor.resource.gpu.amount=1 \
+  --jars rapids-4-spark_2.12-24.10.0.jar \
+  my_etl_job.py
+```
+
+<Callout type="tip">
+**Код PySpark не меняется.** Тот же `df.groupBy().agg()` и `df.join()` выполняется на GPU вместо CPU. RAPIDS -- прозрачный ускоритель уровня execution engine.
+</Callout>
+
+## Performance: CPU vs GPU
+
+Типичные ускорения на реальных ETL-нагрузках:
+
+| Операция | CPU baseline | GPU (RAPIDS) | Ускорение |
+|----------|-------------|-------------|-----------|
+| Sort (100GB) | 120 sec | 24-40 sec | **3-5x** |
+| Hash Join (50GB x 10GB) | 90 sec | 9-18 sec | **5-10x** |
+| GroupBy Aggregation | 60 sec | 9-20 sec | **3-7x** |
+| String operations | 45 sec | 15-22 sec | **2-3x** |
+| End-to-end ETL pipeline | 30 min | 6-15 min | **2-5x** |
+
+Максимальное ускорение достигается на операциях с высоким параллелизмом: сортировка, хеш-вычисления, агрегации. String-операции ускоряются меньше -- GPU менее эффективен для sequential string processing.
+
+<Callout type="warning">
+**Реальное ускорение зависит от workload.** Приведённые цифры -- типичные для GPU-friendly операций на больших данных (десятки-сотни GB). На малых данных (&lt;1GB) overhead переноса данных CPU->GPU может превысить выигрыш. Всегда бенчмаркайте на вашей конкретной нагрузке.
+</Callout>
+
+## GPU Cluster Deployment
+
+### YARN с GPU Scheduling
+
+```xml
+<!-- resource-types.xml -- регистрация GPU как ресурса -->
+<configuration>
+  <property>
+    <name>yarn.resource-types</name>
+    <value>yarn.io/gpu</value>
+  </property>
+</configuration>
+```
+
+```properties
+# yarn-site.xml -- GPU discovery
+yarn.nodemanager.resource-plugins         yarn.io/gpu
+yarn.nodemanager.resource-plugins.gpu.allowed-gpu-devices  auto
+```
+
+### Kubernetes с nvidia-device-plugin
+
+```yaml
+# DaemonSet для GPU-нод
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: nvidia-device-plugin
+spec:
+  selector:
+    matchLabels:
+      name: nvidia-device-plugin
+  template:
+    spec:
+      containers:
+      - name: nvidia-device-plugin
+        image: nvcr.io/nvidia/k8s-device-plugin:v0.14.0
+        securityContext:
+          privileged: true
+```
+
+```bash
+# spark-submit на K8s с GPU
+spark-submit \
+  --master k8s://https://k8s-api:6443 \
+  --conf spark.kubernetes.executor.request.cores=4 \
+  --conf spark.executor.resource.gpu.amount=1 \
+  --conf spark.executor.resource.gpu.vendor=nvidia.com \
+  my_job.py
+```
+
+## Cost Considerations
+
+GPU-инстансы значительно дороже CPU:
+
+| Instance (AWS) | vCPU | RAM | GPU | Цена/час |
+|---------------|------|-----|-----|----------|
+| m5.4xlarge (CPU) | 16 | 64GB | -- | ~$0.77 |
+| g5.4xlarge (GPU) | 16 | 64GB | 1x A10G | ~$1.62 |
+| p4d.24xlarge (GPU) | 96 | 1152GB | 8x A100 | ~$32.77 |
+
+**Когда GPU оправдан:**
+- Регулярные ETL-jobs (ежедневно/ежечасно) с большими данными (>100GB)
+- Ускорение 3-5x окупает разницу в цене при достаточном объёме
+- ML training на больших датасетах (cuML + spark-rapids)
+
+**Когда GPU не оправдан:**
+- Разовые ad-hoc запросы (startup overhead GPU)
+- Малые данные (&lt;10GB) -- overhead переноса на GPU
+- Workload с преобладанием I/O (чтение из S3) -- GPU не ускорит network
+
+## Ограничения
+
+Не все операции Spark поддерживаются на GPU. При встрече неподдерживаемой операции RAPIDS **автоматически fallback на CPU**:
+
+```
+GPU-supported:              CPU fallback:
+  [OK] Filter, Project            [NO] UDF (Python)
+  [OK] HashAggregate              [NO] Hive SerDe
+  [OK] SortMergeJoin              [NO] некоторые window functions
+  [OK] Sort                       [NO] collect_list на nested types
+  [OK] HashJoin                   [NO] некоторые string regex
+  [OK] Window (basic)             [NO] Custom partitioners
+```
+
+```properties
+# Логирование: какие операции перешли на CPU
+spark.rapids.sql.explain               ALL
+# В логах: "cannot run on GPU because ..."
+```
+
+<KnowledgeCheck
+  question="Как RAPIDS Accelerator ускоряет Spark без изменения пользовательского кода? На каком уровне происходит замена?"
+  answer="RAPIDS работает на уровне Catalyst physical plan. Когда Spark создаёт физический план выполнения (после logical optimization), RAPIDS plugin проверяет каждую физическую операцию (Sort, HashAggregate, Join) и заменяет CPU-реализацию на GPU-реализацию (CUDA kernel). Пользовательский PySpark/SQL код не меняется -- те же df.groupBy().agg() и df.join() выполняются, но на GPU вместо CPU. Если операция не поддерживается на GPU, происходит автоматический fallback на CPU."
+/>
+
+<KnowledgeCheck
+  question="Когда GPU-ускорение НЕ оправдано для Spark workload? Назовите минимум 3 случая."
+  answer="GPU не оправдан: (1) Малые данные (&lt;10GB) -- overhead переноса данных между CPU и GPU памятью превышает выигрыш; (2) I/O-bound workload (чтение из S3, записи в БД) -- GPU не ускорит сетевые операции; (3) Разовые ad-hoc запросы -- startup overhead GPU driver и memory allocation; (4) Workload с Python UDF -- UDF выполняются на CPU, RAPIDS не может их ускорить; (5) Бюджетные ограничения -- GPU-инстансы в 2-3x дороже CPU при пропорциональных ресурсах."
+/>
+
+## Что дальше?
+
+В следующем уроке мы разберём **альтернативные движки и расширения Spark** -- DataFusion, Photon, push-based shuffle и другие технологии, расширяющие экосистему Spark.

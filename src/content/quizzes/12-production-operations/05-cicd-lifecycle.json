@@ -1,0 +1,156 @@
+{
+  "lessonSlug": "12-production-operations/05-cicd-lifecycle",
+  "moduleId": "12-production-operations",
+  "_meta": {
+    "idPrefix": "spark-m12-05",
+    "description": "Use IDs: m12-05-q1, m12-05-q2, ... (4 questions on packaging, GitHub Actions, versioning)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-05-q1",
+      "type": "multiple-choice",
+      "question": "Какой артефакт используется для деплоя Python Spark-приложения через spark-submit?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Docker image с Python-кодом"
+        },
+        {
+          "id": "b",
+          "text": "ZIP-архив с исходным кодом"
+        },
+        {
+          "id": "c",
+          "text": "wheel (.whl) -- Python package, передаётся через --py-files при spark-submit"
+        },
+        {
+          "id": "d",
+          "text": "JAR-файл, собранный через Maven"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Python Spark-приложения упаковываются в wheel (.whl) через poetry build или pip wheel. При spark-submit wheel передаётся через --py-files: spark-submit --py-files dist/spark_etl-2.1.0-py3-none-any.whl main.py. Для Scala используется fat-jar через sbt assembly.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: CI/CD для Spark -- packaging: wheels для Python, fat-jars для Scala"
+    },
+    {
+      "id": "spark-m12-05-q2",
+      "type": "multiple-choice",
+      "question": "Почему Spark-приложение в production нельзя деплоить как notebook?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Notebooks не поддерживают PySpark"
+        },
+        {
+          "id": "b",
+          "text": "Notebooks не поддерживают spark-submit"
+        },
+        {
+          "id": "c",
+          "text": "Notebooks работают медленнее, чем скрипты"
+        },
+        {
+          "id": "d",
+          "text": "Notebook не может быть версионирован в Git, автоматически протестирован при PR, собран в deployable artifact и задеплоен через promotion pipeline (dev -> staging -> prod)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Production Spark-код должен: версионироваться в Git, тестироваться автоматически при каждом PR, собираться в deployable artifact (wheel/jar), деплоиться через promotion pipeline. Notebook не обеспечивает эти гарантии -- нет тестов, нет review, нет rollback-стратегии. Без CI/CD изменения попадают в production без контроля.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 5: CI/CD для Spark -- зачем CI/CD вместо notebook-деплоя"
+    },
+    {
+      "id": "spark-m12-05-q3",
+      "type": "multiple-choice",
+      "question": "В GitHub Actions pipeline для Spark-приложения, какой этап должен выполняться ПЕРЕД сборкой wheel?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Запуск pytest unit-тестов -- убедиться, что код работает до упаковки"
+        },
+        {
+          "id": "b",
+          "text": "Деплой на staging кластер"
+        },
+        {
+          "id": "c",
+          "text": "Публикация в PyPI"
+        },
+        {
+          "id": "d",
+          "text": "Запуск production job для проверки"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "CI/CD pipeline для Spark: (1) Lint/format check, (2) Unit-тесты с pytest (SparkSession local[2]), (3) Сборка wheel (poetry build), (4) Integration-тесты (опционально), (5) Publish artifact, (6) Deploy через promotion. Тесты ПЕРЕД сборкой -- чтобы не тратить время на упаковку неработающего кода.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 5: CI/CD для Spark -- этапы GitHub Actions pipeline"
+    },
+    {
+      "id": "spark-m12-05-q4",
+      "type": "multiple-choice",
+      "question": "Зачем в pyproject.toml зависимость pyspark указывается с конкретной version constraint (^4.0.0), а не latest?",
+      "options": [
+        {
+          "id": "a",
+          "text": "PyPI не поддерживает latest для pyspark"
+        },
+        {
+          "id": "b",
+          "text": "Фиксированная версия обеспечивает reproducibility: тот же код с той же версией PySpark даёт одинаковый результат на dev, staging и production"
+        },
+        {
+          "id": "c",
+          "text": "Разные версии PySpark несовместимы с Python"
+        },
+        {
+          "id": "d",
+          "text": "Spark не обновляется достаточно часто для latest"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Reproducibility -- ключевой принцип production deployment. Фиксированная версия (^4.0.0 = совместимые обновления 4.x) гарантирует: dev, staging и production используют одну версию PySpark. Без этого новая минорная версия может изменить поведение (null handling, AQE defaults) и привести к silent data corruption.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 5: CI/CD для Spark -- versioning и reproducibility"
+    },
+    {
+      "id": "spark-m12-05-code-1",
+      "type": "code-challenge",
+      "question": "Реализуйте валидацию артефактов деплоя. У вас есть DataFrame с конфигурациями (app_name, version, config_path, main_class, deploy_mode). Проверьте: версия формата X.Y.Z (содержит 2 точки), config_path не null, main_class не пустая, deploy_mode в (cluster, client). Выведите отчёт валидации.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit\n\nspark = SparkSession.builder.appName(\"cicd_validation\").getOrCreate()\n\nartifacts = spark.createDataFrame([\n    (\"etl-pipeline\", \"2.1.0\", \"/conf/etl.yaml\", \"com.app.ETL\", \"cluster\"),\n    (\"ml-scoring\", \"1.0\", \"/conf/ml.yaml\", \"com.app.ML\", \"client\"),\n    (\"report-gen\", \"3.0.1\", None, \"com.app.Report\", \"cluster\"),\n    (\"data-ingest\", \"1.2.3\", \"/conf/ingest.yaml\", \"\", \"cluster\"),\n    (\"analytics\", \"2.0.0\", \"/conf/analytics.yaml\", \"com.app.Analytics\", \"local\"),\n], [\"app_name\", \"version\", \"config_path\", \"main_class\", \"deploy_mode\"])\n\n# TODO: Добавьте version_valid — True если формат X.Y.Z (like '%.%.%')\n\n# TODO: Добавьте config_valid — True если config_path не null\n\n# TODO: Добавьте class_valid — True если main_class не null и не пустая\n\n# TODO: Добавьте mode_valid — True если deploy_mode in (cluster, client)\n\n# TODO: Добавьте status — PASS если все проверки True, иначе FAIL\n\n# TODO: Покажите (app_name, version, status)\n\n# TODO: print(f\"Valid: {n_pass}, Invalid: {n_fail}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, when, lit\n\nspark = SparkSession.builder.appName(\"cicd_validation\").getOrCreate()\n\nartifacts = spark.createDataFrame([\n    (\"etl-pipeline\", \"2.1.0\", \"/conf/etl.yaml\", \"com.app.ETL\", \"cluster\"),\n    (\"ml-scoring\", \"1.0\", \"/conf/ml.yaml\", \"com.app.ML\", \"client\"),\n    (\"report-gen\", \"3.0.1\", None, \"com.app.Report\", \"cluster\"),\n    (\"data-ingest\", \"1.2.3\", \"/conf/ingest.yaml\", \"\", \"cluster\"),\n    (\"analytics\", \"2.0.0\", \"/conf/analytics.yaml\", \"com.app.Analytics\", \"local\"),\n], [\"app_name\", \"version\", \"config_path\", \"main_class\", \"deploy_mode\"])\n\nresult = artifacts.withColumn(\"version_valid\", when(col(\"version\").like(\"%.%.%\"), lit(True)).otherwise(lit(False)))\nresult = result.withColumn(\"config_valid\", col(\"config_path\").isNotNull())\nresult = result.withColumn(\"class_valid\", when((col(\"main_class\").isNotNull()) & (col(\"main_class\") != lit(\"\")), lit(True)).otherwise(lit(False)))\nresult = result.withColumn(\"mode_valid\", when(col(\"deploy_mode\").isin(\"cluster\", \"client\"), lit(True)).otherwise(lit(False)))\nresult = result.withColumn(\"status\", when(col(\"version_valid\") & col(\"config_valid\") & col(\"class_valid\") & col(\"mode_valid\"), lit(\"PASS\")).otherwise(lit(\"FAIL\")))\n\nresult.select(\"app_name\", \"version\", \"status\").show()\n\nn_pass = result.filter(col(\"status\") == \"PASS\").count()\nn_fail = result.filter(col(\"status\") == \"FAIL\").count()\nprint(f\"Valid: {n_pass}, Invalid: {n_fail}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Подсчёт валидных и невалидных",
+          "input": "",
+          "expectedOutput": "Valid:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит FAIL",
+          "input": "",
+          "expectedOutput": "FAIL",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит etl-pipeline",
+          "input": "",
+          "expectedOutput": "etl-pipeline",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Валидация артефактов деплоя — критический этап CI/CD pipeline для Spark-приложений. Проверка формата версии (semver), наличия конфигурации, заполненности main_class и допустимости deploy_mode предотвращает деплой невалидных артефактов в production. В реальных pipeline эти проверки автоматизируются в Jenkins/GitHub Actions перед spark-submit.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

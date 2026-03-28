@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "05-aqe-deep-dive/02-coalesce-shuffle-partitions",
+  "moduleId": "05-aqe-deep-dive",
+  "_meta": {
+    "idPrefix": "spark-m05-02",
+    "description": "Use IDs: m05-02-q1, m05-02-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m05-02-q1",
+      "type": "multiple-choice",
+      "question": "spark.sql.shuffle.partitions = 200, после фильтра осталось 2 МБ данных. Без AQE будет 200 tasks для 2 МБ. Что сделает AQE?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Объединит мелкие/пустые партиции до целевого размера advisoryPartitionSizeInBytes (64 МБ), создав 1-2 партиции вместо 200"
+        },
+        {
+          "id": "b",
+          "text": "Увеличит число партиций для параллелизма"
+        },
+        {
+          "id": "c",
+          "text": "Удалит пустые партиции и оставит остальные без изменений"
+        },
+        {
+          "id": "d",
+          "text": "Перезапустит запрос с меньшим числом партиций"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "AQE Coalesce Shuffle Partitions объединяет смежные мелкие партиции до целевого размера advisoryPartitionSizeInBytes (по умолчанию 64 МБ). Для 2 МБ данных AQE создаст 1 партицию вместо 200. Это устраняет overhead планирования 199 пустых/мелких tasks.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m05-02-q2",
+      "type": "multiple-choice",
+      "question": "Какой параметр определяет целевой размер партиции при AQE coalesce?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.sql.shuffle.partitions"
+        },
+        {
+          "id": "b",
+          "text": "spark.sql.adaptive.advisoryPartitionSizeInBytes (по умолчанию 64 МБ)"
+        },
+        {
+          "id": "c",
+          "text": "spark.sql.adaptive.skewedPartitionThresholdInBytes"
+        },
+        {
+          "id": "d",
+          "text": "spark.executor.memory"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "advisoryPartitionSizeInBytes (64 МБ по умолчанию) -- целевой размер партиции после coalesce. AQE объединяет смежные партиции, пока их суммарный размер не приблизится к этому значению. Для больших данных можно увеличить до 128 МБ; minPartitionSize (1 МБ) защищает от слишком мелких партиций.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m05-02-q3",
+      "type": "true-false",
+      "question": "С AQE coalesce partitions можно безопасно оставить spark.sql.shuffle.partitions=200, потому что AQE автоматически уменьшит число партиций для маленьких данных.",
+      "correctAnswer": true,
+      "explanation": "Верно. С AQE значение shuffle.partitions=200 становится начальным (максимальным) числом партиций. AQE автоматически объединит мелкие партиции после shuffle. Это упрощает настройку: не нужно подбирать оптимальное число для каждого запроса. Для очень больших данных может потребоваться увеличить начальное значение.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m05-02-q4",
+      "type": "multiple-choice",
+      "question": "В Spark UI после stage с AQE вы видите AQEShuffleRead вместо обычного Exchange. Что это означает?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Произошла ошибка в плане выполнения"
+        },
+        {
+          "id": "b",
+          "text": "Spark использовал альтернативный механизм shuffle"
+        },
+        {
+          "id": "c",
+          "text": "AQE адаптировал shuffle read -- возможно объединил мелкие партиции или применил local shuffle read"
+        },
+        {
+          "id": "d",
+          "text": "Exchange был отменён и данные не перераспределялись"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "AQEShuffleRead -- маркер в плане, указывающий что AQE адаптировал чтение shuffle-данных. Это может означать: (1) объединение мелких партиций (coalesce), (2) local shuffle read (чтение данных с того же executor без сетевого трансфера), (3) разбиение skewed-партиций. AQE модифицирует shuffle read, но сам shuffle (запись) уже произошёл.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m05-02-q5",
+      "type": "multiple-choice",
+      "question": "Параметр coalescePartitions.minPartitionSize = 1 МБ. Что произойдёт, если AQE попытается создать партицию размером 500 КБ?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Партиция 500 КБ будет создана без изменений"
+        },
+        {
+          "id": "b",
+          "text": "Запрос упадёт с ошибкой"
+        },
+        {
+          "id": "c",
+          "text": "AQE удалит партицию как слишком маленькую"
+        },
+        {
+          "id": "d",
+          "text": "AQE объединит эту партицию с соседней, чтобы суммарный размер был >= 1 МБ"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "minPartitionSize (1 МБ по умолчанию) -- нижний порог размера партиции. Если партиция меньше этого значения, AQE объединит её с соседней. Это защищает от создания слишком мелких партиций, overhead планирования которых превышает полезную работу.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m05-02-code-1",
+      "type": "code-challenge",
+      "question": "Создайте DataFrame с 1000 строками заказов по 50 категориям, выполните groupBy-агрегацию (сумма по категории), затем примените coalesce(1) к результату. Покажите итоговое количество строк и первые 5 строк результата (отсортированных по убыванию суммы).",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, sum as _sum, lit, desc\n\nspark = SparkSession.builder.appName(\"coalesce_demo\").getOrCreate()\n\n# Генерация данных: 1000 заказов по 50 категориям\nrows = [(i, f\"cat_{i % 50}\", (i * 7) % 500 + 10) for i in range(1000)]\norders = spark.createDataFrame(rows, [\"order_id\", \"category\", \"amount\"])\n\n# TODO: Выполните groupBy по category с суммой amount\n# agg_df = orders.groupBy(...)\n\n# TODO: Примените coalesce(1) к результату\n# result = agg_df.coalesce(...)\n\n# TODO: Отсортируйте по убыванию суммы и покажите первые 5 строк\n# result.orderBy(...).show(5)\n\n# TODO: Выведите общее количество категорий\n# print(f\"Categories: {result.count()}\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, sum as _sum, lit, desc\n\nspark = SparkSession.builder.appName(\"coalesce_demo\").getOrCreate()\n\nrows = [(i, f\"cat_{i % 50}\", (i * 7) % 500 + 10) for i in range(1000)]\norders = spark.createDataFrame(rows, [\"order_id\", \"category\", \"amount\"])\n\nagg_df = orders.groupBy(\"category\").agg(_sum(\"amount\").alias(\"total_amount\"))\n\nresult = agg_df.coalesce(1)\n\nresult.orderBy(desc(\"total_amount\")).show(5)\n\nprint(f\"Categories: {result.count()}\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит 50 категорий",
+          "input": "",
+          "expectedOutput": "Categories: 50",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Вывод содержит total_amount",
+          "input": "",
+          "expectedOutput": "total_amount",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Вывод содержит cat_",
+          "input": "",
+          "expectedOutput": "cat_",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "После groupBy-агрегации данные проходят через shuffle, создавая множество мелких партиций. coalesce(1) объединяет их в одну партицию без дополнительного shuffle — именно это делает AQE автоматически через Coalesce Shuffle Partitions, когда видит что результат агрегации маленький. В production AQE объединит 200 дефолтных shuffle-партиций до 1-2 на основе advisoryPartitionSizeInBytes.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

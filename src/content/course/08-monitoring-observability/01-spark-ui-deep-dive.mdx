@@ -1,0 +1,171 @@
+---
+title: "Spark UI: глубокое погружение"
+description: "Jobs, Stages, SQL, Storage и Environment tabs -- как читать Spark UI и находить проблемы производительности"
+order: 1
+difficulty: "intermediate"
+estimatedTime: 16
+topics: ["Spark UI", "Jobs Tab", "Stages Tab", "SQL Tab", "Storage Tab", "Environment Tab"]
+---
+
+import { SparkUISimulationDiagram, SpillToDiskDiagram } from '../../../components/diagrams/module8';
+
+# Spark UI: глубокое погружение
+
+Spark UI -- ваш главный инструмент диагностики. Каждое Spark-приложение запускает веб-интерфейс на порту 4040, где вы видите всё: от общей картины jobs до деталей каждой task. Проблема в том, что UI показывает **сотни метрик** -- нужно знать, на что смотреть.
+
+В этом уроке мы разберём каждую вкладку Spark UI и научимся находить **красные флаги** -- признаки проблем, которые убивают производительность.
+
+## Jobs Tab: общая картина
+
+Вкладка **Jobs** показывает все jobs приложения. Каждый action (count, collect, write) создаёт отдельный job.
+
+**Что искать:**
+- **Duration** -- сколько времени занял каждый job. Если один job в 10 раз дольше остальных, это сигнал
+- **Stages** -- количество stages в job. Много stages = много shuffles
+- **Failed jobs** -- красная строка означает exception. Кликните для stack trace
+
+```
+Job ID | Description      | Duration | Stages  | Status
+-------|------------------|----------|---------|--------
+0      | count at <...>   | 2.1 s    | 2/2     | SUCCEEDED
+1      | save at <...>    | 45.3 s   | 5/5     | SUCCEEDED  ← подозрительно долго
+2      | collect at <...> | --       | 0/3     | FAILED     ← красный флаг
+```
+
+<Callout type="warning">
+**Красный флаг: один job значительно дольше остальных**
+
+Если Job 1 занимает 45 секунд при том, что Job 0 -- 2 секунды, проверьте его stages. Скорее всего, одна из stages содержит data skew или excessive shuffle.
+</Callout>
+
+## Stages Tab: где тратится время
+
+Вкладка **Stages** -- самая информативная. Здесь вы видите детали каждой stage: количество tasks, shuffle read/write, GC time, task duration distribution.
+
+**Ключевые колонки:**
+
+| Метрика | Что показывает | Красный флаг |
+|---------|---------------|--------------|
+| **Duration** | Время выполнения stage | > 5 минут для одной stage |
+| **Input** | Объём прочитанных данных | Неожиданно большой (нет partition pruning?) |
+| **Shuffle Read** | Данные полученные из других stages | > 1 GB на stage |
+| **Shuffle Write** | Данные отправленные в другие stages | >> Shuffle Read (data explosion) |
+| **GC Time** | Время сборки мусора | > 10% от Duration |
+
+### Task Duration Distribution
+
+Внутри каждой stage кликните на **Event Timeline** или **Summary Metrics**. Вы увидите распределение task durations:
+
+```
+Metric          | Min    | 25th   | Median | 75th   | Max
+----------------|--------|--------|--------|--------|--------
+Duration        | 0.1 s  | 0.3 s  | 0.4 s  | 0.5 s  | 45.2 s  ← SKEW!
+GC Time         | 0 ms   | 5 ms   | 12 ms  | 20 ms  | 8.5 s   ← SKEW!
+Shuffle Read    | 1 MB   | 2 MB   | 2 MB   | 3 MB   | 450 MB  ← SKEW!
+```
+
+<Callout type="danger">
+**Красный флаг: Max >> Median в task metrics**
+
+Когда максимальная task duration в 100 раз больше медианы (45.2s vs 0.4s), это **data skew**. Одна партиция содержит значительно больше данных, чем остальные. Решение: salting, AQE skew join, или repartition.
+</Callout>
+
+### GC Time: скрытый убийца
+
+**GC Time > 10% от task duration** -- серьёзный сигнал. Это означает, что executor тратит больше времени на сборку мусора, чем на полезную работу.
+
+**Причины высокого GC:**
+- Слишком мало памяти для executor (`spark.executor.memory`)
+- Слишком много данных в одной partition
+- Cache/persist занимает слишком много storage memory
+- Утечка объектов через UDF
+
+**Что делать:**
+```python
+# Увеличить память executor
+spark.conf.set("spark.executor.memory", "4g")
+
+# Или увеличить количество партиций (меньше данных на task)
+df = df.repartition(200)
+```
+
+## SQL Tab: план запроса
+
+Вкладка **SQL** доступна для DataFrame/SQL операций и показывает **визуальный план выполнения** с метриками на каждом узле.
+
+**Что искать:**
+- **Scan**: количество прочитанных строк. Если нет predicate pushdown -- сканируете всю таблицу
+- **Filter**: количество строк до и после фильтрации. Ratio 1000:1 = фильтр работает поздно
+- **Exchange**: это shuffle. Количество байт показывает объём перемещённых данных
+- **SortMergeJoin vs BroadcastHashJoin**: broadcast = быстро, sort-merge = shuffle
+
+```
++- WholeStageCodegen (3)
+   +- SortMergeJoin [customer_id], [customer_id]
+      :- Exchange hashpartitioning(customer_id, 200)  ← 2.3 GB shuffle!
+      :  +- Filter (amount > 100)
+      :     +- Scan parquet [orders] (1.2B rows)      ← нет partition pruning
+      +- Exchange hashpartitioning(customer_id, 200)  ← 450 MB shuffle
+         +- Scan parquet [customers] (10M rows)        ← можно broadcast!
+```
+
+В этом примере:
+1. **customers** (450 MB) достаточно мала для broadcast join (по умолчанию < 10 MB, но можно увеличить)
+2. **orders** сканирует 1.2B строк -- нужен partition pruning по дате
+3. Два Exchange = два shuffle по 2.3 GB + 450 MB
+
+<KnowledgeCheck
+  question="На вкладке SQL вы видите SortMergeJoin с Exchange (shuffle) для обеих таблиц. Одна таблица -- 450 MB, другая -- 50 GB. Как оптимизировать?"
+  answer="Таблицу 450 MB можно передать через broadcast join вместо shuffle. Установите spark.sql.autoBroadcastJoinThreshold в значение >= 450 MB (например, 500m) или используйте broadcast hint: df_large.join(broadcast(df_small), 'key'). Это устранит один из двух shuffle и значительно ускорит join."
+/>
+
+## Storage Tab: кэширование
+
+Вкладка **Storage** показывает все кэшированные (persist/cache) DataFrame и RDD.
+
+**Что искать:**
+- **Size in Memory / Size on Disk** -- сколько памяти занимает кэш
+- **Fraction Cached** -- если < 100%, часть данных вытеснена из памяти (spill)
+- **Storage Level** -- MEMORY_ONLY vs MEMORY_AND_DISK
+
+<SpillToDiskDiagram client:load />
+
+<Callout type="tip">
+**Анти-паттерн: кэширование всего подряд**
+
+Кэширование занимает storage memory, вытесняя execution memory. Кэшируйте только те DataFrame, которые используются более одного раза. Используйте `df.unpersist()` когда кэш больше не нужен.
+</Callout>
+
+## Environment Tab: конфигурация
+
+Вкладка **Environment** показывает все активные конфигурации Spark. Здесь можно проверить:
+
+- `spark.sql.adaptive.enabled` -- включён ли AQE
+- `spark.sql.shuffle.partitions` -- количество shuffle partitions (по умолчанию 200)
+- `spark.executor.memory` / `spark.driver.memory` -- распределение памяти
+- `spark.sql.autoBroadcastJoinThreshold` -- порог для broadcast join
+
+## Интерактивная диаграмма: Что искать в Spark UI
+
+<SparkUISimulationDiagram client:load />
+
+Диаграмма выше показывает ключевые элементы каждой вкладки Spark UI и выделяет **красные флаги** -- метрики, требующие вашего внимания. Кликайте по вкладкам Jobs, Stages и SQL, чтобы увидеть типичные проблемы и их индикаторы.
+
+## Чеклист диагностики
+
+Когда Spark job медленный, проходите по этому чеклисту:
+
+1. **Jobs tab** -- какой job самый долгий? Есть ли failed jobs?
+2. **Stages tab** -- в каком stage bottleneck? Проверьте GC time и task distribution
+3. **SQL tab** -- есть ли ненужные shuffle (Exchange)? Можно ли использовать broadcast?
+4. **Storage tab** -- не переполнен ли кэш? Fraction Cached = 100%?
+5. **Environment tab** -- правильные ли настройки AQE, памяти, partitions?
+
+<KnowledgeCheck
+  question="В Summary Metrics stage вы видите: Min Duration = 0.1s, Median = 0.4s, Max = 45.2s. GC Time Max = 8.5s. Что это означает и как исправить?"
+  answer="Max Duration в 100 раз больше медианы -- это data skew: одна партиция содержит значительно больше данных. Высокий GC Time (8.5s) подтверждает, что executor обрабатывает слишком большой объём данных в одной task. Решения: (1) включить AQE skew join (spark.sql.adaptive.skewJoin.enabled=true), (2) добавить salt key для перераспределения данных, (3) увеличить spark.executor.memory для тяжёлых tasks."
+/>
+
+## Что дальше?
+
+Spark UI показывает текущие и недавние приложения. Но что если вам нужно проанализировать job, который завершился вчера? Для этого существует **History Server** -- инструмент для post-mortem анализа, который мы разберём в следующем уроке.

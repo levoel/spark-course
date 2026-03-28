@@ -1,0 +1,134 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/06-spark-sql-catalog",
+  "moduleId": "03-dataframes-spark-sql",
+  "_meta": {
+    "idPrefix": "spark-m03-06",
+    "description": "Use IDs: m03-06-q1, m03-06-q2, ... for MC/TF; m03-06-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-06-q1",
+      "type": "multiple-choice",
+      "question": "Чем отличается createOrReplaceTempView() от createTempView()?",
+      "options": [
+        {
+          "id": "a",
+          "text": "createOrReplaceTempView создаёт постоянную таблицу, createTempView -- временную"
+        },
+        {
+          "id": "b",
+          "text": "createOrReplaceTempView перезаписывает существующее представление с тем же именем; createTempView выбросит ошибку, если представление с таким именем уже существует"
+        },
+        {
+          "id": "c",
+          "text": "createTempView быстрее, потому что не проверяет существующие представления"
+        },
+        {
+          "id": "d",
+          "text": "createOrReplaceTempView доступен из всех SparkSession, createTempView -- только из текущей"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "createOrReplaceTempView() создаёт временное представление и перезаписывает существующее, если оно уже есть с тем же именем. createTempView() создаёт представление, но выбросит AnalysisException, если представление уже существует. Оба создают представления в области видимости текущей SparkSession. Для глобальных представлений (между SparkSession) используйте createOrReplaceGlobalTempView().",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-06-q2",
+      "type": "multiple-choice",
+      "question": "Что произойдёт с данными при выполнении DROP TABLE на managed table vs external table?",
+      "options": [
+        {
+          "id": "a",
+          "text": "В обоих случаях удаляются только метаданные, данные остаются"
+        },
+        {
+          "id": "b",
+          "text": "В обоих случаях удаляются и данные, и метаданные"
+        },
+        {
+          "id": "c",
+          "text": "Managed table: удаляются и данные, и метаданные. External table: удаляются только метаданные, данные на внешнем storage остаются"
+        },
+        {
+          "id": "d",
+          "text": "Spark не позволяет удалять external tables"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Managed table: Spark управляет и данными, и метаданными. DROP TABLE удаляет всё. External table: Spark управляет только метаданными (запись в Hive Metastore), данные находятся на внешнем storage (HDFS, S3). DROP TABLE удаляет запись из метаstore, но данные остаются на месте. Практическое правило: managed для промежуточных результатов, external для данных, используемых другими системами.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-06-q3",
+      "type": "multiple-choice",
+      "question": "Spark SQL и DataFrame API генерируют одинаковый физический план выполнения. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "DataFrame API внутренне конвертируется в SQL-строку, которая затем парсится"
+        },
+        {
+          "id": "b",
+          "text": "Физические планы разные, но результат одинаковый"
+        },
+        {
+          "id": "c",
+          "text": "SQL API использует отдельный оптимизатор, но он генерирует тот же результат"
+        },
+        {
+          "id": "d",
+          "text": "Оба API создают логический план, который проходит через один и тот же Catalyst optimizer: анализ, логическая оптимизация, физическое планирование"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "DataFrame API строит логический план из вызовов методов (filter, join, groupBy). SQL-запрос парсится в логический план из текста. После этого оба плана проходят одни и те же стадии Catalyst optimizer: analysis, logical optimization (predicate pushdown, constant folding), physical planning (выбор join-стратегии). Результат -- идентичный физический план, одинаковый DAG из stages и tasks.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m03-06-q4",
+      "type": "true-false",
+      "question": "Метод registerTempTable() устарел в Spark 2.0 и заменён на createOrReplaceTempView().",
+      "correctAnswer": true,
+      "explanation": "registerTempTable() был помечен как deprecated в Spark 2.0. Замена -- createOrReplaceTempView(), которая явно указывает, что создаётся представление (view), а не физическая таблица. Если вы встречаете registerTempTable() в старом коде, замените на createOrReplaceTempView() -- поведение идентично.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-06-code-1",
+      "type": "code-challenge",
+      "question": "Напишите SQL-запрос GROUP BY с HAVING: найдите отделы, в которых более 2 сотрудников, и выведите количество сотрудников и среднюю зарплату.",
+      "language": "sql",
+      "setupSQL": "CREATE TABLE employees (name TEXT, department TEXT, salary INTEGER);\nINSERT INTO employees VALUES ('Alice', 'Engineering', 75000);\nINSERT INTO employees VALUES ('Bob', 'Marketing', 55000);\nINSERT INTO employees VALUES ('Carol', 'Engineering', 80000);\nINSERT INTO employees VALUES ('Dave', 'Marketing', 60000);\nINSERT INTO employees VALUES ('Eve', 'Engineering', 70000);",
+      "starterCode": "-- Найдите отделы с более чем 2 сотрудниками\n-- Выведите: department, employee_count, avg_salary\n\nSELECT\n    department,\n    -- TODO: COUNT и AVG\nFROM employees\n-- TODO: GROUP BY и HAVING\n",
+      "solutionCode": "SELECT\n    department,\n    COUNT(*) AS employee_count,\n    AVG(salary) AS avg_salary\nFROM employees\nGROUP BY department\nHAVING COUNT(*) > 2",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Engineering в результате (3 сотрудника)",
+          "input": "",
+          "expectedOutput": "Engineering",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Marketing отфильтрован (только 2 сотрудника)",
+          "input": "",
+          "expectedOutput": "Marketing",
+          "matchMode": "not_contains",
+          "hidden": true
+        },
+        {
+          "id": "tc3",
+          "description": "Содержит число 3",
+          "input": "",
+          "expectedOutput": "3",
+          "matchMode": "contains",
+          "hidden": false
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "GROUP BY department группирует строки по отделам. COUNT(*) считает количество строк в каждой группе. AVG(salary) вычисляет среднюю зарплату. HAVING COUNT(*) > 2 фильтрует результаты агрегации, оставляя только группы с более чем 2 записями. В PySpark аналог HAVING -- это filter() после groupBy().agg().",
+      "bloomLevel": "applied"
+    }
+  ]
+}

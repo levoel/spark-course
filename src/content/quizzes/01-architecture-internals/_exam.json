@@ -1,0 +1,363 @@
+{
+  "lessonSlug": "01-architecture-internals/_exam",
+  "moduleId": "01-architecture-internals",
+  "examTitle": "Экзамен: Архитектура и внутреннее устройство Spark",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m01-exam",
+    "description": "Use IDs: m01-exam-q1, m01-exam-q2, ... (12-15 analytical questions)"
+  },
+  "questions": [
+    {
+      "id": "spark-m01-exam-q1",
+      "type": "multiple-choice",
+      "question": "Production-кластер: 50 executors, spark.executor.memory=8g, spark.memory.fraction=0.6. Spark-приложение кэширует 3 DataFrame общим объёмом 200 ГБ и одновременно выполняет sort-merge join на 150 ГБ данных. Executors начинают терять heartbeat и отваливаться. Какова наиболее вероятная причина?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Сетевой bottleneck между executors из-за большого объёма shuffle"
+        },
+        {
+          "id": "b",
+          "text": "Driver не справляется с планированием 50 executors"
+        },
+        {
+          "id": "c",
+          "text": "Execution memory вытесняет кэшированные данные, вызывая пересчёт DataFrame; одновременно execution нуждается в дополнительной памяти для sort -- всё вместе приводит к GC-паузам и потере heartbeat"
+        },
+        {
+          "id": "d",
+          "text": "spark.memory.fraction=0.6 слишком мал для 8 ГБ executors"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Каждый executor имеет ~4.6 ГБ Spark Memory. При 200 ГБ кэша на 50 executors это ~4 ГБ кэша на executor -- почти весь Spark Memory. Когда sort-merge join начинает требовать execution memory, он вытесняет кэшированные данные (execution может evict storage, но не наоборот). Вытесненные DataFrame пересчитываются, создавая дополнительную нагрузку. GC на переполненном heap вызывает паузы, executor пропускает heartbeat и убивается Cluster Manager.",
+      "studyHint": "Повторите урок 7: Управление памятью: Unified Memory Manager -- раздел о правилах заимствования и вытеснения",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-exam-q2",
+      "type": "multiple-choice",
+      "question": "Запрос: чтение таблицы A (filter), чтение таблицы B (filter), JOIN A и B, groupBy + aggregation, sort по результату. Сколько stages создаст DAG Scheduler и какие из них могут выполняться параллельно?",
+      "options": [
+        {
+          "id": "a",
+          "text": "3 stages: все последовательные"
+        },
+        {
+          "id": "b",
+          "text": "2 stages: чтение данных и обработка"
+        },
+        {
+          "id": "c",
+          "text": "4 stages: scan A, scan B, JOIN+groupBy, sort"
+        },
+        {
+          "id": "d",
+          "text": "5 stages: Stage 0 (scan+filter A) и Stage 1 (scan+filter B) параллельно; Stage 2 (shuffle+JOIN), Stage 3 (shuffle+groupBy), Stage 4 (shuffle+sort) последовательно"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "DAG Scheduler разбивает по shuffle boundaries (wide dependencies). Narrow-операции (filter) группируются с предшествующим scan. Wide-операции (JOIN, groupBy, sort) создают новые stages. Stage 0 и Stage 1 -- независимые ветви DAG (разные таблицы), выполняются параллельно. Stages 2-4 последовательны, каждая зависит от предыдущей через shuffle.",
+      "studyHint": "Повторите урок 4: DAG Scheduler -- раздел о narrow vs wide dependencies и параллельном выполнении stages",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-exam-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer запускает Spark-приложение в client mode на ноутбуке. Задание выполняет collect() на результате размером 5 ГБ. Driver memory = 2 ГБ. Какие ДВЕ проблемы присутствуют в этом сценарии?",
+      "options": [
+        {
+          "id": "a",
+          "text": "(1) collect() попытается передать 5 ГБ в driver с 2 ГБ RAM -- OutOfMemoryError; (2) client mode на ноутбуке означает зависимость от стабильности сетевого подключения -- любой разрыв убьёт задание"
+        },
+        {
+          "id": "b",
+          "text": "Client mode не поддерживает collect(); driver memory слишком мал"
+        },
+        {
+          "id": "c",
+          "text": "Проблема только одна: driver memory. Client mode работает надёжно на любом устройстве"
+        },
+        {
+          "id": "d",
+          "text": "(1) Executors не смогут отправить 5 ГБ по сети; (2) YARN не поддерживает client mode"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Две независимые проблемы: (1) collect() собирает ВСЕ данные в driver memory -- 5 ГБ данных в 2 ГБ heap = OOM. Решение: использовать take(N), show(), или записать результат через write. (2) В client mode driver работает на ноутбуке -- если ноутбук потеряет сеть, закроет крышку или уйдёт в sleep, driver умрёт и задание упадёт. Для production используйте cluster mode.",
+      "studyHint": "Повторите урок 1: Обзор архитектуры (collect() опасность) и урок 2: Driver-Executor модель (client vs cluster mode)",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-exam-q4",
+      "type": "multiple-choice",
+      "question": "Spark-приложение в FAIR Scheduler с двумя пулами: 'interactive' (weight=2) и 'batch' (weight=1). Интерактивный запрос поступает во время выполнения тяжёлого batch-задания. Как распределятся ресурсы?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Batch-задание завершится первым, затем начнётся интерактивный запрос (FIFO внутри FAIR)"
+        },
+        {
+          "id": "b",
+          "text": "FAIR Scheduler выделит интерактивному пулу 2/3 ресурсов (weight=2 из 3), batch получит 1/3; интерактивный запрос начнёт выполняться немедленно"
+        },
+        {
+          "id": "c",
+          "text": "Оба задания получат по 50% ресурсов независимо от весов"
+        },
+        {
+          "id": "d",
+          "text": "Интерактивный запрос полностью вытеснит batch-задание"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "FAIR Scheduler распределяет ресурсы пропорционально весам пулов. При weight=2 для interactive и weight=1 для batch соотношение 2:1 означает ~67% ресурсов interactive и ~33% batch. Интерактивный запрос начнёт выполняться сразу, не ожидая завершения batch. Это ключевое преимущество FAIR над FIFO -- малые задания не блокируются большими.",
+      "studyHint": "Повторите урок 5: Task Scheduler -- раздел о FIFO vs FAIR Scheduler и конфигурации пулов",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-exam-q5",
+      "type": "multiple-choice",
+      "question": "Spark UI показывает, что 90% tasks Stage 3 завершились за 30 секунд, а 10% tasks выполняются уже 5 минут. spark.speculation=false. Какое сочетание действий наиболее эффективно решит проблему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить executor memory для медленных tasks"
+        },
+        {
+          "id": "b",
+          "text": "Увеличить число партиций через repartition"
+        },
+        {
+          "id": "c",
+          "text": "Включить spark.speculation=true для автоматического перезапуска медленных tasks на других executors + проверить data skew в партициях через Spark UI (Tasks tab: Input Size разброс)"
+        },
+        {
+          "id": "d",
+          "text": "Переключиться с FAIR на FIFO Scheduler"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "10% straggler tasks могут быть вызваны двумя причинами: (1) data skew -- некоторые партиции содержат больше данных, чем другие; (2) проблемы конкретных нод (перегруженный диск, GC). spark.speculation=true запустит дубликаты медленных tasks на других executors, решая проблему нод. Проверка Input Size в Spark UI покажет, есть ли data skew. Если skew обнаружен, дополнительно потребуется repartition или salting.",
+      "studyHint": "Повторите урок 5: Task Scheduler -- speculative execution и урок 6: Shuffle Deep Dive -- data skew",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-exam-q6",
+      "type": "multiple-choice",
+      "question": "В Spark-приложении выполняется цепочка: read parquet -> filter -> join -> groupBy -> filter -> sort -> write. Какие из этих операций narrow, какие wide?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Narrow: read, filter, sort. Wide: join, groupBy"
+        },
+        {
+          "id": "b",
+          "text": "Все операции narrow, кроме join"
+        },
+        {
+          "id": "c",
+          "text": "Narrow: read, filter (оба). Wide: join, groupBy, sort, write"
+        },
+        {
+          "id": "d",
+          "text": "Narrow: read, filter (оба), write. Wide: join, groupBy, sort"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Narrow (без shuffle): read -- чтение партиций независимо; filter -- обработка каждой партиции отдельно; write -- запись каждой партиции отдельно. Wide (с shuffle): join -- перемещение данных по ключу join между executors; groupBy -- перемещение данных по ключу группировки; sort -- глобальная сортировка требует перемещения данных между партициями. Write в Spark -- narrow, если число выходных партиций совпадает.",
+      "studyHint": "Повторите урок 4: DAG Scheduler (narrow vs wide) и урок 6: Shuffle Deep Dive (какие операции вызывают shuffle)",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-exam-q7",
+      "type": "multiple-choice",
+      "question": "Executor с 4 ГБ heap, spark.memory.fraction=0.6, spark.memory.storageFraction=0.5. В данный момент storage использует 1500 МБ (включая заимствованную у execution), execution не используется. Затем запускается shuffle, требующий 1000 МБ. Что произойдёт с кэшированными данными?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Shuffle вытеснит ~361 МБ кэшированных данных: сначала заберёт свои 1139 МБ (execution region), затем вытеснит часть storage, которая заимствовала execution space"
+        },
+        {
+          "id": "b",
+          "text": "Shuffle получит 1000 МБ из execution region (1139 МБ) без вытеснения кэша"
+        },
+        {
+          "id": "c",
+          "text": "Shuffle не сможет запуститься, пока storage не освободит память"
+        },
+        {
+          "id": "d",
+          "text": "Spark увеличит heap executor до 6 ГБ для размещения обоих"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Spark Memory = 0.6 * (4096-300) = 2278 МБ. Default split: storage = 1139 МБ, execution = 1139 МБ. Storage заимствовала ~361 МБ у execution (1500 - 1139 = 361 МБ). Когда shuffle требует 1000 МБ execution memory, он имеет право вытеснить данные из storage, которые занимают execution region. Execution вытеснит 361 МБ кэшированных данных (заимствованных из execution space), получив 1139 МБ для работы. Кэш уменьшится с 1500 до 1139 МБ.",
+      "studyHint": "Повторите урок 7: Управление памятью -- soft boundary, правила заимствования и формула расчёта",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-exam-q8",
+      "type": "multiple-choice",
+      "question": "Data engineer создаёт SparkSession в notebook: SparkSession.builder.config('spark.sql.shuffle.partitions', '50').getOrCreate(). Затем в следующей ячейке снова вызывает SparkSession.builder.config('spark.sql.shuffle.partitions', '200').getOrCreate(). Какое значение shuffle.partitions будет использоваться?",
+      "options": [
+        {
+          "id": "a",
+          "text": "200 -- последний builder перезаписывает конфигурацию"
+        },
+        {
+          "id": "b",
+          "text": "50 -- getOrCreate() вернёт существующую сессию, игнорируя конфигурацию второго builder"
+        },
+        {
+          "id": "c",
+          "text": "Возникнет ошибка: нельзя создать две SparkSession"
+        },
+        {
+          "id": "d",
+          "text": "Значение по умолчанию 200 (Spark 3.x default)"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "getOrCreate() реализует Singleton pattern: если SparkSession уже существует, возвращается существующий экземпляр. Конфигурации из второго builder игнорируются. Чтобы изменить runtime-параметр, используйте spark.conf.set('spark.sql.shuffle.partitions', '200'). Это частая ловушка в notebooks, где ячейки выполняются многократно с разными конфигурациями.",
+      "studyHint": "Повторите урок 3: SparkSession и SparkContext -- getOrCreate() поведение и приоритет конфигурации",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-exam-q9",
+      "type": "multiple-choice",
+      "question": "Spark-задание обрабатывает 500 ГБ данных с groupBy-агрегацией. spark.sql.shuffle.partitions=200. В Spark UI вы видите: shuffle write=500 ГБ, median task duration=2 мин, max task duration=45 мин. Что указывает max >> median и какое решение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Проблема в медленной сети между executors; решение -- увеличить network buffer"
+        },
+        {
+          "id": "b",
+          "text": "Executor memory недостаточна; решение -- увеличить spark.executor.memory"
+        },
+        {
+          "id": "c",
+          "text": "Data skew: некоторые ключи groupBy имеют непропорционально много строк, создавая огромные партиции; решение -- salting ключей или repartition(2000+) для более мелких партиций"
+        },
+        {
+          "id": "d",
+          "text": "Слишком мало executors; решение -- увеличить число executors до 1000"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Max >> median (45 мин vs 2 мин) -- классический индикатор data skew. При groupBy данные с одинаковым ключом попадают в одну партицию. Если один ключ содержит 30% всех строк, одна партиция будет в десятки раз больше остальных. Решения: (1) salting -- добавление случайного суффикса к ключу для распределения нагрузки; (2) увеличение spark.sql.shuffle.partitions для уменьшения размера партиций; (3) AQE (Adaptive Query Execution) в Spark 3.x для автоматического split skewed partitions.",
+      "studyHint": "Повторите урок 6: Shuffle Deep Dive -- partition tuning и урок 5: Task Scheduler -- диагностика straggler tasks",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-exam-q10",
+      "type": "multiple-choice",
+      "question": "Spark-приложение запущено в cluster mode на YARN. Во время выполнения один из worker nodes теряет сетевое подключение. На этом узле работали 3 executor. Опишите последовательность восстановления.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Задание немедленно завершится с ошибкой -- потеря executors фатальна"
+        },
+        {
+          "id": "b",
+          "text": "YARN перезагрузит потерянный узел и восстановит executors на нём"
+        },
+        {
+          "id": "c",
+          "text": "Driver переместится на другой узел вместе с executors"
+        },
+        {
+          "id": "d",
+          "text": "YARN обнаружит потерю нод, driver получит уведомление, YARN выделит 3 новых executor на здоровых нодах, driver перезапустит незавершённые tasks и пересчитает потерянные shuffle-данные"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "В cluster mode driver работает на отдельном узле и не пострадает. Последовательность: (1) YARN NodeManager перестаёт отвечать на heartbeat; (2) YARN ResourceManager помечает узел как LOST; (3) Driver получает уведомление о потере 3 executors; (4) YARN выделяет 3 новых контейнера на здоровых нодах; (5) Driver перезапускает незавершённые tasks из потерянных executors; (6) Если потерянные executors хранили shuffle-данные для текущих stages, предыдущие stages пересчитываются для восстановления shuffle output.",
+      "studyHint": "Повторите урок 2: Driver-Executor модель -- отказоустойчивость и cluster mode",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-exam-q11",
+      "type": "multiple-choice",
+      "question": "Почему правило Unified Memory Manager гласит, что execution может вытеснять storage, но НЕ наоборот? Какая архитектурная причина за этим стоит?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Execution memory критична для завершения текущей задачи (shuffle/sort buffers); без неё task упадёт. Storage (кэш) -- это оптимизация: потерянные кэшированные данные можно пересчитать из источника"
+        },
+        {
+          "id": "b",
+          "text": "Storage memory используется реже, чем execution, поэтому её можно безопасно вытеснить"
+        },
+        {
+          "id": "c",
+          "text": "Вытеснение execution привело бы к deadlock между executors"
+        },
+        {
+          "id": "d",
+          "text": "Это ограничение JVM -- off-heap memory не может быть вытеснена"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Архитектурное решение основано на приоритете корректности: execution memory хранит буферы текущих операций (shuffle, sort, join, aggregation). Если execution лишится памяти, task не сможет завершиться и упадёт. Storage memory хранит кэшированные RDD/DataFrame -- это оптимизация производительности. Если кэш вытеснен, данные будут пересчитаны при следующем обращении. Потеря кэша замедляет, но не ломает выполнение.",
+      "studyHint": "Повторите урок 7: Управление памятью -- soft boundary и асимметрия правил вытеснения",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-exam-q12",
+      "type": "multiple-choice",
+      "question": "Data engineer заметил, что coalesce(1) перед записью создаёт один выходной файл, но одна task обрабатывает все данные (100 ГБ). repartition(1) тоже создаёт один файл. В чём разница в выполнении и когда что использовать?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет разницы -- оба выполняют одинаковую операцию"
+        },
+        {
+          "id": "b",
+          "text": "coalesce(1) объединяет партиции без shuffle (narrow), но вся нагрузка ложится на один executor; repartition(1) выполняет full shuffle, распределяя чтение данных по всем executors, а запись -- на одном"
+        },
+        {
+          "id": "c",
+          "text": "coalesce(1) быстрее для маленьких данных; repartition(1) быстрее для больших"
+        },
+        {
+          "id": "d",
+          "text": "coalesce(1) создаёт сжатый файл, repartition(1) -- несжатый"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "coalesce(1) -- narrow dependency: один executor читает и обрабатывает все входные партиции. Для 100 ГБ это может вызвать OOM или быть чрезвычайно медленным. repartition(1) -- wide dependency: все executors читают данные параллельно, выполняют shuffle, и один executor записывает финальный файл. repartition(1) быстрее для больших данных, но создаёт shuffle overhead. На практике для 100 ГБ лучше избегать одного файла -- запишите партиционированно.",
+      "studyHint": "Повторите урок 6: Shuffle Deep Dive -- coalesce vs repartition и их impact на DAG",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-exam-q13",
+      "type": "multiple-choice",
+      "question": "Spark-приложение содержит spark.locality.wait=30s. В кластере 100 executors, но данные расположены только на 10 нодах (HDFS replication factor=3). Как эта конфигурация повлияет на производительность?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Улучшит производительность -- tasks будут ждать локальные executors и избегать сетевого I/O"
+        },
+        {
+          "id": "b",
+          "text": "Не повлияет -- HDFS автоматически перемещает данные к executors"
+        },
+        {
+          "id": "c",
+          "text": "Ухудшит производительность: 90 executors будут простаивать до 30 секунд на каждом task, ожидая локальности; задание растянется из-за неравномерной загрузки кластера"
+        },
+        {
+          "id": "d",
+          "text": "Улучшит только для первой stage, ухудшит для shuffle stages"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "С replication factor=3 данные каждого блока находятся на 3 из 100 нод. spark.locality.wait=30s заставляет Task Scheduler ждать 30 секунд на каждом уровне локальности (PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL) перед деградацией до ANY. 90+ executors на нодах без данных будут простаивать, пока Scheduler не пройдёт все уровни (до 90 секунд ожидания). Для кластеров с неравномерным распределением данных spark.locality.wait=0-3s часто оптимальнее.",
+      "studyHint": "Повторите урок 5: Task Scheduler -- data locality levels и spark.locality.wait",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

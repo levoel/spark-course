@@ -1,0 +1,126 @@
+{
+  "lessonSlug": "01-architecture-internals/04-dag-scheduler",
+  "moduleId": "01-architecture-internals",
+  "_meta": {
+    "idPrefix": "spark-m01-04",
+    "description": "Use IDs: m01-04-q1, m01-04-q2, ... for MC/TF; m01-04-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m01-04-q1",
+      "type": "multiple-choice",
+      "question": "Запрос содержит чтение двух таблиц, filter на каждой, JOIN между ними и финальную агрегацию (groupBy + sum). Сколько stages создаст DAG Scheduler?",
+      "options": [
+        {
+          "id": "a",
+          "text": "4 stages: scan+filter таблицы A, scan+filter таблицы B, shuffle+JOIN, shuffle+groupBy"
+        },
+        {
+          "id": "b",
+          "text": "3 stages: по одной для каждой таблицы (scan + filter), затем одна для JOIN"
+        },
+        {
+          "id": "c",
+          "text": "2 stages: одна для чтения, одна для обработки"
+        },
+        {
+          "id": "d",
+          "text": "5 stages: отдельная stage для каждой операции"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "DAG Scheduler разбивает план на stages по shuffle boundaries (wide dependencies). Narrow-операции (filter, select) остаются в той же stage. В этом запросе: Stage 0 -- scan+filter таблицы A; Stage 1 -- scan+filter таблицы B (параллельно со Stage 0); Stage 2 -- shuffle данных обеих таблиц + JOIN; Stage 3 -- shuffle для groupBy + агрегация. JOIN и groupBy -- wide dependencies, каждая создаёт новую stage.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-04-q2",
+      "type": "multiple-choice",
+      "question": "Почему DAG Scheduler группирует narrow transformations (filter, map, select) в одну stage, а не выполняет каждую отдельно?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Narrow transformations не поддерживают параллельное выполнение"
+        },
+        {
+          "id": "b",
+          "text": "Narrow transformations обрабатывают данные в одной партиции без перемещения по сети, поэтому их можно объединить в pipeline и выполнить за один проход по данным"
+        },
+        {
+          "id": "c",
+          "text": "Это упрощает код DAG Scheduler"
+        },
+        {
+          "id": "d",
+          "text": "DAG Scheduler ограничен максимумом 10 stages на Job"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "При narrow dependency каждая выходная партиция зависит от одной входной партиции. Это значит, что операции filter -> map -> select можно объединить в pipeline: данные читаются один раз и проходят через все трансформации за один проход, без материализации промежуточных результатов. Разделение на отдельные stages потребовало бы записи промежуточных данных и лишней координации.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-04-q3",
+      "type": "multiple-choice",
+      "question": "В Spark UI вы видите, что Stage 0 и Stage 1 начали выполнение одновременно, а Stage 2 ждёт их завершения. Какое свойство DAG объясняет это поведение?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Stage 0 и Stage 1 -- narrow dependencies, поэтому выполняются параллельно"
+        },
+        {
+          "id": "b",
+          "text": "Spark всегда запускает первые две stages параллельно для повышения производительности"
+        },
+        {
+          "id": "c",
+          "text": "Stage 0 и Stage 1 не имеют зависимостей друг от друга (независимые ветви DAG), а Stage 2 зависит от обеих через wide dependency (shuffle)"
+        },
+        {
+          "id": "d",
+          "text": "Stage 2 ждёт из-за нехватки executor cores"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "DAG (Directed Acyclic Graph) определяет зависимости между stages. Если две stages читают разные источники данных и не зависят друг от друга, DAG Scheduler запускает их параллельно. Stage 2 (JOIN) зависит от результатов обеих -- это wide dependency, требующая shuffle данных из Stage 0 и Stage 1. Поэтому Stage 2 начинается только после завершения обеих родительских stages.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-04-code-1",
+      "type": "code-challenge",
+      "question": "Постройте multi-stage запрос: создайте два DataFrame (orders и products), выполните JOIN по product_id, отфильтруйте amount > 100, сгруппируйте по product_name и посчитайте суммарный amount через groupBy().agg(). Вызовите show() для вывода результата. Этот запрос создаёт 4 stages в DAG: scan orders, scan products, shuffle+JOIN, shuffle+groupBy.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import sum\n\nspark = SparkSession.builder.appName(\"dag-scheduler\").getOrCreate()\n\norders = spark.createDataFrame(\n    [(1, 101, 150), (2, 102, 80), (3, 101, 200), (4, 103, 300), (5, 102, 50)],\n    [\"order_id\", \"product_id\", \"amount\"]\n)\n\nproducts = spark.createDataFrame(\n    [(101, \"Laptop\"), (102, \"Mouse\"), (103, \"Monitor\")],\n    [\"product_id\", \"product_name\"]\n)\n\n# TODO: JOIN orders и products по product_id\n# joined = orders.join(...)\n\n# TODO: Отфильтруйте amount > 100\n# filtered = joined.filter(...)\n\n# TODO: Сгруппируйте по product_name и посчитайте sum(\"amount\")\n# result = filtered.groupBy(...).agg(...)\n\n# TODO: Вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import sum\n\nspark = SparkSession.builder.appName(\"dag-scheduler\").getOrCreate()\n\norders = spark.createDataFrame(\n    [(1, 101, 150), (2, 102, 80), (3, 101, 200), (4, 103, 300), (5, 102, 50)],\n    [\"order_id\", \"product_id\", \"amount\"]\n)\n\nproducts = spark.createDataFrame(\n    [(101, \"Laptop\"), (102, \"Mouse\"), (103, \"Monitor\")],\n    [\"product_id\", \"product_name\"]\n)\n\njoined = orders.join(products, \"product_id\")\n\nfiltered = joined.filter(joined[\"amount\"] > 100)\n\nresult = filtered.groupBy(\"product_name\").agg(sum(\"amount\").alias(\"total_amount\"))\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит Laptop",
+          "input": "",
+          "expectedOutput": "Laptop",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Результат содержит Monitor",
+          "input": "",
+          "expectedOutput": "Monitor",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Код содержит groupBy",
+          "input": "",
+          "expectedOutput": "groupBy",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "DAG Scheduler разбивает этот запрос на 4 stages по shuffle boundaries: Stage 0 -- scan+filter orders; Stage 1 -- scan products (параллельно со Stage 0); Stage 2 -- shuffle данных обеих таблиц по product_id + JOIN; Stage 3 -- shuffle для groupBy по product_name + агрегация sum. Narrow transformations (filter, select) остаются внутри stage, а wide transformations (JOIN, groupBy) создают новые stages. Наблюдаемый результат: Mouse отсутствует, потому что оба заказа Mouse (80, 50) отфильтрованы условием amount > 100.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

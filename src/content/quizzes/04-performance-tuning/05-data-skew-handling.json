@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "04-performance-tuning/05-data-skew-handling",
+  "moduleId": "04-performance-tuning",
+  "_meta": {
+    "idPrefix": "spark-m04-05",
+    "description": "Use IDs: m04-05-q1, m04-05-q2, ... for MC/TF; m04-05-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m04-05-q1",
+      "type": "multiple-choice",
+      "question": "В Spark UI вы видите: 199 tasks завершились за 30 секунд, 1 task выполняется 40 минут. Shuffle Read median = 50 МБ, max = 5 ГБ. Что это?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Медленный node в кластере -- нужно заменить executor"
+        },
+        {
+          "id": "b",
+          "text": "Data skew -- один ключ содержит непропорционально много данных, straggler task обрабатывает 5 ГБ вместо 50 МБ"
+        },
+        {
+          "id": "c",
+          "text": "Сетевая проблема -- один executor не получает данные"
+        },
+        {
+          "id": "d",
+          "text": "Спекулятивное выполнение задерживает task"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Ключевой индикатор data skew -- огромная разница между Shuffle Read median (50 МБ) и max (5 ГБ). При медленном node Shuffle Read Size одинаков у всех tasks, но один выполняется дольше. При data skew straggler task обрабатывает в 100 раз больше данных -- это объясняет и разницу в duration, и высокий GC Time.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-05-q2",
+      "type": "multiple-choice",
+      "question": "Что делает техника salting для устранения data skew?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Шифрует ключи для равномерного распределения по hash"
+        },
+        {
+          "id": "b",
+          "text": "Удаляет записи с горячим ключом из таблицы"
+        },
+        {
+          "id": "c",
+          "text": "Добавляет случайный суффикс к горячему ключу (например, 'Москва_0', 'Москва_1'), разбивая одну большую партицию на N равных"
+        },
+        {
+          "id": "d",
+          "text": "Увеличивает число shuffle partitions для горячего ключа"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Salting добавляет случайный suffix (0 до N-1) к горячему ключу: 'Москва' становится 'Москва_0', 'Москва_1', 'Москва_2', 'Москва_3'. Вместо одной партиции с 800K записей получаем 4 партиции по ~200K. Для groupBy нужна двухпроходная агрегация: partial aggregate с salt, затем final aggregate без salt.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m04-05-q3",
+      "type": "multiple-choice",
+      "question": "AQE обнаруживает skewed партицию. Какие ДВА условия должны выполняться одновременно?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Размер > 1 ГБ И количество строк > 10 млн"
+        },
+        {
+          "id": "b",
+          "text": "Размер > 256 МБ ИЛИ размер > 5x median -- достаточно одного условия"
+        },
+        {
+          "id": "c",
+          "text": "Duration > 10 минут И GC Time > 50%"
+        },
+        {
+          "id": "d",
+          "text": "Размер > skewedPartitionFactor * median (5x) И размер > skewedPartitionThresholdInBytes (256 МБ)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "AQE проверяет два условия: (1) размер партиции > skewedPartitionFactor (5.0) * median всех партиций; (2) размер партиции > skewedPartitionThresholdInBytes (256 МБ). Оба условия должны выполняться одновременно. Threshold предотвращает ложные срабатывания: маленькая партиция в 5 КБ при median 1 КБ не будет разбита, потому что overhead разбиения превысит выигрыш.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m04-05-q4",
+      "type": "true-false",
+      "question": "AQE автоматически обрабатывает data skew как для join, так и для groupBy операций.",
+      "correctAnswer": false,
+      "explanation": "AQE Skew Join Optimization обрабатывает skew только для join (SortMergeJoin). Для skewed groupBy AQE не предоставляет автоматической оптимизации -- по-прежнему нужен ручной salting с двухпроходной агрегацией. Это связано с тем, что при join AQE может реплицировать другую сторону, а при groupBy такой механизм невозможен.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m04-05-q5",
+      "type": "multiple-choice",
+      "question": "Как выбрать число salt buckets для горячего ключа?",
+      "options": [
+        {
+          "id": "a",
+          "text": "buckets = ceil(skewed_key_size / median_key_size); если горячий ключ в 10 раз больше -- 4-8 buckets, в 100 раз -- 16-32"
+        },
+        {
+          "id": "b",
+          "text": "Всегда используйте 10 buckets -- универсальное значение"
+        },
+        {
+          "id": "c",
+          "text": "Число buckets = число executors в кластере"
+        },
+        {
+          "id": "d",
+          "text": "Чем больше buckets, тем лучше -- всегда используйте 1000"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Число salt buckets зависит от степени skew: buckets = ceil(skewed_key_size / median_key_size). Для skew 10x достаточно 4-8 buckets. Для skew 100x нужно 16-32. Слишком много buckets увеличивает overhead: для join dimension-таблица реплицируется SALT_BUCKETS раз, для groupBy добавляется лишний pass агрегации.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m04-05-code-1",
+      "type": "code-challenge",
+      "question": "Москва доминирует в данных заказов. Добавьте salt column (0-3) к city для устранения skew при groupBy. Используйте concat, lit, floor и rand.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, concat, lit, floor, rand, count\n\nspark = SparkSession.builder.appName(\"salting\").getOrCreate()\n\ndata = [\n    (\"Москва\", 100), (\"Москва\", 200), (\"Москва\", 300), (\"Москва\", 400),\n    (\"Москва\", 500), (\"Москва\", 600), (\"Москва\", 700), (\"Москва\", 800),\n    (\"СПб\", 150), (\"Казань\", 250)\n]\ndf = spark.createDataFrame(data, [\"city\", \"amount\"])\n\n# TODO: Добавьте столбец salted_city = city + \"_\" + random(0-3)\n# SALT_BUCKETS = 4\n# df_salted = df.withColumn(\"salted_city\", concat(...))\n\n# TODO: Покажите df_salted с salted_city\n# df_salted.show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, concat, lit, floor, rand, count\n\nspark = SparkSession.builder.appName(\"salting\").getOrCreate()\n\ndata = [\n    (\"Москва\", 100), (\"Москва\", 200), (\"Москва\", 300), (\"Москва\", 400),\n    (\"Москва\", 500), (\"Москва\", 600), (\"Москва\", 700), (\"Москва\", 800),\n    (\"СПб\", 150), (\"Казань\", 250)\n]\ndf = spark.createDataFrame(data, [\"city\", \"amount\"])\n\nSALT_BUCKETS = 4\ndf_salted = df.withColumn(\n    \"salted_city\",\n    concat(col(\"city\"), lit(\"_\"), floor(rand() * SALT_BUCKETS).cast(\"int\"))\n)\n\ndf_salted.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит salted_city",
+          "input": "",
+          "expectedOutput": "salted_city",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Москва с salt suffix",
+          "input": "",
+          "expectedOutput": "Москва_",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Данные показаны в табличном формате",
+          "input": "",
+          "expectedOutput": "+",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Salting разбивает горячий ключ 'Москва' на 4 подключа: 'Москва_0', 'Москва_1', 'Москва_2', 'Москва_3'. Теперь при groupBy('salted_city') данные Москвы распределяются по 4 партициям вместо одной. Для финальной агрегации нужно удалить salt (split + groupBy по оригинальному city) -- двухпроходная агрегация.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

@@ -1,0 +1,336 @@
+{
+  "lessonSlug": "15-alternative-execution-engines/_exam",
+  "moduleId": "15-alternative-execution-engines",
+  "examTitle": "Экзамен: Alternative Execution Engines",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m15-exam",
+    "description": "Use IDs: m15-exam-q1, m15-exam-q2, ... (12 questions covering all M15 lessons: Native Execution Foundations, DataFusion Comet, Gluten, Comparison & Decision Framework)"
+  },
+  "questions": [
+    {
+      "id": "spark-m15-exam-q1",
+      "type": "multiple-choice",
+      "question": "Data engineer оценивает Comet и Gluten для ускорения ежедневного ETL (500GB Parquet, scan + aggregation + join). Команда не имеет C++ опыта, использует Spark 3.5 на open-source кластере. Какой движок выбрать и почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Comet -- single JAR deployment, 97% тест-совместимость, Rust memory safety. Без C++ опыта дебаг Gluten нативных crash крайне сложен. Если Comet недостаточен -- evaluate Gluten позже"
+        },
+        {
+          "id": "b",
+          "text": "Gluten (Velox) -- 3.3x ускорение лучше, чем 2.4x Comet"
+        },
+        {
+          "id": "c",
+          "text": "Photon -- лучшая производительность для любого Spark кластера"
+        },
+        {
+          "id": "d",
+          "text": "Использовать оба одновременно для максимального ускорения"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Для команды без C++ опыта Comet -- оптимальный выбор: single JAR (без C++ зависимостей), 97% тест-совместимость Spark SQL, Rust memory safety (меньше native crashes). Gluten быстрее на бенчмарках (3.3x vs 2.4x), но требует C++ debugging capabilities. Photon -- только Databricks. Стратегия: начать с Comet, evaluate Gluten при недостаточном ускорении.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L04: Decision flowchart -- без C++ опыта начинать с Comet (lower risk)"
+    },
+    {
+      "id": "spark-m15-exam-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer включил Comet на production. Job стал медленнее на 15%. spark.comet.explainFallback.enabled=true показывает, что 45% операторов fallback на JVM. Какова наиболее вероятная причина замедления?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Comet JAR конфликтует с другими Spark плагинами"
+        },
+        {
+          "id": "b",
+          "text": "При fallback rate 45% Comet загружает нативные библиотеки, аллоцирует off-heap и делает JNI-вызовы, но большинство операторов остаётся на JVM с C2R/R2C overhead на каждом переходе. Суммарный overhead превышает ускорение"
+        },
+        {
+          "id": "c",
+          "text": "Off-heap memory слишком мала -- нужно увеличить до 64 GB"
+        },
+        {
+          "id": "d",
+          "text": "Spark 3.5 имеет известный баг совместимости с Comet"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "При fallback rate >30% нативные движки часто вредны. Comet всё равно загружает нативные библиотеки, аллоцирует off-heap, делает JNI-вызовы. Каждый переход нативный->JVM требует C2R конвертации (полное копирование данных), JVM->нативный -- R2C. При 45% fallback множество таких переходов. Решение: отключить Comet для данного workload или переписать unsupported операторы на built-in functions.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L02: Fallback -- при >50-60% Comet неэффективен; L04: >30% нативный движок вреден"
+    },
+    {
+      "id": "spark-m15-exam-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer конфигурирует Comet для production Spark 3.5 кластера. Какой набор параметров МИНИМАЛЬНО необходим?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.plugins=org.apache.spark.CometPlugin"
+        },
+        {
+          "id": "b",
+          "text": "spark.plugins=org.apache.spark.CometPlugin + spark.shuffle.manager=CometShuffleManager + spark.memory.offHeap.enabled=true + spark.memory.offHeap.size=16g"
+        },
+        {
+          "id": "c",
+          "text": "spark.plugins=org.apache.spark.CometPlugin + spark.memory.offHeap.enabled=true + spark.memory.offHeap.size=16g (плюс JAR в classpath)"
+        },
+        {
+          "id": "d",
+          "text": "spark.comet.enabled=true + spark.comet.offHeap=16g"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Минимально необходимо: (1) JAR в classpath (--jars + extraClassPath); (2) spark.plugins=org.apache.spark.CometPlugin; (3) spark.memory.offHeap.enabled=true; (4) spark.memory.offHeap.size с адекватным размером. CometShuffleManager -- опционален (ускоряет shuffle, но не обязателен). Без offHeap.enabled нативный код не получит память -- crash или OOM.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите L02: Конфигурация Comet -- обязательные параметры (plugins, offHeap)"
+    },
+    {
+      "id": "spark-m15-exam-q4",
+      "type": "multiple-choice",
+      "question": "Comet использует Protocol Buffer для сериализации Spark плана, а Gluten использует Substrait. В чём архитектурное отличие подходов?",
+      "options": [
+        {
+          "id": "a",
+          "text": "ProtoBuf быстрее Substrait, поэтому Comet производительнее"
+        },
+        {
+          "id": "b",
+          "text": "Оба формата идентичны -- название разное, суть одна"
+        },
+        {
+          "id": "c",
+          "text": "Substrait поддерживает только C++ бэкенды, а ProtoBuf -- только Rust"
+        },
+        {
+          "id": "d",
+          "text": "Comet ProtoBuf -- проприетарный формат, tight интеграция с DataFusion. Gluten Substrait -- стандартизированная спецификация, потенциально поддерживает любой бэкенд (Velox, ClickHouse, и другие Substrait consumers)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Comet ProtoBuf -- проприетарный формат, точно отражающий Spark physical plan operators для tight маппинга на DataFusion ExecutionPlan. Gluten Substrait -- стандартизированная cross-language спецификация (поддерживается Calcite, Acero, DataFusion, Velox). Substrait позволяет подключать разные бэкенды без изменения core Gluten. Выбор Comet обеспечивает тесную интеграцию, Gluten -- гибкость бэкендов.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите L02: ProtoBuf pipeline Comet; L03: Substrait универсальная спецификация Gluten"
+    },
+    {
+      "id": "spark-m15-exam-q5",
+      "type": "multiple-choice",
+      "question": "В чём разница между Substrait (Gluten) и ProtoBuf (Comet) подходом к трансляции планов? Какие последствия для production?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Substrait позволяет Gluten подключать разные бэкенды (Velox, ClickHouse, потенциально другие). ProtoBuf привязывает Comet к DataFusion, но обеспечивает tight маппинг с 97% тест-совместимостью"
+        },
+        {
+          "id": "b",
+          "text": "Substrait более зрелый стандарт с большей production adoption"
+        },
+        {
+          "id": "c",
+          "text": "Разница только в формате сериализации, на production не влияет"
+        },
+        {
+          "id": "d",
+          "text": "ProtoBuf поддерживает больше типов данных, чем Substrait"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Substrait -- универсальный стандарт, позволяющий Gluten быть middleware для разных бэкендов. Именно поэтому Gluten работает и с Velox, и с ClickHouse, и потенциально с другими Substrait consumers. Comet ProtoBuf привязан к DataFusion, но эта tight интеграция обеспечивает 97% совместимость Spark SQL тестов. Trade-off: гибкость (Gluten) vs совместимость (Comet).",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите L03: Substrait -- middleware гибкость; L02: ProtoBuf -- tight DataFusion интеграция"
+    },
+    {
+      "id": "spark-m15-exam-q6",
+      "type": "multiple-choice",
+      "question": "Компания на Databricks рассматривает установку open-source Comet вместо Photon для SQL ETL. Это хорошая идея?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Да -- Comet open-source и бесплатный, экономия на лицензии"
+        },
+        {
+          "id": "b",
+          "text": "Нет -- на Databricks Photon уже built-in, zero config, интегрирован с Delta Lake и Databricks ecosystem. Установка Comet добавляет сложность без преимуществ"
+        },
+        {
+          "id": "c",
+          "text": "Да -- Comet быстрее Photon на всех бенчмарках"
+        },
+        {
+          "id": "d",
+          "text": "Нужно использовать оба для максимального ускорения"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "На Databricks Photon -- оптимальный выбор: built-in (zero config), 3-4x ускорение, интеграция с Delta Lake, Databricks SQL, Unity Catalog. Установка Comet на Databricks добавляет JAR management, off-heap конфигурацию и потенциальные конфликты с Photon. Если компания уже платит за Databricks, Photon не является дополнительным vendor lock-in.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L04: Decision flowchart -- на Databricks всегда Photon (built-in, zero config)"
+    },
+    {
+      "id": "spark-m15-exam-q7",
+      "type": "multiple-choice",
+      "question": "Data engineer видит в Spark UI множество ColumnarToRow и RowToColumnar узлов после включения Gluten. Какие действия предпринять?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Это нормальное поведение Gluten -- C2R/R2C всегда присутствуют"
+        },
+        {
+          "id": "b",
+          "text": "Увеличить off-heap memory -- C2R/R2C исчезнут"
+        },
+        {
+          "id": "c",
+          "text": "Множество C2R/R2C означает высокий fallback rate. Нужно: (1) определить unsupported операторы; (2) переписать на supported alternatives; (3) если fallback >30% -- отключить Gluten для данного запроса"
+        },
+        {
+          "id": "d",
+          "text": "Переключиться на ClickHouse бэкенд -- он поддерживает больше операторов"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Каждый C2R/R2C -- полное копирование данных между columnar и row форматами. Множество таких узлов = высокий fallback rate. Действия: (1) анализ physical plan -- какие операторы вызывают fallback; (2) переписать на supported alternatives (например, built-in functions вместо UDF); (3) если fallback >30%, отключить Gluten для конкретного запроса через session config -- overhead превысит ускорение.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L03: C2R/R2C overhead; L04: troubleshooting -- selective disable при высоком fallback"
+    },
+    {
+      "id": "spark-m15-exam-q8",
+      "type": "multiple-choice",
+      "question": "При конфигурации Gluten с Velox бэкендом, какой параметр специфичен для Velox (отсутствует в ClickHouse конфигурации)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark.plugins=org.apache.gluten.GlutenPlugin"
+        },
+        {
+          "id": "b",
+          "text": "spark.shuffle.manager=ColumnarShuffleManager"
+        },
+        {
+          "id": "c",
+          "text": "spark.memory.offHeap.enabled=true"
+        },
+        {
+          "id": "d",
+          "text": "spark.gluten.sql.columnar.backend.velox.memCacheSize -- размер нативного кеша Velox, не имеет эквивалента в ClickHouse бэкенде"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "spark.gluten.sql.columnar.backend.velox.memCacheSize -- специфичный параметр Velox для нативного кеша в памяти. ClickHouse бэкенд имеет свои специфичные параметры (backend.ch.runtime_config.logger.level). Общие для обоих: GlutenPlugin, ColumnarShuffleManager, offHeap. Различия в JAR (gluten-velox-bundle vs gluten-clickhouse-bundle) и backend-specific config.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите L03: Сравнение конфигурации Velox vs ClickHouse -- backend-specific параметры"
+    },
+    {
+      "id": "spark-m15-exam-q9",
+      "type": "multiple-choice",
+      "question": "ETL pipeline содержит 80% PySpark UDF для custom business logic. Data engineer предлагает ускорить его с помощью Gluten + Velox. Оцените это предложение.",
+      "options": [
+        {
+          "id": "a",
+          "text": "Неэффективно -- PySpark UDF выполняются в Python-процессе через Arrow serialization, ни один нативный движок не может их ускорить. При 80% UDF нативные операторы ускорят только 20% работы, а C2R/R2C overhead добавит latency"
+        },
+        {
+          "id": "b",
+          "text": "Отличная идея -- Gluten 3.3x ускорит весь pipeline"
+        },
+        {
+          "id": "c",
+          "text": "Нужно переписать UDF на C++ для совместимости с Velox"
+        },
+        {
+          "id": "d",
+          "text": "Gluten автоматически компилирует PySpark UDF в нативный код"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Все пользовательские UDF (Python, Java, Scala) выполняются на JVM/Python runtime. Ни Comet, ни Gluten не могут ускорить произвольный пользовательский код. При 80% UDF-вычислений нативные движки ускорят только 20% pipeline, а C2R/R2C overhead может замедлить общее выполнение. Рекомендация: переписать UDF на built-in functions (M06) или pandas UDF через Arrow (M11).",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L04: Когда НЕ использовать -- UDF-heavy workloads, нативные движки бесполезны"
+    },
+    {
+      "id": "spark-m15-exam-q10",
+      "type": "multiple-choice",
+      "question": "TPC-H бенчмарк Comet показывает 2.4x среднее ускорение. Некоторые запросы ускорены в 5x, другие -- менее чем в 1.5x. Какой вывод корректен?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Comet нестабилен -- разброс ускорения указывает на баги"
+        },
+        {
+          "id": "b",
+          "text": "Разброс нормален: scan-heavy и aggregation-heavy запросы ускоряются максимально (нативный Parquet reader + SIMD), а запросы с unsupported операторами или UDF получают минимальное ускорение. Среднее 2.4x -- не гарантия для каждого запроса"
+        },
+        {
+          "id": "c",
+          "text": "Нужно использовать только запросы с 5x ускорением"
+        },
+        {
+          "id": "d",
+          "text": "2.4x среднее означает, что каждый запрос ускоряется ровно в 2.4x"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Разброс per-query ускорения -- нормальное поведение. Scan-heavy queries показывают максимальное ускорение: нативный Rust Parquet reader обходит Java reader на чтении, декодировании и десжатии. Hash join и aggregation также значительно ускоряются. Запросы с unsupported операторами (window functions, UDF) получают минимальное ускорение или даже замедление из-за fallback overhead.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите L02: Бенчмарки -- per-query variability, scan-heavy макс., UDF-heavy мин."
+    },
+    {
+      "id": "spark-m15-exam-q11",
+      "type": "multiple-choice",
+      "question": "5-фазная стратегия миграции на нативные движки: Диагностика -> Измерение fallback -> A/B тестирование -> Production rollout -> Tuning. Какой шаг является ПЕРВЫМ перед любыми изменениями production workloads?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Установить Comet/Gluten на production кластере"
+        },
+        {
+          "id": "b",
+          "text": "Переписать все UDF на built-in functions"
+        },
+        {
+          "id": "c",
+          "text": "Phase 1: Диагностика -- включить spark.comet.explainFallback.enabled=true (или анализ Gluten physical plan) без изменения production workloads, чтобы определить fallback rate каждого запроса"
+        },
+        {
+          "id": "d",
+          "text": "Купить серверы с большим объёмом off-heap memory"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Phase 1 (Диагностика) -- первый шаг. Включение fallback diagnostics без изменения production: spark.comet.explainFallback.enabled=true для Comet, анализ physical plan для Gluten. Это показывает, какие операторы не поддерживаются и какой fallback rate у каждого production запроса. Без диагностики невозможно оценить, даст ли нативный движок ускорение или замедлит workload.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите L04: 5-фазная миграция -- Phase 1 диагностика, Phase 2 измерение fallback rate"
+    },
+    {
+      "id": "spark-m15-exam-q12",
+      "type": "multiple-choice",
+      "question": "Data engineer конфигурирует Gluten без spark.memory.offHeap.enabled=true. Нативный бэкенд (Velox) запускается. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Velox автоматически аллоцирует off-heap память из системного RAM"
+        },
+        {
+          "id": "b",
+          "text": "Spark автоматически перенаправит off-heap запросы в JVM heap"
+        },
+        {
+          "id": "c",
+          "text": "Gluten будет работать медленнее, но без crash"
+        },
+        {
+          "id": "d",
+          "text": "Нативный C++ код не получит выделенной off-heap памяти. Результат: crash (OOM) или катастрофическая деградация производительности, так как нативные операции не смогут аллоцировать память для vectorized processing"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Без spark.memory.offHeap.enabled=true нативный код (C++/Velox) не получит выделенной off-heap памяти. Нативные операции (vectorized processing, Arrow batch allocation) не смогут аллоцировать достаточно памяти, что приведёт к crash (OOM) или катастрофической деградации. Рекомендация: offHeap.size 20g+ для production Gluten workloads. Это обязательный параметр для ВСЕХ нативных движков.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите L01: Off-heap обязателен для нативного кода; L02 + L03: конфигурация offHeap"
+    }
+  ]
+}

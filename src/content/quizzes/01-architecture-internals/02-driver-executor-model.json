@@ -1,0 +1,126 @@
+{
+  "lessonSlug": "01-architecture-internals/02-driver-executor-model",
+  "moduleId": "01-architecture-internals",
+  "_meta": {
+    "idPrefix": "spark-m01-02",
+    "description": "Use IDs: m01-02-q1, m01-02-q2, ... for MC/TF; m01-02-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m01-02-q1",
+      "type": "multiple-choice",
+      "question": "Какой компонент Spark отвечает за построение DAG, планирование задач и координацию executors?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Cluster Manager (YARN, Kubernetes)"
+        },
+        {
+          "id": "b",
+          "text": "Executor"
+        },
+        {
+          "id": "c",
+          "text": "Driver"
+        },
+        {
+          "id": "d",
+          "text": "Worker Node"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Driver -- центральный координатор Spark-приложения. Он содержит SparkContext, строит DAG из вашего кода, разбивает его на stages и tasks через DAG Scheduler, а затем распределяет tasks на executors через Task Scheduler. Cluster Manager (YARN, K8s) только выделяет ресурсы, а executors только выполняют tasks и хранят данные.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m01-02-q2",
+      "type": "multiple-choice",
+      "question": "Spark-приложение запущено в client deploy mode на ноутбуке data engineer. Во время выполнения 2-часового задания ноутбук теряет сетевое подключение. Что произойдёт с заданием?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Задание продолжит выполняться на кластере -- executors работают автономно"
+        },
+        {
+          "id": "b",
+          "text": "Executors сохранят промежуточные результаты и возобновят работу после восстановления связи"
+        },
+        {
+          "id": "c",
+          "text": "YARN автоматически перенесёт driver на один из узлов кластера"
+        },
+        {
+          "id": "d",
+          "text": "Задание упадёт, потому что driver (на ноутбуке) потерял связь с executors, и executors не получают heartbeat от driver"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "В client mode driver работает на машине, откуда запущено приложение (ноутбук). Executors регулярно отправляют heartbeat driver и получают от него новые tasks. Потеря связи с driver приводит к потере координатора -- executors не могут получить новые задания и будут завершены Cluster Manager после таймаута. Для длительных заданий используйте cluster mode, где driver работает на узле кластера.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-02-q3",
+      "type": "multiple-choice",
+      "question": "В чём ключевое различие между client и cluster deploy mode в контексте отказоустойчивости?",
+      "options": [
+        {
+          "id": "a",
+          "text": "В cluster mode driver запускается на узле кластера и может быть перезапущен Cluster Manager при сбое, тогда как в client mode driver зависит от клиентской машины"
+        },
+        {
+          "id": "b",
+          "text": "В client mode executors получают больше памяти, чем в cluster mode"
+        },
+        {
+          "id": "c",
+          "text": "Client mode не поддерживает shuffle-операции"
+        },
+        {
+          "id": "d",
+          "text": "Cluster mode использует отдельный Cluster Manager для каждого приложения"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "В cluster mode driver работает внутри кластера (как контейнер YARN или pod Kubernetes). Это даёт два преимущества: (1) driver не зависит от клиентской машины -- можно закрыть терминал; (2) Cluster Manager может перезапустить driver при сбое. В client mode driver привязан к машине пользователя, что удобно для отладки (видны логи), но ненадёжно для production.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-02-code-1",
+      "type": "code-challenge",
+      "question": "Создайте два DataFrame: employees (id, name, dept_id) и departments (dept_id, dept_name). Выполните JOIN по dept_id и выведите колонки name и dept_name через select() и show(). Это демонстрирует, как driver координирует выполнение JOIN на executors, а show() собирает результат обратно на driver.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"driver-executor\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(1, \"Alice\", 10), (2, \"Bob\", 20), (3, \"Carol\", 10)],\n    [\"id\", \"name\", \"dept_id\"]\n)\n\ndepartments = spark.createDataFrame(\n    [(10, \"Engineering\"), (20, \"Marketing\"), (30, \"Sales\")],\n    [\"dept_id\", \"dept_name\"]\n)\n\n# TODO: Выполните JOIN employees и departments по dept_id\n# joined = employees.join(...)\n\n# TODO: Выберите колонки name и dept_name\n# result = joined.select(...)\n\n# TODO: Вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"driver-executor\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(1, \"Alice\", 10), (2, \"Bob\", 20), (3, \"Carol\", 10)],\n    [\"id\", \"name\", \"dept_id\"]\n)\n\ndepartments = spark.createDataFrame(\n    [(10, \"Engineering\"), (20, \"Marketing\"), (30, \"Sales\")],\n    [\"dept_id\", \"dept_name\"]\n)\n\njoined = employees.join(departments, \"dept_id\")\n\nresult = joined.select(\"name\", \"dept_name\")\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит колонку dept_name",
+          "input": "",
+          "expectedOutput": "dept_name",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Alice в Engineering",
+          "input": "",
+          "expectedOutput": "Engineering",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Bob в Marketing",
+          "input": "",
+          "expectedOutput": "Marketing",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "JOIN -- wide transformation (wide dependency), требующая shuffle данных между executors. Driver строит DAG: scan employees -> scan departments -> shuffle обеих таблиц по dept_id -> hash join -> select. Executors выполняют вычисления параллельно, а show() (action) собирает первые 20 строк результата обратно на driver для отображения. В production вместо show() на больших данных используйте write для сохранения результата.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

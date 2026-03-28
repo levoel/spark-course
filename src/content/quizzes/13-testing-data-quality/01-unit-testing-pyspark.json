@@ -1,0 +1,183 @@
+{
+  "lessonSlug": "13-testing-data-quality/01-unit-testing-pyspark",
+  "moduleId": "13-testing-data-quality",
+  "_meta": {
+    "idPrefix": "spark-m13-01",
+    "description": "Use IDs: m13-01-q1, m13-01-q2, ... (5 questions on pytest fixtures, SparkSession scope, assertDataFrameEqual)"
+  },
+  "questions": [
+    {
+      "id": "spark-m13-01-q1",
+      "type": "multiple-choice",
+      "question": "Почему SparkSession fixture в conftest.py использует scope='session', а не scope='function'?",
+      "options": [
+        {
+          "id": "a",
+          "text": "scope='session' создаёт один SparkSession на весь прогон -- JVM запускается один раз (~5-10 сек). При scope='function' JVM запускалась бы для каждого теста, делая прогон в 10-100 раз медленнее"
+        },
+        {
+          "id": "b",
+          "text": "scope='session' обеспечивает лучшую изоляцию между тестами"
+        },
+        {
+          "id": "c",
+          "text": "pytest не поддерживает scope='function' для SparkSession"
+        },
+        {
+          "id": "d",
+          "text": "scope='session' нужен для доступа к Hive metastore"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "SparkSession запускает JVM, что занимает 5-10 секунд. scope='session' создаёт один экземпляр на весь тестовый прогон -- все тесты переиспользуют одну JVM. scope='function' запускал бы JVM для каждого теста, что при 50+ тестах превращает секунды в минуты. Изоляция обеспечивается малыми тестовыми данными.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Unit-тестирование PySpark -- SparkSession fixture scope='session'"
+    },
+    {
+      "id": "spark-m13-01-q2",
+      "type": "multiple-choice",
+      "question": "Какой главный принцип делает Spark-код тестируемым?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Использование только Spark SQL вместо DataFrame API"
+        },
+        {
+          "id": "b",
+          "text": "Трансформации как чистые функции: принимают DataFrame, возвращают DataFrame, без side effects (не читают из внешних источников, не пишут в базу)"
+        },
+        {
+          "id": "c",
+          "text": "Написание всей логики в одном файле"
+        },
+        {
+          "id": "d",
+          "text": "Использование RDD вместо DataFrame для тестируемости"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Чистые функции (DataFrame -> DataFrame) легко тестировать: создаём маленький DataFrame через spark.createDataFrame(), передаём в функцию, проверяем результат через collect() или assertDataFrameEqual(). Внешние зависимости (S3, Kafka) подменяются через dependency injection, fixture-файлы или monkeypatch.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Unit-тестирование PySpark -- трансформации как чистые функции"
+    },
+    {
+      "id": "spark-m13-01-q3",
+      "type": "multiple-choice",
+      "question": "assertDataFrameEqual (PySpark 3.5+) сравнивает два DataFrame. Что именно проверяется?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только схему (имена колонок)"
+        },
+        {
+          "id": "b",
+          "text": "Только данные (значения строк)"
+        },
+        {
+          "id": "c",
+          "text": "Схему (имена и типы колонок), данные (значения строк без учёта порядка) и корректную обработку NULL"
+        },
+        {
+          "id": "d",
+          "text": "Только количество строк и колонок"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "assertDataFrameEqual сравнивает: (1) схему -- имена и типы всех колонок; (2) данные -- значения строк как множества (порядок не важен); (3) NULL-значения -- корректно обрабатывает NULL == NULL. Это встроенная функция PySpark 3.5+ из pyspark.testing.utils.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 1: Unit-тестирование PySpark -- assertDataFrameEqual из pyspark.testing.utils"
+    },
+    {
+      "id": "spark-m13-01-q4",
+      "type": "multiple-choice",
+      "question": "Зачем в тестовом SparkSession настроен spark.sql.shuffle.partitions=2 вместо default 200?",
+      "options": [
+        {
+          "id": "a",
+          "text": "200 партиций невозможны в local mode"
+        },
+        {
+          "id": "b",
+          "text": "pytest не поддерживает больше 2 партиций"
+        },
+        {
+          "id": "c",
+          "text": "2 партиции быстрее для чтения из S3"
+        },
+        {
+          "id": "d",
+          "text": "Для тестовых данных (десятки строк) 200 партиций -- колоссальный overhead: создаётся 200 tasks для 10 строк. 2 партиции минимизируют overhead, сохраняя параллелизм"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Default 200 shuffle partitions предназначен для production (гигабайты данных). Для тестов (десятки строк) 200 партиций создают колоссальный overhead: scheduler планирует 200 tasks для 10 строк, 198 из которых пустые. spark.sql.shuffle.partitions=2 минимизирует overhead. local[2] -- 2 потока для минимального параллелизма.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 1: Unit-тестирование PySpark -- настройки тестового SparkSession"
+    },
+    {
+      "id": "spark-m13-01-q5",
+      "type": "multiple-choice",
+      "question": "Как тестировать Spark pipeline, который читает из S3, не подключаясь к реальному S3?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Три паттерна: (1) fixture-файлы с tmp_path, (2) параметризованная функция-reader (dependency injection), (3) pytest monkeypatch для подмены read-функции"
+        },
+        {
+          "id": "b",
+          "text": "Невозможно -- нужен реальный S3 для тестов"
+        },
+        {
+          "id": "c",
+          "text": "Только через LocalStack -- эмулятор AWS"
+        },
+        {
+          "id": "d",
+          "text": "Отключить S3 модуль и тестировать без данных"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Три паттерна mock внешних источников: (1) fixture-файлы: записать test data в tmp_path как Parquet, читать из tmp_path; (2) dependency injection: pipeline принимает read_fn параметр, в тестах передаём lambda: spark.createDataFrame(...); (3) monkeypatch: подменить read-функцию модуля через monkeypatch.setattr. Все три избегают реального S3.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 1: Unit-тестирование PySpark -- mock внешних источников: fixtures, DI, monkeypatch"
+    },
+    {
+      "id": "spark-m13-01-code-1",
+      "type": "code-challenge",
+      "question": "Реализуйте набор data-assertion проверок для DataFrame. Проверьте: количество строк == 6, отсутствие null в колонке name, значения salary в диапазоне [30000, 200000], уникальность employee_id. Выведите отчёт pass/fail по каждой проверке.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, when, lit\n\nspark = SparkSession.builder.appName(\"unit_test_assertions\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Anna\", \"Engineering\", 95000),\n    (2, \"Boris\", \"Marketing\", 72000),\n    (3, \"Clara\", \"Engineering\", 110000),\n    (4, None, \"Sales\", 65000),\n    (5, \"Denis\", \"Marketing\", 78000),\n    (5, \"Elena\", \"Engineering\", 125000),\n], [\"employee_id\", \"name\", \"department\", \"salary\"])\n\n# TODO: Проверка 1 — row_count == 6\n# print(f\"Row count: {'PASS' if ... else 'FAIL'} (got {row_count})\")\n\n# TODO: Проверка 2 — null count в name == 0\n\n# TODO: Проверка 3 — salary в [30000, 200000]\n\n# TODO: Проверка 4 — уникальность employee_id\n\n# TODO: print(f\"Overall: {n_pass} passed, {n_fail} failed\")\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, count, when, lit\n\nspark = SparkSession.builder.appName(\"unit_test_assertions\").getOrCreate()\n\nemployees = spark.createDataFrame([\n    (1, \"Anna\", \"Engineering\", 95000),\n    (2, \"Boris\", \"Marketing\", 72000),\n    (3, \"Clara\", \"Engineering\", 110000),\n    (4, None, \"Sales\", 65000),\n    (5, \"Denis\", \"Marketing\", 78000),\n    (5, \"Elena\", \"Engineering\", 125000),\n], [\"employee_id\", \"name\", \"department\", \"salary\"])\n\nresults = []\n\nrow_count = employees.count()\nrc_pass = row_count == 6\nresults.append(rc_pass)\nprint(f\"Row count: {'PASS' if rc_pass else 'FAIL'} (got {row_count})\")\n\nnull_count = employees.filter(col(\"name\").isNull()).count()\nnull_pass = null_count == 0\nresults.append(null_pass)\nprint(f\"Null check (name): {'PASS' if null_pass else 'FAIL'} (nulls: {null_count})\")\n\nout_of_range = employees.filter((col(\"salary\") < 30000) | (col(\"salary\") > 200000)).count()\nrange_pass = out_of_range == 0\nresults.append(range_pass)\nprint(f\"Salary range: {'PASS' if range_pass else 'FAIL'} (out of range: {out_of_range})\")\n\ntotal = employees.count()\ndistinct = employees.select(\"employee_id\").distinct().count()\nunique_pass = total == distinct\nresults.append(unique_pass)\nprint(f\"Uniqueness (employee_id): {'PASS' if unique_pass else 'FAIL'} (total: {total}, distinct: {distinct})\")\n\nn_pass = sum(results)\nn_fail = len(results) - n_pass\nprint(f\"Overall: {n_pass} passed, {n_fail} failed\")\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Итоговый статус проверок",
+          "input": "",
+          "expectedOutput": "Overall:",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Обнаружен null",
+          "input": "",
+          "expectedOutput": "FAIL",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Проверка уникальности",
+          "input": "",
+          "expectedOutput": "Uniqueness",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Data assertion — основа unit-тестирования PySpark. Четыре базовые проверки: row count (полнота загрузки), null check (целостность), range check (валидность значений), uniqueness check (отсутствие дубликатов). В данных намеренно заложены 2 дефекта: null в name и дубликат employee_id=5 — оба должны быть обнаружены.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

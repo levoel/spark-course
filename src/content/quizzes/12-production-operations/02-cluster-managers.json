@@ -1,0 +1,145 @@
+{
+  "lessonSlug": "12-production-operations/02-cluster-managers",
+  "moduleId": "12-production-operations",
+  "_meta": {
+    "idPrefix": "spark-m12-02",
+    "description": "Use IDs: m12-02-q1, m12-02-q2, ... (5 questions on Standalone vs YARN vs K8s decision matrix)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-02-q1",
+      "type": "multiple-choice",
+      "question": "Компания мигрирует из on-premise Hadoop в AWS. Какой cluster manager рекомендуется для новых Spark workloads?",
+      "options": [
+        {
+          "id": "a",
+          "text": "YARN -- привычный менеджер, легче перенести конфигурацию"
+        },
+        {
+          "id": "b",
+          "text": "Standalone -- простейший в настройке, подходит для любого масштаба"
+        },
+        {
+          "id": "c",
+          "text": "Apache Mesos -- универсальный менеджер для облака"
+        },
+        {
+          "id": "d",
+          "text": "Kubernetes -- cloud-native авто-масштабирование (HPA/VPA), resource isolation через pod limits, интеграция с CI/CD"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Для cloud-миграции Kubernetes (EKS/GKE) -- рекомендуемый выбор: нативное авто-масштабирование через HPA/VPA и Cluster Autoscaler, resource isolation через pod limits и namespaces, интеграция с CI/CD (Docker images для Spark apps), поддержка spot instances. YARN имеет смысл только если часть workloads остаётся в Hadoop.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: Менеджеры кластеров -- decision matrix и рекомендация Kubernetes для cloud"
+    },
+    {
+      "id": "spark-m12-02-q2",
+      "type": "multiple-choice",
+      "question": "В чём ключевое ограничение Standalone cluster manager по сравнению с YARN и Kubernetes?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Нет resource isolation -- один пользователь может занять весь кластер, нет multi-tenancy"
+        },
+        {
+          "id": "b",
+          "text": "Не поддерживает Python-приложения"
+        },
+        {
+          "id": "c",
+          "text": "Максимум 3 worker-ноды"
+        },
+        {
+          "id": "d",
+          "text": "Не поддерживает deploy-mode cluster"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Standalone -- самый простой менеджер, но имеет ключевые ограничения: нет resource isolation (приложения делят ресурсы без гарантий), нет multi-tenancy (нет queue или namespace), примитивный FIFO scheduler. YARN предоставляет контейнеры и queue, Kubernetes -- pod limits и namespaces.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Менеджеры кластеров -- ограничения Standalone"
+    },
+    {
+      "id": "spark-m12-02-q3",
+      "type": "multiple-choice",
+      "question": "Почему для production Spark-приложений рекомендуется deploy-mode cluster, а не client?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Cluster mode быстрее обрабатывает данные"
+        },
+        {
+          "id": "b",
+          "text": "В cluster mode driver работает на кластере -- не зависит от рабочей станции, ближе к executor, продолжает работу при отключении машины разработчика"
+        },
+        {
+          "id": "c",
+          "text": "Client mode не поддерживается в YARN и Kubernetes"
+        },
+        {
+          "id": "d",
+          "text": "Cluster mode использует меньше памяти"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "В client mode driver работает на машине, откуда запущен spark-submit. Если машина отключится -- job пропадёт. В cluster mode driver запускается на кластере в контейнере/pod: не зависит от рабочей станции, ближе к executor (меньше network latency), Airflow/CI/CD могут запустить и забыть (fire-and-forget).",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 2: Менеджеры кластеров -- client vs cluster deploy mode"
+    },
+    {
+      "id": "spark-m12-02-q4",
+      "type": "multiple-choice",
+      "question": "Какой master URL используется для spark-submit на Kubernetes кластер?",
+      "options": [
+        {
+          "id": "a",
+          "text": "spark://k8s-master:7077"
+        },
+        {
+          "id": "b",
+          "text": "yarn"
+        },
+        {
+          "id": "c",
+          "text": "k8s://https://k8s-api-server:6443"
+        },
+        {
+          "id": "d",
+          "text": "kubernetes://master:8080"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Для Kubernetes используется формат k8s://https://host:port, где host:port -- адрес Kubernetes API Server. Для Standalone -- spark://host:7077, для YARN -- просто yarn. spark-submit -- unified interface: меняется только --master URL, остальные параметры одинаковы.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Менеджеры кластеров -- master URL и spark-submit unified interface"
+    },
+    {
+      "id": "spark-m12-02-q5",
+      "type": "multiple-choice",
+      "question": "YARN запускает executor в контейнерах за ~30 секунд. Какое время запуска executor pod на Kubernetes?",
+      "options": [
+        {
+          "id": "a",
+          "text": "~1 секунда"
+        },
+        {
+          "id": "b",
+          "text": "~5 секунд (как Standalone)"
+        },
+        {
+          "id": "c",
+          "text": "~60 секунд -- медленнее YARN из-за image pull"
+        },
+        {
+          "id": "d",
+          "text": "~15 секунд -- быстрее YARN, но медленнее Standalone"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Время запуска executor: Standalone ~5s (JVM процесс), Kubernetes ~15s (pod scheduling + container start), YARN ~30-60s (container allocation + JVM). Kubernetes быстрее YARN благодаря оптимизированному scheduling, но медленнее Standalone, так как требует pod scheduling и container runtime.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 2: Менеджеры кластеров -- decision matrix, время запуска executor"
+    }
+  ]
+}

@@ -1,0 +1,214 @@
+---
+title: "Apache Paimon: глубокое погружение"
+description: "LSM-tree архитектура, streaming-first дизайн, changelog CDC, auto-compaction, bucket-based партиционирование"
+order: 5
+difficulty: "intermediate"
+estimatedTime: 14
+topics: ["Apache Paimon", "LSM-Tree", "Changelog", "Streaming-First", "Auto-Compaction"]
+---
+
+import { PaimonLsmDiagram } from '../../../components/diagrams/module10';
+
+# Apache Paimon: глубокое погружение
+
+## Архитектура
+
+**Apache Paimon** -- lakehouse-формат, разработанный Alibaba (выпущен из инкубатора Apache в 2022 году). Paimon принципиально отличается от Delta Lake, Iceberg и Hudi: он использует **LSM-tree** (Log-Structured Merge-tree) для хранения данных, что делает его **write-optimized**.
+
+<PaimonLsmDiagram client:visible />
+
+**Почему LSM-tree?** В streaming-first архитектуре данные приходят непрерывно с высокой частотой. LSM-tree оптимизирован именно для этого: запись -- всегда sequential append в memory buffer, что на порядки быстрее random writes (как в COW). Цена -- более сложное чтение, требующее merge из нескольких уровней.
+
+### Streaming-First Design
+
+Paimon изначально создавался как **streaming lakehouse**: таблица одновременно является и sink (запись) и source (чтение) для streaming-пайплайнов. Ключевая фича -- **changelog producer**, который автоматически генерирует CDC-поток изменений.
+
+```
+Streaming pipeline с Paimon:
+Kafka ──→ Flink/Spark ──→ Paimon Table ──→ Changelog ──→ Downstream
+  source    processing      sink/source      CDC stream    consumers
+```
+
+## Настройка SparkSession
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("PaimonPipeline") \
+    .config("spark.sql.catalog.paimon",
+            "org.apache.paimon.spark.SparkCatalog") \
+    .config("spark.sql.catalog.paimon.warehouse",
+            "s3a://warehouse/paimon") \
+    .config("spark.jars",
+            "/opt/spark/jars/paimon-spark-4.0_2.13-1.3.jar") \
+    .getOrCreate()
+```
+
+<Callout type="note">
+**Paimon Spark connector**
+
+Paimon -- Flink-first проект, и Spark-интеграция развивается активно. Для Spark 4.0 используйте `paimon-spark-4.0_2.13-1.3.jar`. Возможно, потребуется скачать JAR напрямую с Maven Central (не все версии доступны через `spark.jars.packages`).
+</Callout>
+
+## Ключевые возможности
+
+### Primary Key Tables vs Append-Only
+
+Paimon поддерживает два типа таблиц:
+
+**Primary key tables** -- с первичным ключом. Поддерживают upsert, delete, changelog:
+
+```python
+spark.sql("""
+    CREATE TABLE paimon.db.orders (
+        order_id BIGINT,
+        product STRING,
+        amount DOUBLE,
+        status STRING,
+        dt STRING,
+        PRIMARY KEY (order_id, dt) NOT ENFORCED
+    ) TBLPROPERTIES (
+        'changelog-producer' = 'input',
+        'bucket' = '4'
+    ) PARTITIONED BY (dt)
+""")
+
+# Upsert: автоматический merge по primary key
+df.write.format("paimon") \
+    .mode("append") \
+    .saveAsTable("paimon.db.orders")
+```
+
+**Append-only tables** -- без первичного ключа. Оптимизированы для log/event данных:
+
+```python
+spark.sql("""
+    CREATE TABLE paimon.db.events (
+        event_id STRING,
+        event_time TIMESTAMP,
+        payload STRING
+    ) TBLPROPERTIES (
+        'bucket' = '8'
+    )
+""")
+```
+
+### Changelog Producer
+
+**Changelog** -- главное преимущество Paimon для streaming-архитектуры. Каждое изменение в таблице автоматически генерирует CDC-событие:
+
+```python
+# Создание таблицы с changelog
+spark.sql("""
+    CREATE TABLE paimon.db.orders (
+        order_id BIGINT,
+        product STRING,
+        amount DOUBLE,
+        PRIMARY KEY (order_id) NOT ENFORCED
+    ) TBLPROPERTIES (
+        'changelog-producer' = 'input'
+    )
+""")
+
+# Streaming-чтение changelog
+changelog_df = spark.readStream \
+    .format("paimon") \
+    .table("paimon.db.orders")
+
+# changelog_df содержит колонку _row_kind:
+# +I (insert), -U (update before), +U (update after), -D (delete)
+changelog_df.writeStream \
+    .format("console") \
+    .start()
+```
+
+Режимы `changelog-producer`:
+- `none` -- без changelog (по умолчанию)
+- `input` -- changelog из входных данных
+- `lookup` -- дополнительный lookup для генерации before-image
+- `full-compaction` -- changelog генерируется при compaction
+
+<KnowledgeCheck
+  question="Почему LSM-tree делает Paimon оптимальным для streaming нагрузок?"
+  answer="LSM-tree оптимизирован для записи: все данные сначала записываются в memory buffer (MemTable), затем flush-ятся на диск как sorted SST-файлы. Запись -- всегда sequential append, что на порядки быстрее random writes. Для streaming, где данные приходят непрерывно с высокой частотой, это критично. Цена -- read amplification (чтение требует merge из нескольких уровней LSM-tree), которая решается periodic compaction."
+/>
+
+### Auto-Compaction
+
+Paimon предлагает **автоматическую compaction** -- фоновый процесс, который сливает мелкие SST-файлы в крупные, уменьшая read amplification:
+
+```python
+# Конфигурация auto-compaction
+spark.sql("""
+    CREATE TABLE paimon.db.metrics (
+        metric_id STRING,
+        value DOUBLE,
+        ts TIMESTAMP,
+        PRIMARY KEY (metric_id) NOT ENFORCED
+    ) TBLPROPERTIES (
+        'compaction.min.file-num' = '5',
+        'compaction.max.file-num' = '50',
+        'compaction.target-file-size' = '256mb'
+    )
+""")
+```
+
+По умолчанию compaction запускается автоматически при достижении порога файлов на уровне LSM-tree. Можно также запускать вручную:
+
+```python
+# Ручная compaction
+spark.sql("CALL sys.compact('paimon.db.metrics')")
+```
+
+### Bucket-Based Partitioning
+
+Paimon использует **bucket-based** распределение данных внутри партиций:
+
+```python
+# 4 bucket-а в каждой партиции
+spark.sql("""
+    CREATE TABLE paimon.db.events (...)
+    TBLPROPERTIES ('bucket' = '4')
+    PARTITIONED BY (dt)
+""")
+```
+
+Каждый bucket -- отдельный LSM-tree. Данные распределяются по bucket-ам на основе hash от primary key. Это обеспечивает параллелизм записи и чтения.
+
+<KnowledgeCheck
+  question="Чем changelog producer в Paimon полезен для downstream consumers?"
+  answer="Changelog producer автоматически генерирует CDC-поток изменений для каждой write-операции в таблицу. Downstream consumers получают записи с _row_kind: +I (insert), -U (update before), +U (update after), -D (delete). Это позволяет строить real-time streaming пайплайны, где изменения в одной таблице автоматически пропагируются в downstream таблицы без перечитывания всех данных."
+/>
+
+## Anti-patterns
+
+<Callout type="warning">
+**Частые ошибки при работе с Apache Paimon**
+
+1. **Игнорирование compaction** -- LSM-tree без compaction деградирует: чтение становится медленнее с каждой записью, потому что нужно merge из всё большего количества уровней. Убедитесь, что auto-compaction включена или запускайте вручную.
+
+2. **Слишком мало bucket-ов** -- один bucket = один LSM-tree. Если данных много, а bucket один, то compaction и чтение становятся bottleneck. Рекомендация: 1 bucket на ~1GB данных.
+
+3. **changelog-producer = lookup без нужды** -- `lookup` mode делает дополнительный lookup для генерации before-image, что медленнее. Используйте `input` если before-image не нужен.
+
+4. **Использование Paimon для batch-only** -- если у вас нет streaming нагрузки, Delta Lake или Iceberg -- более зрелые варианты с лучшей Spark-интеграцией.
+</Callout>
+
+## Когда использовать Apache Paimon
+
+**Лучший выбор, когда:**
+- Streaming-first архитектура (непрерывная запись из Kafka/Flink)
+- Нужен native changelog CDC (автоматическая пропагация изменений)
+- Write-heavy нагрузки (LSM-tree оптимизирован для записи)
+- Работаете с Apache Flink (Paimon -- основной partner format)
+
+**Не лучший выбор, когда:**
+- Batch-only нагрузки (Delta/Iceberg зрелее)
+- Нужна широкая экосистема движков (Iceberg -- самый vendor-neutral)
+- Databricks экосистема (Delta -- нативная интеграция)
+- Нужна partition evolution без rewrite (Iceberg)
+
+## Что дальше?
+
+В следующем уроке мы сведём все четыре формата в **матрицу сравнения** и построим decision tree для выбора формата под ваш конкретный сценарий.

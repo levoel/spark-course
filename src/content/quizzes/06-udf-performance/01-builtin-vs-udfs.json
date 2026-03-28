@@ -1,0 +1,160 @@
+{
+  "lessonSlug": "06-udf-performance/01-builtin-vs-udfs",
+  "moduleId": "06-udf-performance",
+  "_meta": {
+    "idPrefix": "spark-m06-01",
+    "description": "Use IDs: m06-01-q1, m06-01-q2, ... for MC/TF"
+  },
+  "questions": [
+    {
+      "id": "spark-m06-01-q1",
+      "type": "multiple-choice",
+      "question": "Почему встроенные функции Spark (upper, when, date_add) работают быстрее любого UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Catalyst оптимизирует встроенные функции, Tungsten генерирует JVM-байткод (Whole-Stage CodeGen), и нет сериализации -- UDF является чёрным ящиком для всех трёх механизмов"
+        },
+        {
+          "id": "b",
+          "text": "Встроенные функции написаны на C++ и компилируются в машинный код"
+        },
+        {
+          "id": "c",
+          "text": "Встроенные функции кэшируются в памяти, UDF вычисляются каждый раз заново"
+        },
+        {
+          "id": "d",
+          "text": "UDF ограничены одним ядром CPU, встроенные -- многопоточные"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Три причины превосходства встроенных функций: (1) Catalyst optimizer видит внутрь и может оптимизировать (fold constants, predicate pushdown); (2) Tungsten Whole-Stage CodeGen генерирует оптимизированный JVM-байткод; (3) нет сериализации (всё на JVM). UDF -- чёрный ящик: Catalyst не может заглянуть внутрь, CodeGen не включает UDF, Python UDF требует per-row сериализацию.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m06-01-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer написал Python UDF для извлечения домена из email: email.split('@')[1].lower(). Какая встроенная альтернатива?",
+      "options": [
+        {
+          "id": "a",
+          "text": "regexp_extract(col('email'), '@(.+)', 1)"
+        },
+        {
+          "id": "b",
+          "text": "Все три варианта работают, но B -- наиболее точный эквивалент"
+        },
+        {
+          "id": "c",
+          "text": "substring_index(col('email'), '@', -1)"
+        },
+        {
+          "id": "d",
+          "text": "lower(element_at(split(col('email'), '@'), 2))"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Все три варианта решают задачу: (A) regex извлекает группу после @; (B) split по @ и element_at(2) -- точный эквивалент UDF; (C) substring_index возвращает часть после последнего @. Вариант B наиболее читаемый и прямой эквивалент. Все три в 100x быстрее Python UDF благодаря Catalyst + CodeGen.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-01-q3",
+      "type": "true-false",
+      "question": "Если задача не решается одной встроенной функцией, всегда нужно писать UDF.",
+      "correctAnswer": false,
+      "explanation": "Большинство задач решаются комбинацией встроенных функций: when/otherwise для условной логики, concat/split/regexp для строк, datediff/date_format для дат, higher-order functions (transform, filter, aggregate) для массивов. Spark предоставляет 300+ встроенных функций. UDF -- последний вариант, когда комбинация невозможна.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m06-01-q4",
+      "type": "multiple-choice",
+      "question": "UDF для категоризации salary: if < 50000 -> 'junior', elif < 120000 -> 'middle', else 'senior'. Как переписать на встроенные функции?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Невозможно -- условная логика требует UDF"
+        },
+        {
+          "id": "b",
+          "text": "case_when(col('salary'), {50000: 'junior', 120000: 'middle'})"
+        },
+        {
+          "id": "c",
+          "text": "when(col('salary') < 50000, lit('junior')).when(col('salary') < 120000, lit('middle')).otherwise(lit('senior'))"
+        },
+        {
+          "id": "d",
+          "text": "if_else(col('salary'), 50000, 'junior', 'senior')"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "when/otherwise -- встроенная функция для условной логики. Цепочка when().when().otherwise() эквивалентна if/elif/else. Эта версия участвует в Whole-Stage CodeGen, оптимизируется Catalyst и выполняется на JVM без сериализации. Разница с Python UDF может достигать 100x на больших датасетах.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-01-q5",
+      "type": "multiple-choice",
+      "question": "В дереве решений 'какой подход выбрать', если нужна Python-библиотека -- какой тип UDF рекомендуется?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Python UDF (стандартный)"
+        },
+        {
+          "id": "b",
+          "text": "Built-in SQL function"
+        },
+        {
+          "id": "c",
+          "text": "Scala UDF -- быстрее любого Python UDF"
+        },
+        {
+          "id": "d",
+          "text": "Pandas UDF (Arrow-based vectorized) -- батчевая передача вместо per-row сериализации"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Если нужна Python-библиотека (pandas, numpy, scikit-learn), Pandas UDF -- оптимальный выбор. Pandas UDF использует Apache Arrow для батчевой передачи данных (вместо per-row сериализации Python UDF), что даёт ~5x overhead вместо ~100x. Scala UDF быстрее, но не имеет доступа к Python-библиотекам.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m06-01-code-1",
+      "type": "code-challenge",
+      "question": "Замените ручную Python-обработку строк на встроенные функции DataFrame. Дан DataFrame с именами клиентов: приведите имя к верхнему регистру, добавьте префикс 'VIP_' для клиентов с amount > 1000, остальным — 'STD_'. Используйте upper(), concat(), when().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, upper, concat, lit, when\n\nspark = SparkSession.builder.appName(\"builtin_vs_udf\").getOrCreate()\n\ncustomers = spark.createDataFrame([\n    (1, \"alice johnson\", 1500),\n    (2, \"bob smith\", 300),\n    (3, \"carol williams\", 2000),\n    (4, \"david brown\", 800),\n    (5, \"eve davis\", 1200),\n], [\"id\", \"name\", \"amount\"])\n\n# TODO: Создайте колонку formatted_name:\n# - Имя в верхнем регистре\n# - Если amount > 1000: \"VIP_\" + upper(name)\n# - Иначе: \"STD_\" + upper(name)\n# result = customers.withColumn(\"formatted_name\", ...)\n\n# TODO: Покажите результат\n# result.select(\"id\", \"name\", \"amount\", \"formatted_name\").show(truncate=False)\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, upper, concat, lit, when\n\nspark = SparkSession.builder.appName(\"builtin_vs_udf\").getOrCreate()\n\ncustomers = spark.createDataFrame([\n    (1, \"alice johnson\", 1500),\n    (2, \"bob smith\", 300),\n    (3, \"carol williams\", 2000),\n    (4, \"david brown\", 800),\n    (5, \"eve davis\", 1200),\n], [\"id\", \"name\", \"amount\"])\n\nresult = customers.withColumn(\n    \"formatted_name\",\n    when(col(\"amount\") > 1000,\n         concat(lit(\"VIP_\"), upper(col(\"name\")))\n    ).otherwise(\n         concat(lit(\"STD_\"), upper(col(\"name\")))\n    )\n)\n\nresult.select(\"id\", \"name\", \"amount\", \"formatted_name\").show(truncate=False)\n",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Alice — VIP (amount 1500 > 1000)",
+          "input": "",
+          "expectedOutput": "VIP_ALICE JOHNSON",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Bob — STD (amount 300 <= 1000)",
+          "input": "",
+          "expectedOutput": "STD_BOB SMITH",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Eve — VIP (amount 1200 > 1000)",
+          "input": "",
+          "expectedOutput": "VIP_EVE DAVIS",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Встроенные функции (upper, concat, when) выполняются внутри JVM на оптимизированном Tungsten-формате данных. Python UDF для той же задачи потребовал бы сериализации каждой строки из JVM в Python, обработки в Python, и десериализации обратно. Для 1 млн строк это может означать разницу в 10-100x по скорости. Правило: если задача решается встроенными функциями — всегда предпочитайте их UDF.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

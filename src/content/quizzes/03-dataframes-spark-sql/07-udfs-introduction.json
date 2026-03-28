@@ -1,0 +1,88 @@
+{
+  "lessonSlug": "03-dataframes-spark-sql/07-udfs-introduction",
+  "moduleId": "03-dataframes-spark-sql",
+  "_meta": {
+    "idPrefix": "spark-m03-07",
+    "description": "Use IDs: m03-07-q1, m03-07-q2, ... for MC/TF; NO code challenges (spark_sim.py does not support udf() registration)"
+  },
+  "questions": [
+    {
+      "id": "spark-m03-07-q1",
+      "type": "multiple-choice",
+      "question": "Расположите типы UDF в порядке убывания производительности:",
+      "options": [
+        {
+          "id": "a",
+          "text": "Встроенные функции > Scala UDF > Pandas UDF > Python UDF"
+        },
+        {
+          "id": "b",
+          "text": "Python UDF > Pandas UDF > Scala UDF > Встроенные функции"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF > Встроенные функции > Python UDF > Scala UDF"
+        },
+        {
+          "id": "d",
+          "text": "Scala UDF > Встроенные функции > Pandas UDF > Python UDF"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Иерархия производительности: (1) Встроенные функции (col, when, upper) -- выполняются на JVM, Catalyst может оптимизировать, поддерживают code generation; (2) Scala UDF -- выполняется нативно на JVM без сериализации; (3) Pandas UDF -- батчевая обработка через Apache Arrow, без per-row сериализации; (4) Python UDF -- сериализация/десериализация каждой строки через socket между JVM и Python, самый медленный вариант (10-100x медленнее встроенных).",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m03-07-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer написал Python UDF для преобразования строки в верхний регистр: @udf(returnType=StringType()) def upper_case(s): return s.upper(). Какая встроенная функция заменяет этот UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Встроенной замены нет -- нужен UDF для строковых операций"
+        },
+        {
+          "id": "b",
+          "text": "from pyspark.sql.functions import upper; df.withColumn('name_upper', upper(col('name')))"
+        },
+        {
+          "id": "c",
+          "text": "df.withColumn('name_upper', col('name').toUpperCase())"
+        },
+        {
+          "id": "d",
+          "text": "from pyspark.sql.functions import string_upper; df.withColumn('name_upper', string_upper(col('name')))"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Spark предоставляет 300+ встроенных функций. upper() -- встроенная функция для преобразования строки в верхний регистр. Она выполняется на JVM с поддержкой code generation (Tungsten) и будет в 10-50x быстрее Python UDF на больших датасетах. Правило: прежде чем писать UDF, проверьте документацию pyspark.sql.functions -- большинство стандартных операций уже реализованы.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m03-07-q3",
+      "type": "multiple-choice",
+      "question": "Почему Pandas UDF (vectorized) значительно быстрее обычного Python UDF?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Pandas UDF выполняется на JVM вместо Python"
+        },
+        {
+          "id": "b",
+          "text": "Pandas UDF компилируется в нативный код через Cython"
+        },
+        {
+          "id": "c",
+          "text": "Pandas UDF обрабатывает данные батчами через Apache Arrow columnar format, минимизируя overhead сериализации; вместо миллионов per-row сериализаций происходит несколько десятков per-batch"
+        },
+        {
+          "id": "d",
+          "text": "Pandas UDF не использует Python -- это обёртка над Scala"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Python UDF сериализует/десериализует каждую строку через socket между JVM и Python worker. Pandas UDF передаёт данные батчами в Apache Arrow columnar format -- бинарный формат без per-row overhead. Функция получает pd.Series (целый батч) и возвращает pd.Series. Дополнительно, pandas/NumPy операции над Series используют vectorized C-код, что быстрее Python-циклов по отдельным строкам.",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

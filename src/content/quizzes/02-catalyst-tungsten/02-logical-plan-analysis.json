@@ -1,0 +1,152 @@
+{
+  "lessonSlug": "02-catalyst-tungsten/02-logical-plan-analysis",
+  "moduleId": "02-catalyst-tungsten",
+  "_meta": {
+    "idPrefix": "spark-m02-02",
+    "description": "Use IDs: m02-02-q1, m02-02-q2, ... for MC/TF; m02-02-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m02-02-q1",
+      "type": "multiple-choice",
+      "question": "В Unresolved Logical Plan узел UnresolvedRelation('employees') означает, что:",
+      "options": [
+        {
+          "id": "a",
+          "text": "Таблица employees не существует в базе данных"
+        },
+        {
+          "id": "b",
+          "text": "Spark не поддерживает таблицу с таким именем"
+        },
+        {
+          "id": "c",
+          "text": "Таблица employees заблокирована другим запросом"
+        },
+        {
+          "id": "d",
+          "text": "Parser создал ссылку на таблицу employees, но Analyzer ещё не проверил её существование в Catalog"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "UnresolvedRelation -- это placeholder, созданный Parser. На этапе парсинга Spark только понимает структуру SQL-запроса, но не обращается к Catalog. Задача Analyzer -- взять UnresolvedRelation('employees') и разрешить её: проверить существование таблицы, извлечь схему (имена и типы колонок), определить базу данных. Если таблицы нет, Analyzer выбросит AnalysisException.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m02-02-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer выполняет spark.sql('SELECT name FROM nonexistent_table'). На какой стадии Catalyst pipeline возникнет ошибка?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Analyzer -- Catalog не найдёт таблицу nonexistent_table и выбросит AnalysisException"
+        },
+        {
+          "id": "b",
+          "text": "Parser -- SQL-синтаксис некорректен"
+        },
+        {
+          "id": "c",
+          "text": "Optimizer -- правила оптимизации не смогут обработать несуществующую таблицу"
+        },
+        {
+          "id": "d",
+          "text": "SparkPlanner -- невозможно создать физический план для несуществующей таблицы"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Parser успешно разберёт SQL-синтаксис: SELECT, FROM и имя таблицы валидны. Parser создаст UnresolvedRelation('nonexistent_table'). Analyzer обратится к Catalog, не найдёт таблицу и выбросит AnalysisException: 'Table or view not found: nonexistent_table'. Optimizer и SparkPlanner никогда не получат этот план.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-02-q3",
+      "type": "multiple-choice",
+      "question": "Какую роль играет Catalog в работе Analyzer?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Catalog хранит оптимизированные планы предыдущих запросов для переиспользования"
+        },
+        {
+          "id": "b",
+          "text": "Catalog -- метаданное хранилище, содержащее информацию о базах данных, таблицах, схемах и функциях; Analyzer обращается к нему для разрешения имён и типов"
+        },
+        {
+          "id": "c",
+          "text": "Catalog -- система кэширования результатов запросов"
+        },
+        {
+          "id": "d",
+          "text": "Catalog используется только для Hive-таблиц, не для DataFrame"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Catalog -- центральное метаданное хранилище Spark. Analyzer использует его для: (1) проверки существования таблиц и разрешения UnresolvedRelation; (2) извлечения схем таблиц (имена и типы колонок) для разрешения UnresolvedAttribute; (3) разрешения функций (встроенных и UDF); (4) разворачивания UnresolvedStar (*) в список конкретных колонок. Catalog работает со всеми источниками данных, не только Hive.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m02-02-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer вызывает df.explain(True) и видит секции: Parsed Logical Plan, Analyzed Logical Plan, Optimized Logical Plan, Physical Plan. В Parsed Plan видит UnresolvedRelation, в Analyzed -- SubqueryAlias с полной схемой. Что произошло между этими двумя секциями?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Optimizer применил правила трансформации для разрешения ссылок"
+        },
+        {
+          "id": "b",
+          "text": "SparkPlanner создал физический план, который отобразился как Analyzed Plan"
+        },
+        {
+          "id": "c",
+          "text": "Analyzer обратился к Catalog, разрешил имя таблицы, определил типы колонок и заменил UnresolvedRelation на резолвенную ссылку с полной схемой"
+        },
+        {
+          "id": "d",
+          "text": "Parser повторно разобрал запрос с дополнительной информацией о таблице"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Между Parsed и Analyzed планами работает Analyzer. Он выполняет набор правил (analysis rules): ResolveRelations разрешает имена таблиц через Catalog; ResolveReferences сопоставляет имена колонок с конкретными таблицами; TypeCoercion обеспечивает совместимость типов. Результат -- полностью типизированный план, где каждый узел имеет известную схему.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-02-code-1",
+      "type": "code-challenge",
+      "question": "Исследуйте, как Analyzer разрешает ссылки на колонки. Создайте два DataFrame (employees и departments), выполните JOIN по dept_id, затем примените WHERE age > 30 и SELECT name, dept_name. Вызовите printSchema() на результате, чтобы увидеть итоговую схему (результат работы Analyzer), и show() для данных.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"logical-plan\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(1, \"Alice\", 35, 10), (2, \"Bob\", 28, 20), (3, \"Carol\", 42, 10)],\n    [\"id\", \"name\", \"age\", \"dept_id\"]\n)\n\ndepartments = spark.createDataFrame(\n    [(10, \"Engineering\"), (20, \"Marketing\")],\n    [\"dept_id\", \"dept_name\"]\n)\n\n# TODO: JOIN employees и departments по dept_id\n# joined = employees.join(...)\n\n# TODO: Отфильтруйте age > 30\n# filtered = joined.where(...)\n\n# TODO: Выберите name и dept_name\n# result = filtered.select(...)\n\n# TODO: Вызовите printSchema() и show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"logical-plan\").getOrCreate()\n\nemployees = spark.createDataFrame(\n    [(1, \"Alice\", 35, 10), (2, \"Bob\", 28, 20), (3, \"Carol\", 42, 10)],\n    [\"id\", \"name\", \"age\", \"dept_id\"]\n)\n\ndepartments = spark.createDataFrame(\n    [(10, \"Engineering\"), (20, \"Marketing\")],\n    [\"dept_id\", \"dept_name\"]\n)\n\njoined = employees.join(departments, \"dept_id\")\n\nfiltered = joined.where(joined[\"age\"] > 30)\n\nresult = filtered.select(\"name\", \"dept_name\")\n\nresult.printSchema()\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "printSchema показывает типы колонок",
+          "input": "",
+          "expectedOutput": "string",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Alice в Engineering",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Bob отфильтрован (age 28)",
+          "input": "",
+          "expectedOutput": "Bob",
+          "matchMode": "not_contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "printSchema() отображает результат работы Analyzer: все колонки разрешены, типы определены. В Catalyst pipeline этот запрос проходит: Parser создаёт план с UnresolvedRelation и UnresolvedAttribute; Analyzer обращается к Catalog, разрешает имена таблиц и колонок, определяет типы (string, bigint); Optimizer применяет PushDownPredicate (age > 30 сдвигается до JOIN) и ColumnPruning (id и age не нужны в финальном результате).",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

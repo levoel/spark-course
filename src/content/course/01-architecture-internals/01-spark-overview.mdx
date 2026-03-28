@@ -1,0 +1,123 @@
+---
+title: "Apache Spark: Обзор архитектуры"
+description: "Что такое Spark, почему он заменил MapReduce, экосистема компонентов и unified engine"
+order: 1
+difficulty: "beginner"
+estimatedTime: 12
+topics: ["Spark", "Architecture", "MapReduce", "Distributed Computing"]
+---
+
+# Apache Spark: Обзор архитектуры
+
+## Проблема: MapReduce и его ограничения
+
+До появления Spark основным инструментом обработки больших данных был **Apache MapReduce**. Каждый шаг вычислений в MapReduce записывал промежуточные результаты на **диск HDFS**. Для итеративных алгоритмов (machine learning, graph processing) это означало десятки циклов чтения-записи на диск.
+
+```
+MapReduce итерация:
+HDFS -> Map -> Disk -> Reduce -> HDFS -> Map -> Disk -> Reduce -> HDFS
+         ↑                                  ↑
+    Disk I/O bottleneck               Disk I/O bottleneck
+```
+
+**Результат:** алгоритм k-means на 100 итераций делал 200 записей на диск. Это было мучительно медленно.
+
+## Решение: Apache Spark
+
+**Apache Spark** -- это unified engine для распределённой обработки данных, разработанный в AMPLab (UC Berkeley) в 2009 году. Ключевое отличие от MapReduce -- **in-memory computing**: промежуточные результаты хранятся в оперативной памяти, а не на диске.
+
+```
+Spark итерация:
+Data -> Transform -> Memory -> Transform -> Memory -> Transform -> Result
+                       ↑                       ↑
+                  RAM (100x faster)       RAM (100x faster)
+```
+
+<Callout type="tip">
+**Spark vs MapReduce: главное отличие**
+
+MapReduce записывает промежуточные данные на диск после каждого шага. Spark хранит их в памяти (RAM), что делает итеративные алгоритмы в 10-100 раз быстрее. Это не значит, что Spark всегда быстрее -- для single-pass ETL разница минимальна. Но для ML, graph processing и interactive analytics Spark радикально выигрывает.
+</Callout>
+
+## Экосистема Spark
+
+Spark -- это не один инструмент, а **платформа** из нескольких модулей:
+
+| Модуль | Назначение | API |
+|--------|-----------|-----|
+| **Spark Core** | Распределённое выполнение, планирование задач, memory management | RDD API |
+| **Spark SQL** | Структурированная обработка данных, Catalyst optimizer | DataFrame / Dataset API |
+| **Structured Streaming** | Потоковая обработка (micro-batch и continuous) | DataFrame API |
+| **MLlib** | Machine learning (classification, regression, clustering) | DataFrame API |
+| **GraphX** | Обработка графов (PageRank, connected components) | RDD API |
+
+Все модули работают на одном **ядре** (Spark Core) и используют один **планировщик задач** (DAG Scheduler). Это означает, что вы можете комбинировать SQL-запросы, ML-пайплайны и потоковую обработку в одном приложении.
+
+## Unified Engine: Batch + Streaming
+
+Одно из главных преимуществ Spark -- **один API для batch и streaming**. В Structured Streaming тот же DataFrame API, который вы используете для batch-обработки, работает с потоковыми данными:
+
+```python
+# Batch -- чтение файла
+df_batch = spark.read.parquet("/data/events/")
+
+# Streaming -- чтение из Kafka (тот же API!)
+df_stream = (
+    spark.readStream
+    .format("kafka")
+    .option("subscribe", "events")
+    .load()
+)
+
+# Одна и та же трансформация для обоих
+result = df.groupBy("event_type").count()
+```
+
+Это не просто синтаксический сахар -- Catalyst optimizer применяет **одни и те же оптимизации** к batch и streaming запросам.
+
+## Как Spark выполняет ваш код
+
+Когда вы пишете Spark-приложение, происходит следующее:
+
+1. **Вы описываете трансформации** (filter, join, groupBy) -- но они не выполняются сразу
+2. **Spark строит DAG** (Directed Acyclic Graph) -- граф зависимостей между операциями
+3. **Catalyst optimizer** оптимизирует этот план (pushdown предикатов, выбор join-стратегии)
+4. **DAG Scheduler** разбивает план на stages и tasks
+5. **Tasks выполняются на executors** -- распределённо, по партициям данных
+
+Мы подробно разберём каждый из этих шагов в следующих уроках.
+
+## Анти-паттерн: `collect()` на больших данных
+
+Один из самых частых ошибок новичков -- вызов `collect()` на большом DataFrame:
+
+```python
+# ОПАСНО: collect() тянет ВСЕ данные в driver
+all_data = df.collect()  # 1 миллиард строк -> OOM!
+```
+
+Почему это проблема? `collect()` отправляет **все данные** со всех executors в **один процесс** (driver). Если у вас 1 миллиард строк по 100 байт каждая -- это 100 ГБ в памяти одного JVM-процесса. Driver обычно имеет 1-4 ГБ памяти. Результат -- `OutOfMemoryError` и крах приложения.
+
+**Что делать вместо этого:**
+
+```python
+# Безопасно: ограничиваем количество строк
+sample = df.limit(100).collect()
+
+# Безопасно: агрегируем на executors
+count = df.count()  # возвращает одно число
+
+# Безопасно: записываем результат распределённо
+df.write.parquet("/output/result/")
+```
+
+Запомните: **driver координирует, executors обрабатывают**. Никогда не тяните большие данные в driver.
+
+<KnowledgeCheck
+  question="Почему Spark значительно быстрее MapReduce на итеративных алгоритмах?"
+  answer="MapReduce записывает промежуточные результаты на диск (HDFS) после каждого шага Map и Reduce. При 100 итерациях это означает 200 циклов disk I/O. Spark хранит промежуточные данные в оперативной памяти (RAM), что на 2-3 порядка быстрее дискового доступа. Для single-pass ETL разница минимальна, но для итеративных алгоритмов (ML, graph processing) Spark выигрывает в 10-100 раз."
+/>
+
+## Что дальше?
+
+В следующем уроке мы детально разберём архитектуру **Driver и Executor** -- два ключевых процесса, на которых строится распределённое выполнение Spark. Вы поймёте, почему driver не должен обрабатывать данные, и чем отличаются режимы развёртывания client и cluster.

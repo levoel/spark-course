@@ -1,0 +1,152 @@
+{
+  "lessonSlug": "02-catalyst-tungsten/06-whole-stage-codegen",
+  "moduleId": "02-catalyst-tungsten",
+  "_meta": {
+    "idPrefix": "spark-m02-06",
+    "description": "Use IDs: m02-06-q1, m02-06-q2, ... for MC/TF; m02-06-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m02-06-q1",
+      "type": "multiple-choice",
+      "question": "Что означает символ * (звёздочка) перед оператором в выводе explain()? Например: *(1) Filter (age > 30).",
+      "options": [
+        {
+          "id": "a",
+          "text": "Оператор является критически медленным и требует оптимизации"
+        },
+        {
+          "id": "b",
+          "text": "Оператор использует broadcast для распределения данных"
+        },
+        {
+          "id": "c",
+          "text": "Оператор выполняется на всех executors параллельно"
+        },
+        {
+          "id": "d",
+          "text": "Оператор включён в Whole-Stage CodeGen pipeline -- он объединён с другими операторами в единый сгенерированный Java-метод"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Звёздочка (*) в explain() -- индикатор Whole-Stage CodeGen. Число в скобках (1) -- номер codegen pipeline (stage). Операторы внутри одного *(N) объединены в единый Java-метод через Janino compiler. Вместо цепочки виртуальных вызовов next() между операторами генерируется один цикл, обрабатывающий данные за один проход. Операторы без * выполняются через классическую Volcano Iterator Model.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-06-q2",
+      "type": "multiple-choice",
+      "question": "Почему Whole-Stage CodeGen разрывает pipeline на границе shuffle (Exchange)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Shuffle требует материализации данных (запись на диск, передача по сети), что прерывает pipeline обработки; операторы до и после shuffle работают на разных executors"
+        },
+        {
+          "id": "b",
+          "text": "Janino compiler не поддерживает сетевые операции"
+        },
+        {
+          "id": "c",
+          "text": "Shuffle-операции не поддерживают CodeGen"
+        },
+        {
+          "id": "d",
+          "text": "Это ограничение Spark, которое будет исправлено в Spark 4.0"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Whole-Stage CodeGen объединяет операторы, которые обрабатывают данные в одном потоке без материализации. Shuffle (Exchange) прерывает этот поток: данные сериализуются, записываются на диск, передаются по сети и десериализуются на других executors. Это физический барьер -- операторы до и после shuffle выполняются на разных machines. Поэтому CodeGen создаёт отдельные pipelines для pre-shuffle и post-shuffle операторов.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-06-q3",
+      "type": "multiple-choice",
+      "question": "Какую проблему Volcano Iterator Model решает Whole-Stage CodeGen, обеспечивая ускорение до 10x?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Volcano Model медленна из-за ограничений сетевого протокола"
+        },
+        {
+          "id": "b",
+          "text": "Volcano Model создаёт миллиарды виртуальных вызовов next() между операторами, boxing/unboxing примитивных типов и branch misprediction; CodeGen устраняет всё это, генерируя один tight loop"
+        },
+        {
+          "id": "c",
+          "text": "Volcano Model не поддерживает параллельное выполнение операторов"
+        },
+        {
+          "id": "d",
+          "text": "Volcano Model использует устаревшие алгоритмы сортировки"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "В Volcano Model каждый оператор (Scan, Filter, Project, Aggregate) -- отдельный объект с методом next(). Для 1 миллиарда строк и 5 операторов это 5 миллиардов виртуальных вызовов (через vtable, JVM не может инлайнить), 5 миллиардов boxing/unboxing (int -> Integer -> int) и постоянный branch misprediction. Whole-Stage CodeGen генерирует один цикл, где все операции выполняются inline, данные остаются в CPU registers, и JIT может полностью оптимизировать код.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m02-06-q4",
+      "type": "multiple-choice",
+      "question": "Spark использует Janino вместо javac для компиляции сгенерированного кода. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Janino генерирует более быстрый байткод, чем javac"
+        },
+        {
+          "id": "b",
+          "text": "Janino поддерживает Scala, а javac -- нет"
+        },
+        {
+          "id": "c",
+          "text": "Janino -- легковесный compiler, который компилирует код за миллисекунды в runtime; javac требует запуска отдельного процесса и значительно медленнее для динамической генерации"
+        },
+        {
+          "id": "d",
+          "text": "javac не может компилировать код с off-heap доступом"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Каждый запрос генерирует уникальный Java-код, который нужно скомпилировать в runtime. javac -- полноценный compiler, требующий запуска отдельного JVM-процесса, что занимает сотни миллисекунд. Janino -- embedded compiler, работающий в том же JVM-процессе и компилирующий за 1-10 мс. Для интерактивных запросов, выполняющихся за секунды, задержка компиляции должна быть минимальной. Качество байткода у обоих достаточное -- JIT-компилятор JVM дооптимизирует в runtime.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-06-code-1",
+      "type": "code-challenge",
+      "question": "Постройте цепочку операторов, которую Whole-Stage CodeGen объединяет в один pipeline: filter -> select -> withColumn -> groupBy -> agg -> show. Создайте DataFrame продаж, отфильтруйте amount > 200, выберите нужные колонки, добавьте вычисляемую колонку tax (amount * 0.2), сгруппируйте по category и посчитайте sum(tax). Все narrow transformations до shuffle фьюзятся в один codegen pipeline.",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, sum\n\nspark = SparkSession.builder.appName(\"codegen-fusion\").getOrCreate()\n\nsales = spark.createDataFrame(\n    [(\"Electronics\", \"Laptop\", 1500), (\"Electronics\", \"Mouse\", 50),\n     (\"Books\", \"Spark Guide\", 300), (\"Books\", \"Python 101\", 150),\n     (\"Electronics\", \"Monitor\", 800), (\"Books\", \"Data Eng\", 250)],\n    [\"category\", \"product\", \"amount\"]\n)\n\n# TODO: Отфильтруйте amount > 200\n# step1 = sales.filter(...)\n\n# TODO: Выберите category и amount\n# step2 = step1.select(...)\n\n# TODO: Добавьте колонку tax = amount * 0.2\n# step3 = step2.withColumn(\"tax\", ...)\n\n# TODO: Сгруппируйте по category и посчитайте sum(tax)\n# result = step3.groupBy(...).agg(...)\n\n# TODO: Вызовите show()\n",
+      "solutionCode": "from pyspark.sql import SparkSession\nfrom pyspark.sql.functions import col, sum\n\nspark = SparkSession.builder.appName(\"codegen-fusion\").getOrCreate()\n\nsales = spark.createDataFrame(\n    [(\"Electronics\", \"Laptop\", 1500), (\"Electronics\", \"Mouse\", 50),\n     (\"Books\", \"Spark Guide\", 300), (\"Books\", \"Python 101\", 150),\n     (\"Electronics\", \"Monitor\", 800), (\"Books\", \"Data Eng\", 250)],\n    [\"category\", \"product\", \"amount\"]\n)\n\nstep1 = sales.filter(col(\"amount\") > 200)\n\nstep2 = step1.select(\"category\", \"amount\")\n\nstep3 = step2.withColumn(\"tax\", col(\"amount\") * 0.2)\n\nresult = step3.groupBy(\"category\").agg(sum(\"tax\").alias(\"total_tax\"))\n\nresult.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Electronics в результате",
+          "input": "",
+          "expectedOutput": "Electronics",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Books в результате",
+          "input": "",
+          "expectedOutput": "Books",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Код содержит filter и groupBy",
+          "input": "",
+          "expectedOutput": "groupBy",
+          "matchMode": "contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "Whole-Stage CodeGen объединяет narrow transformations (filter, select, withColumn) в один codegen pipeline: *(1) Scan -> Filter -> Project -> Project. Эти операции выполняются за один проход по данным без материализации промежуточных результатов. На границе shuffle (groupBy) pipeline разрывается: *(2) HashAggregate. В Volcano Iterator Model каждый оператор вызывал бы next() -- миллиарды виртуальных вызовов. CodeGen генерирует один tight Java loop через Janino compiler, устраняя virtual dispatch и boxing.",
+      "bloomLevel": "analytical",
+      "useSparkHelpers": true
+    }
+  ]
+}

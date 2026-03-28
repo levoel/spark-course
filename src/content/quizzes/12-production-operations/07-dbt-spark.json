@@ -1,0 +1,118 @@
+{
+  "lessonSlug": "12-production-operations/07-dbt-spark",
+  "moduleId": "12-production-operations",
+  "_meta": {
+    "idPrefix": "spark-m12-07",
+    "description": "Use IDs: m12-07-q1, m12-07-q2, ... (4 questions on dbt-spark adapter, incremental models)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-07-q1",
+      "type": "multiple-choice",
+      "question": "Зачем в dbt используется ref() macro вместо прямых имён таблиц в SQL-моделях?",
+      "options": [
+        {
+          "id": "a",
+          "text": "ref() -- синтаксический сахар, не имеющий функционального значения"
+        },
+        {
+          "id": "b",
+          "text": "ref() нужен только для performance -- кеширует результаты между моделями"
+        },
+        {
+          "id": "c",
+          "text": "ref() автоматически строит dependency graph (порядок выполнения), обеспечивает environment isolation (dev/prod schema) и refactoring safety (ошибка при переименовании модели)"
+        },
+        {
+          "id": "d",
+          "text": "ref() требуется для совместимости с Spark Thrift Server"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "ref() macro решает три проблемы: (1) автоматический dependency graph -- dbt знает порядок выполнения; (2) environment isolation -- ref('stg_orders') в dev разрешается в analytics_dev.stg_orders, в prod -- в analytics.stg_orders; (3) refactoring safety -- при переименовании модели dbt покажет ошибку во всех downstream-моделях.",
+      "bloomLevel": "conceptual",
+      "studyHint": "Повторите урок 7: dbt + Spark -- ref() macro и три проблемы, которые он решает"
+    },
+    {
+      "id": "spark-m12-07-q2",
+      "type": "multiple-choice",
+      "question": "Как работает incremental materialization в dbt-spark? Что делает is_incremental()?",
+      "options": [
+        {
+          "id": "a",
+          "text": "is_incremental() всегда true -- dbt всегда обрабатывает только новые данные"
+        },
+        {
+          "id": "b",
+          "text": "is_incremental() автоматически определяет новые записи по primary key"
+        },
+        {
+          "id": "c",
+          "text": "is_incremental() проверяет наличие новых файлов в source"
+        },
+        {
+          "id": "d",
+          "text": "is_incremental() возвращает true при повторных запусках (таблица существует, не full-refresh). Позволяет добавить WHERE-фильтр для отбора только новых строк"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Первый запуск: is_incremental() = false, SELECT без WHERE, создаётся полная таблица. Последующие запуски: is_incremental() = true, SELECT с WHERE (обычно updated_at > MAX(updated_at) из текущей таблицы), затем MERGE новых строк. unique_key определяет ключ для MERGE: если строка существует -- UPDATE, иначе INSERT.",
+      "bloomLevel": "applied",
+      "studyHint": "Повторите урок 7: dbt + Spark -- incremental materialization и is_incremental()"
+    },
+    {
+      "id": "spark-m12-07-q3",
+      "type": "multiple-choice",
+      "question": "Какая incremental strategy в dbt-spark требует Delta Lake file format?",
+      "options": [
+        {
+          "id": "a",
+          "text": "merge -- MERGE по unique_key (upsert), требует Delta Lake для MERGE INTO операции"
+        },
+        {
+          "id": "b",
+          "text": "insert_overwrite -- перезапись partition"
+        },
+        {
+          "id": "c",
+          "text": "append -- добавление новых строк"
+        },
+        {
+          "id": "d",
+          "text": "Все стратегии требуют Delta Lake"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Три incremental strategy для dbt-spark: append (INSERT, любой формат), insert_overwrite (перезапись partition, Hive/Parquet), merge (MERGE по unique_key = upsert, требует Delta Lake). MERGE INTO -- операция Delta Lake, недоступная для plain Parquet/ORC. Без unique_key dbt делает append (может создать дубликаты).",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 7: dbt + Spark -- incremental strategies и требование Delta Lake для merge"
+    },
+    {
+      "id": "spark-m12-07-q4",
+      "type": "multiple-choice",
+      "question": "Когда выбрать dbt + Spark, а когда Spark Declarative Pipelines (SDP, Spark 4.1)?",
+      "options": [
+        {
+          "id": "a",
+          "text": "SDP всегда лучше -- встроен в Spark, не нужен внешний инструмент"
+        },
+        {
+          "id": "b",
+          "text": "dbt -- для SQL-first команд и multi-engine (Spark + Snowflake + BigQuery). SDP -- для Spark-only и Python-first команд"
+        },
+        {
+          "id": "c",
+          "text": "dbt только для Databricks, SDP для open-source Spark"
+        },
+        {
+          "id": "d",
+          "text": "Они несовместимы -- нельзя использовать оба"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "dbt: SQL-first, Jinja macros, поддерживает многие движки (Spark, Snowflake, BigQuery, Redshift) через адаптеры, сильное community и dbt Hub. SDP (Spark 4.1): Python + SQL, встроен в Spark, streaming-native (@dlt.table(is_streaming=True)), Spark UI lineage. Выбор зависит от команды и stack.",
+      "bloomLevel": "analytical",
+      "studyHint": "Повторите урок 7: dbt + Spark -- сравнение dbt vs SDP"
+    }
+  ]
+}

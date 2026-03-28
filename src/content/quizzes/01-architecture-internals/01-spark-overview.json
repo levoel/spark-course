@@ -1,0 +1,134 @@
+{
+  "lessonSlug": "01-architecture-internals/01-spark-overview",
+  "moduleId": "01-architecture-internals",
+  "_meta": {
+    "idPrefix": "spark-m01-01",
+    "description": "Use IDs: m01-01-q1, m01-01-q2, ... for MC/TF; m01-01-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m01-01-q1",
+      "type": "multiple-choice",
+      "question": "Какое ключевое архитектурное отличие Apache Spark от MapReduce обеспечивает ускорение итеративных алгоритмов в 10-100 раз?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark использует более быстрые сетевые протоколы для передачи данных между узлами"
+        },
+        {
+          "id": "b",
+          "text": "Spark использует GPU для параллельных вычислений вместо CPU"
+        },
+        {
+          "id": "c",
+          "text": "Spark работает только на SSD-дисках, которые быстрее HDD"
+        },
+        {
+          "id": "d",
+          "text": "Spark хранит промежуточные результаты в оперативной памяти (RAM), а MapReduce записывает их на диск HDFS после каждого шага"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Ключевое отличие Spark -- in-memory computing. MapReduce записывает промежуточные результаты на диск HDFS после каждого Map и Reduce шага. Для итеративных алгоритмов (ML, graph processing) это означает сотни циклов чтения-записи на диск. Spark хранит промежуточные данные в RAM, что радикально ускоряет повторные обращения к данным. Однако для single-pass ETL разница минимальна.",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m01-01-q2",
+      "type": "multiple-choice",
+      "question": "Data engineer запускает spark.read.parquet('/data/').collect() на таблице объёмом 50 ГБ. Executor memory составляет 4 ГБ, а driver memory -- 2 ГБ. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Driver получит OutOfMemoryError, потому что collect() собирает все 50 ГБ данных в память driver (2 ГБ)"
+        },
+        {
+          "id": "b",
+          "text": "Executors обработают данные и вернут результат в потоковом режиме"
+        },
+        {
+          "id": "c",
+          "text": "Spark автоматически разобьёт данные на chunks и вернёт их по частям"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически увеличит driver memory до нужного объёма"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Метод collect() собирает ВСЕ данные с executors в память driver. Для таблицы 50 ГБ и driver с 2 ГБ RAM это гарантированный OutOfMemoryError. Spark не ограничивает объём collect() автоматически. В production никогда не вызывайте collect() на больших данных -- используйте show(), take(N) или запишите результат через write.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m01-01-q3",
+      "type": "multiple-choice",
+      "question": "Почему все модули Spark (SQL, Streaming, MLlib, GraphX) работают на одном ядре Spark Core и используют один DAG Scheduler?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Это ограничение архитектуры -- каждый модуль технически не может иметь свой планировщик"
+        },
+        {
+          "id": "b",
+          "text": "Единое ядро позволяет комбинировать SQL-запросы, ML-пайплайны и потоковую обработку в одном приложении с общей оптимизацией и планированием ресурсов"
+        },
+        {
+          "id": "c",
+          "text": "Это сделано исключительно для упрощения установки Spark"
+        },
+        {
+          "id": "d",
+          "text": "DAG Scheduler поддерживает только один модуль одновременно, остальные ставятся в очередь"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Архитектура unified engine -- сознательное решение. Общее ядро Spark Core и единый DAG Scheduler позволяют: (1) комбинировать SQL, ML и streaming в одном приложении; (2) Catalyst Optimizer применяет одинаковые оптимизации к batch и streaming запросам; (3) ресурсы кластера распределяются единым планировщиком без конфликтов между модулями.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-01-q4",
+      "type": "true-false",
+      "question": "Spark всегда значительно быстрее MapReduce для любых задач обработки данных, включая single-pass ETL.",
+      "correctAnswer": false,
+      "explanation": "Spark радикально быстрее MapReduce для итеративных алгоритмов (ML, graph processing) и интерактивной аналитики благодаря in-memory computing. Однако для single-pass ETL (однократное чтение -> трансформация -> запись) разница минимальна, потому что данные читаются и записываются на диск один раз в обоих случаях. Преимущество Spark проявляется при многократном обращении к одним и тем же данным.",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m01-01-code-1",
+      "type": "code-challenge",
+      "question": "Создайте SparkSession, постройте DataFrame из списка кортежей [(1, \"Alice\", 100000), (2, \"Bob\", 200000), (3, \"Carol\", 150000)] со схемой [\"id\", \"name\", \"salary\"], отфильтруйте сотрудников с salary > 120000 и вызовите show().",
+      "language": "python",
+      "starterCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"spark-overview\").getOrCreate()\n\ndata = [(1, \"Alice\", 100000), (2, \"Bob\", 200000), (3, \"Carol\", 150000)]\nschema = [\"id\", \"name\", \"salary\"]\n\n# TODO: Создайте DataFrame из data и schema\n# df = spark.createDataFrame(...)\n\n# TODO: Отфильтруйте строки с salary > 120000\n# filtered = df.filter(...)\n\n# TODO: Вызовите show() для вывода результата\n",
+      "solutionCode": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder.appName(\"spark-overview\").getOrCreate()\n\ndata = [(1, \"Alice\", 100000), (2, \"Bob\", 200000), (3, \"Carol\", 150000)]\nschema = [\"id\", \"name\", \"salary\"]\n\ndf = spark.createDataFrame(data, schema)\n\nfiltered = df.filter(df[\"salary\"] > 120000)\n\nfiltered.show()",
+      "testCases": [
+        {
+          "id": "tc1",
+          "description": "Результат содержит Bob",
+          "input": "",
+          "expectedOutput": "Bob",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc2",
+          "description": "Результат содержит Carol",
+          "input": "",
+          "expectedOutput": "Carol",
+          "matchMode": "contains",
+          "hidden": false
+        },
+        {
+          "id": "tc3",
+          "description": "Alice отфильтрована",
+          "input": "",
+          "expectedOutput": "Alice",
+          "matchMode": "not_contains",
+          "hidden": true
+        }
+      ],
+      "correctAnswer": "code",
+      "explanation": "SparkSession -- единая точка входа в Spark. Метод createDataFrame() создаёт распределённый DataFrame из локальных данных. filter() -- narrow transformation, обрабатывающая каждую партицию независимо без shuffle. show() -- action, которое запускает выполнение DAG и выводит результат в формате ASCII-таблицы. Цепочка createDataFrame -> filter -> show демонстрирует ленивые вычисления: до вызова show() Spark не выполняет никаких вычислений.",
+      "bloomLevel": "applied",
+      "useSparkHelpers": true
+    }
+  ]
+}

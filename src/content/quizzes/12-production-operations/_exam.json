@@ -1,0 +1,390 @@
+{
+  "lessonSlug": "12-production-operations/_exam",
+  "moduleId": "12-production-operations",
+  "examTitle": "Экзамен: Production Operations",
+  "passThreshold": 70,
+  "_meta": {
+    "idPrefix": "spark-m12-exam",
+    "description": "Use IDs: m12-exam-q1, m12-exam-q2, ... (14 questions covering all M12 lessons)"
+  },
+  "questions": [
+    {
+      "id": "spark-m12-exam-q1",
+      "type": "multiple-choice",
+      "question": "Data engineer настроил spark.ssl.enabled=true и spark.authenticate=true, но не включил spark.io.encryption.enabled. Компания обрабатывает PII-данные. Security audit обнаружил проблему. Какую именно?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Kerberos не настроен -- аутентификация неполная"
+        },
+        {
+          "id": "b",
+          "text": "ACLs не настроены -- любой пользователь видит Spark UI"
+        },
+        {
+          "id": "c",
+          "text": "Shuffle-данные между executor передаются в открытом виде. PII из DataFrame может быть перехвачена при сетевом сниффинге, несмотря на TLS для Spark UI"
+        },
+        {
+          "id": "d",
+          "text": "spark.authenticate=true конфликтует с ssl.enabled"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "spark.ssl.enabled шифрует только HTTP-трафик (Spark UI, REST API). Shuffle-данные между executor передаются через отдельный block transfer service, не покрытый TLS. Для PII-данных обязателен spark.io.encryption.enabled=true (AES-256 шифрование shuffle). Overhead ~5-15%, но для PII это обязательная цена.",
+      "studyHint": "Повторите урок 1: Безопасность -- три отдельных канала шифрования и shuffle encryption",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m12-exam-q2",
+      "type": "multiple-choice",
+      "question": "Команда запускает Spark на YARN. YARN container запускается за ~30 секунд, dynamic allocation настроен. Команда решает мигрировать на Kubernetes. Какое изменение в поведении dynamic allocation они заметят?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Dynamic allocation не поддерживается на Kubernetes"
+        },
+        {
+          "id": "b",
+          "text": "На K8s нужно использовать HPA вместо Spark dynamic allocation"
+        },
+        {
+          "id": "c",
+          "text": "Никакой разницы -- dynamic allocation одинаков на всех менеджерах"
+        },
+        {
+          "id": "d",
+          "text": "Executor pod запускается быстрее (~15s vs ~30s), но требуется spark.dynamicAllocation.shuffleTracking.enabled=true вместо External Shuffle Service (который не нужен на K8s)"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "На K8s dynamic allocation работает через shuffle tracking (spark.dynamicAllocation.shuffleTracking.enabled=true) вместо External Shuffle Service. Executor pod запускается быстрее (~15s vs ~30s YARN). Shuffle tracking позволяет не удалять executor с active shuffle данными. HPA масштабирует pod, но Spark dynamic allocation масштабирует executor -- это разные уровни.",
+      "studyHint": "Повторите урок 2: Cluster Managers -- dynamic allocation на Kubernetes и shuffle tracking",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m12-exam-q3",
+      "type": "multiple-choice",
+      "question": "Data engineer выбирает между EMR и Databricks для команды, которая использует Delta Lake и нуждается в column-level lineage. Какой фактор определяет выбор?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Unity Catalog (column-level lineage, governance) доступен только на Databricks. Если lineage критичен -- Databricks. Если нужна максимальная гибкость и бюджет ограничен -- EMR + OpenLineage"
+        },
+        {
+          "id": "b",
+          "text": "EMR дешевле -- всегда выбирать EMR"
+        },
+        {
+          "id": "c",
+          "text": "Оба поддерживают Unity Catalog -- разницы нет"
+        },
+        {
+          "id": "d",
+          "text": "Column-level lineage невозможен на managed-платформах"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "Unity Catalog -- проприетарная система Databricks: column-level lineage, cross-workspace governance, интеграция с Delta Lake. На EMR Unity Catalog недоступен. Альтернатива для EMR: OpenLineage + Marquez (открытый стандарт, table-level lineage). Выбор: governance из коробки (Databricks) vs гибкость + экономия (EMR + OpenLineage).",
+      "studyHint": "Повторите урок 3: Облачное развёртывание -- Databricks vs EMR и урок 7 M13: Data Lineage",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m12-exam-q4",
+      "type": "multiple-choice",
+      "question": "Production job на 10x r5.xlarge (32 GB RAM) использует 70% executor на spot instances. Облако отзывает 3 spot executor во время shuffle stage. spark.decommission.enabled=true. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Job упадёт -- потеря executor во время shuffle фатальна"
+        },
+        {
+          "id": "b",
+          "text": "Spark получает decommission signal, переносит shuffle-блоки с отзываемых executor на оставшиеся, затем executor останавливаются. Job продолжает с оставшимися executor, dynamic allocation запросит новые"
+        },
+        {
+          "id": "c",
+          "text": "Все shuffle-данные потеряны -- Spark пересчитает весь stage"
+        },
+        {
+          "id": "d",
+          "text": "Spark автоматически переключится на on-demand instances"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Graceful decommissioning (Spark 3.1+): при получении сигнала об отзыве spot instance Spark переносит shuffle-блоки (spark.storage.decommission.shuffleBlocks.enabled=true) и cached RDD-блоки на оставшиеся executor. Это минимизирует пересчёт. Job продолжает с 7 executor, dynamic allocation запросит новые spot/on-demand.",
+      "studyHint": "Повторите урок 4: Оптимизация стоимости -- graceful decommissioning при отзыве spot",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m12-exam-q5",
+      "type": "multiple-choice",
+      "question": "CI/CD pipeline для PySpark-приложения: pytest -> build -> deploy. Какой артефакт создаётся на этапе build и как передаётся в spark-submit?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Docker image, запускается через docker run"
+        },
+        {
+          "id": "b",
+          "text": "JAR-файл через sbt assembly"
+        },
+        {
+          "id": "c",
+          "text": "wheel (.whl) через poetry build, передаётся через --py-files при spark-submit"
+        },
+        {
+          "id": "d",
+          "text": "ZIP-архив через pip zip"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Python Spark-приложения: poetry build создаёт wheel (spark_etl-2.1.0-py3-none-any.whl). spark-submit --py-files dist/spark_etl-2.1.0.whl main.py. Для Scala: sbt assembly создаёт fat-jar. Docker image используется для K8s executor (spark.kubernetes.container.image), но это не deployment artifact для кода.",
+      "studyHint": "Повторите урок 5: CI/CD -- packaging Python wheel и spark-submit --py-files",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m12-exam-q6",
+      "type": "multiple-choice",
+      "question": "Airflow DAG запускает 3 Spark jobs последовательно: extract -> transform -> validate. transform упал с OOM. retries=2, retry_delay=5min. После 2 retry transform снова упал. Что произойдёт с validate задачей?",
+      "options": [
+        {
+          "id": "a",
+          "text": "validate запустится, игнорируя ошибку transform"
+        },
+        {
+          "id": "b",
+          "text": "validate запустится с пустыми данными"
+        },
+        {
+          "id": "c",
+          "text": "Airflow перезапустит весь DAG сначала"
+        },
+        {
+          "id": "d",
+          "text": "validate не запустится -- upstream dependency (transform) failed. Airflow пометит validate как upstream_failed. Отправится email_on_failure"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "В Airflow DAG задачи связаны зависимостями (extract >> transform >> validate). Если transform failed после всех retry -- validate помечается upstream_failed и не запускается. Это предотвращает каскадные ошибки. email_on_failure отправляется для transform. Для fix: увеличить executor.memory и перезапустить DAG run.",
+      "studyHint": "Повторите урок 6: Airflow -- DAG dependencies и поведение при upstream failure",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m12-exam-q7",
+      "type": "multiple-choice",
+      "question": "dbt incremental model с strategy='merge' и unique_key='order_id' работает на Parquet-таблице. Data engineer запускает dbt run и получает ошибку. В чём причина?",
+      "options": [
+        {
+          "id": "a",
+          "text": "merge strategy требует Delta Lake -- MERGE INTO операция не поддерживается для Parquet/ORC. Нужно добавить file_format='delta' в config или изменить strategy на append/insert_overwrite"
+        },
+        {
+          "id": "b",
+          "text": "unique_key не поддерживается для Parquet"
+        },
+        {
+          "id": "c",
+          "text": "Parquet не поддерживает incremental materialization"
+        },
+        {
+          "id": "d",
+          "text": "dbt-spark не поддерживает merge strategy"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "dbt-spark incremental strategies: append (любой формат), insert_overwrite (Hive/Parquet), merge (только Delta Lake). MERGE INTO -- операция Delta Lake для upsert по unique_key. Parquet -- immutable файловый формат, не поддерживает in-place merge. Решение: добавить file_format='delta' в config macro.",
+      "studyHint": "Повторите урок 7: dbt + Spark -- incremental strategies и требование Delta Lake для merge",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m12-exam-q8",
+      "type": "multiple-choice",
+      "question": "Production Spark-кластер настроен с spark.speculation=true. Один task завершается за 5 минут, остальные 199 tasks -- за 30 секунд. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Spark подождёт 5 минут -- все tasks должны завершиться"
+        },
+        {
+          "id": "b",
+          "text": "Spark запустит speculative copy медленного task на другом executor. Первый завершившийся (оригинал или копия) засчитывается, второй -- убивается. Это защищает от straggler tasks"
+        },
+        {
+          "id": "c",
+          "text": "Spark убьёт медленный task и перезапустит его"
+        },
+        {
+          "id": "d",
+          "text": "spark.speculation не влияет на одиночные медленные tasks"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Speculative execution: когда один task значительно медленнее остальных (straggler), Spark запускает его копию на другом executor. Первый завершившийся (оригинал или speculative copy) засчитывается, второй убивается. Это защищает от: медленного диска, network issue, неудачного data locality. В production spark.speculation=true -- рекомендуемая настройка.",
+      "studyHint": "Повторите урок 8: Best Practices -- spark.speculation и защита от straggler tasks",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m12-exam-q9",
+      "type": "multiple-choice",
+      "question": "Компания использует Apache Ranger для fine-grained access control. Data scientist пытается SELECT * FROM raw_data.users, но получает Access Denied. При этом SELECT * FROM analytics.user_metrics работает. Как это объясняется архитектурой Ranger?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Ошибка в Spark ACLs -- нужно добавить пользователя в spark.ui.view.acls"
+        },
+        {
+          "id": "b",
+          "text": "Kerberos ticket истёк для raw_data"
+        },
+        {
+          "id": "c",
+          "text": "Ranger policy для роли 'data-scientists': database analytics = SELECT (разрешён), database raw_data = DENIED. Ranger обеспечивает table/database-level авторизацию, отдельную от Spark UI ACLs"
+        },
+        {
+          "id": "d",
+          "text": "TLS не настроен для raw_data database"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Apache Ranger -- enterprise policy engine для fine-grained access control. Policies определяют: какие роли имеют доступ к каким ресурсам. Policy 'data-scientists': analytics [SELECT], raw_data [DENIED]. Это отличается от Spark ACLs (spark.acls.enable), которые контролируют доступ к Spark UI, а не к данным.",
+      "studyHint": "Повторите урок 1: Безопасность -- Apache Ranger vs Spark ACLs",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m12-exam-q10",
+      "type": "multiple-choice",
+      "question": "Data engineer настраивает autoscaling для Spark на Kubernetes. Какие параметры определяют поведение dynamic allocation?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Только spark.dynamicAllocation.enabled=true -- остальное автоматически"
+        },
+        {
+          "id": "b",
+          "text": "spark.executor.instances -- фиксированное число, dynamic allocation на K8s не поддерживается"
+        },
+        {
+          "id": "c",
+          "text": "Kubernetes HPA/VPA управляет масштабированием, Spark только потребляет"
+        },
+        {
+          "id": "d",
+          "text": "minExecutors (гарантированный минимум), maxExecutors (потолок), executorIdleTimeout (когда удалять idle), schedulerBacklogTimeout (когда добавлять новые) и shuffleTracking.enabled для K8s"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "Dynamic allocation на K8s: minExecutors (2) -- baseline; maxExecutors (20) -- потолок; initialExecutors (5) -- при старте; executorIdleTimeout (60s) -- idle executor удаляются; schedulerBacklogTimeout (1s) -- при backlog добавляются новые; shuffleTracking.enabled=true -- вместо External Shuffle Service (не нужен на K8s).",
+      "studyHint": "Повторите урок 2: Cluster Managers -- dynamic allocation на K8s и параметры",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m12-exam-q11",
+      "type": "multiple-choice",
+      "question": "Data engineer написал dbt-модель, которая использует ref('stg_orders'). В staging окружении модель резолвится в analytics_dev.stg_orders, а в production -- в analytics.stg_orders. Какой механизм dbt обеспечивает эту изоляцию?",
+      "options": [
+        {
+          "id": "a",
+          "text": "profiles.yml: target определяет schema (analytics_dev для dev, analytics для prod). ref() автоматически подставляет правильный schema prefix на основе текущего target"
+        },
+        {
+          "id": "b",
+          "text": "Разные dbt_project.yml для каждого окружения"
+        },
+        {
+          "id": "c",
+          "text": "Environment variables в SQL-моделях"
+        },
+        {
+          "id": "d",
+          "text": "Отдельные Git-ветки для dev и prod"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "profiles.yml определяет outputs для каждого environment (target): dev -> schema: analytics_dev, prod -> schema: analytics. При dbt run --target dev ref('stg_orders') разрешается в analytics_dev.stg_orders. При --target production -- в analytics.stg_orders. Это обеспечивает environment isolation без изменения SQL-моделей.",
+      "studyHint": "Повторите урок 7: dbt + Spark -- profiles.yml, targets и environment isolation",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m12-exam-q12",
+      "type": "multiple-choice",
+      "question": "Какой trigger использовать в Airflow SparkSubmitOperator для daily ETL pipeline в UTC?",
+      "options": [
+        {
+          "id": "a",
+          "text": "schedule_interval='@hourly' -- чаще = надёжнее"
+        },
+        {
+          "id": "b",
+          "text": "schedule_interval='0 2 * * *' -- ежедневно в 02:00 UTC с catchup=False для предотвращения массового backfill при перезапуске"
+        },
+        {
+          "id": "c",
+          "text": "Не использовать schedule -- запускать вручную"
+        },
+        {
+          "id": "d",
+          "text": "schedule_interval=timedelta(days=1) -- Python timedelta"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "Cron expression '0 2 * * *' запускает DAG ежедневно в 02:00 UTC -- стандартное время для ETL (после закрытия предыдущего дня). catchup=False предотвращает массовый backfill: если Airflow был выключен 3 дня, при перезапуске не запустит 3 исторических run. Для backfill используйте airflow dags backfill осознанно.",
+      "studyHint": "Повторите урок 6: Airflow -- schedule_interval, cron expressions и catchup",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m12-exam-q13",
+      "type": "multiple-choice",
+      "question": "Spark job работал стабильно 6 месяцев, но внезапно начал падать с OOM. Данных стало в 3 раза больше. Какой production best practice предотвратил бы этот сценарий?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Увеличить spark.task.maxFailures до 10"
+        },
+        {
+          "id": "b",
+          "text": "Включить spark.speculation для ускорения медленных tasks"
+        },
+        {
+          "id": "c",
+          "text": "Capacity planning: мониторинг роста данных с alerting на пороговые значения, dynamic allocation с maxExecutors, и регулярный review executor.memory на основе метрик"
+        },
+        {
+          "id": "d",
+          "text": "Переключиться на Databricks -- managed-платформа автоматически масштабируется"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Capacity planning -- proactive подход: (1) мониторинг роста данных (row count, partition size) с alerting на пороговые значения; (2) dynamic allocation с правильным maxExecutors; (3) регулярный review executor.memory на основе GC metrics и spill metrics из Spark UI. Без capacity planning рост данных превышает ресурсы и приводит к OOM.",
+      "studyHint": "Повторите урок 8: Best Practices -- capacity planning и мониторинг роста данных",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m12-exam-q14",
+      "type": "multiple-choice",
+      "question": "Data engineer запускает spark-submit с --deploy-mode client на своём ноутбуке, затем закрывает крышку и уходит домой. Job обрабатывает 2 TB данных. Что произойдёт?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Job продолжит работу -- executor на кластере не зависят от ноутбука"
+        },
+        {
+          "id": "b",
+          "text": "Executor сохранят checkpoint и возобновят работу"
+        },
+        {
+          "id": "c",
+          "text": "Job приостановится и продолжит при открытии крышки"
+        },
+        {
+          "id": "d",
+          "text": "Job упадёт -- в client mode driver работает на ноутбуке. При sleep/shutdown ноутбука driver process завершается, все executor теряют координатора и останавливаются. 2 TB обработки потеряны"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "В client mode driver работает на машине, откуда запущен spark-submit. При закрытии крышки ноутбука (sleep) -- driver process завершается. Executor теряют связь с driver и останавливаются. Вся обработка потеряна. Правило: dev = client mode, production = cluster mode (driver на кластере, не зависит от рабочей станции).",
+      "studyHint": "Повторите урок 2: Cluster Managers -- client vs cluster deploy mode и урок 8: Best Practices",
+      "bloomLevel": "analytical"
+    }
+  ]
+}

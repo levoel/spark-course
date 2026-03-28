@@ -1,0 +1,213 @@
+---
+title: "Delta Lake: глубокое погружение"
+description: "Transaction log, ACID-транзакции, time travel, schema evolution, OPTIMIZE, Z-ORDER, UniForm и Coordinated Commits в Spark 4.0"
+order: 2
+difficulty: "intermediate"
+estimatedTime: 16
+topics: ["Delta Lake", "ACID", "Time Travel", "Schema Evolution", "OPTIMIZE", "Z-ORDER", "UniForm", "Coordinated Commits"]
+---
+
+# Delta Lake: глубокое погружение
+
+## Архитектура
+
+**Delta Lake** -- lakehouse-формат, разработанный Databricks в 2019 году. Архитектура построена на **transaction log** (`_delta_log/`), который записывает каждую атомарную операцию над таблицей.
+
+```
+Delta таблица на диске:
+/data/events/
+├── _delta_log/
+│   ├── 00000000000000000000.json  ← версия 0: initial write
+│   ├── 00000000000000000001.json  ← версия 1: append
+│   ├── 00000000000000000002.json  ← версия 2: update
+│   └── 00000000000000000010.checkpoint.parquet  ← checkpoint
+├── part-00000-...snappy.parquet
+├── part-00001-...snappy.parquet
+└── part-00002-...snappy.parquet
+```
+
+Каждый JSON-файл в `_delta_log/` содержит список **actions**: добавленные файлы (add), удалённые файлы (remove), обновления metadata (metaData). Checkpoint-файлы в Parquet создаются каждые 10 версий для ускорения чтения.
+
+**ACID-гарантии:** optimistic concurrency control. Каждая транзакция атомарно записывает новый JSON в `_delta_log/`. При конфликте (два writer одновременно) один из них получает ошибку и перезапускается.
+
+## Настройка SparkSession
+
+```python
+from pyspark.sql import SparkSession
+
+spark = SparkSession.builder \
+    .appName("DeltaLakePipeline") \
+    .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension") \
+    .config("spark.sql.catalog.spark_catalog",
+            "org.apache.spark.sql.delta.catalog.DeltaCatalog") \
+    .config("spark.jars.packages", "io.delta:delta-spark_2.13:4.0.0") \
+    .getOrCreate()
+```
+
+## Ключевые возможности
+
+### Time Travel
+
+Delta Lake сохраняет полную историю изменений. Вы можете читать данные на любую предыдущую версию или timestamp:
+
+```python
+from delta.tables import DeltaTable
+
+# Создание таблицы
+df.write.format("delta").save("/data/events")
+
+# Чтение конкретной версии
+df_v0 = spark.read.format("delta") \
+    .option("versionAsOf", 0) \
+    .load("/data/events")
+
+# Чтение по timestamp
+df_yesterday = spark.read.format("delta") \
+    .option("timestampAsOf", "2024-01-15T10:00:00") \
+    .load("/data/events")
+
+# Просмотр истории
+spark.sql("DESCRIBE HISTORY delta.`/data/events`").show()
+```
+
+**Восстановление данных** -- откат таблицы к предыдущей версии:
+
+```python
+dt = DeltaTable.forPath(spark, "/data/events")
+dt.restoreToVersion(0)  # Откат к версии 0
+# или
+dt.restoreToTimestamp("2024-01-15T10:00:00")
+```
+
+<Callout type="warning">
+**Anti-pattern: не запускать VACUUM**
+
+Каждая версия таблицы хранит полные файлы данных. Без `VACUUM` старые файлы накапливаются и потребляют хранилище. Настройте регулярный VACUUM с retention period (по умолчанию 7 дней):
+
+```python
+# Удаление файлов старше 7 дней
+spark.sql("VACUUM delta.`/data/events` RETAIN 168 HOURS")
+
+# Важно: после VACUUM time travel к удалённым версиям невозможен!
+```
+</Callout>
+
+### Schema Evolution
+
+Delta Lake поддерживает эволюцию схемы при записи:
+
+```python
+# Добавление новых колонок (mergeSchema)
+new_data.write.format("delta") \
+    .option("mergeSchema", "true") \
+    .mode("append") \
+    .save("/data/events")
+
+# Полная замена схемы (overwriteSchema)
+reshaped_data.write.format("delta") \
+    .option("overwriteSchema", "true") \
+    .mode("overwrite") \
+    .save("/data/events")
+```
+
+Поддерживаемые операции: добавление колонок, переименование (через ALTER TABLE), удаление (через ALTER TABLE DROP COLUMN).
+
+### OPTIMIZE и Z-ORDER
+
+Малые файлы -- главный враг производительности Delta Lake. `OPTIMIZE` объединяет файлы, `Z-ORDER` оптимизирует их для фильтрации по определённым колонкам:
+
+```python
+# Compaction: объединение мелких файлов
+spark.sql("OPTIMIZE delta.`/data/events`")
+
+# Z-ORDER: оптимизация data skipping по колонкам
+spark.sql("""
+    OPTIMIZE delta.`/data/events`
+    ZORDER BY (event_date, user_id)
+""")
+```
+
+**Data skipping:** Delta Lake хранит min/max статистику по каждому файлу. При фильтрации `WHERE event_date = '2024-01-15'` Spark пропускает файлы, где min > '2024-01-15' или max < '2024-01-15'. Z-ORDER группирует связанные значения в одних файлах, увеличивая эффективность skipping.
+
+<KnowledgeCheck
+  question="Почему Z-ORDER улучшает производительность запросов с фильтрацией?"
+  answer="Z-ORDER пересортировывает данные внутри файлов так, чтобы связанные значения указанных колонок оказывались в одних и тех же файлах. Delta Lake хранит min/max статистику по каждому файлу. При запросе с WHERE-фильтром Spark использует data skipping -- пропускает файлы, у которых min/max значения не пересекаются с условием фильтра. Без Z-ORDER значения разбросаны по всем файлам, и skipping неэффективен."
+/>
+
+## Spark 4.0: новые возможности
+
+### UniForm <VersionBadge version="4.0" />
+
+**UniForm** (Universal Format) позволяет читать Delta-таблицу как Apache Iceberg или Apache Hudi без конвертации данных. Delta автоматически генерирует metadata в формате Iceberg/Hudi при каждой записи.
+
+```python
+# Создание Delta-таблицы с UniForm
+spark.sql("""
+    CREATE TABLE events (
+        event_id STRING,
+        event_time TIMESTAMP,
+        payload STRING
+    ) USING delta
+    TBLPROPERTIES (
+        'delta.universalFormat.enabledFormats' = 'iceberg,hudi'
+    )
+""")
+
+# Теперь таблицу можно читать из Trino/Presto как Iceberg!
+```
+
+UniForm решает проблему vendor lock-in: вы пишете в Delta, а другие движки (Trino, Presto, Snowflake) читают через Iceberg-интерфейс.
+
+### Coordinated Commits <VersionBadge version="4.0" />
+
+В Spark 4.0 Delta Lake получил **Coordinated Commits** -- внешний координатор транзакций для multi-cluster сценариев. До этого optimistic concurrency работал только в рамках одного кластера. С Coordinated Commits несколько кластеров могут безопасно писать в одну таблицу, используя внешний commit service (DynamoDB, Azure CosmosDB).
+
+### Variant Type <VersionBadge version="4.0" />
+
+Новый тип данных **Variant** для хранения semi-structured данных (JSON) внутри Delta-таблицы без фиксированной схемы:
+
+```python
+spark.sql("""
+    CREATE TABLE logs (
+        log_id BIGINT,
+        timestamp TIMESTAMP,
+        payload VARIANT  -- semi-structured JSON
+    ) USING delta
+""")
+```
+
+<KnowledgeCheck
+  question="Чем UniForm в Delta Lake полезен для мультиdвижковых архитектур?"
+  answer="UniForm (Universal Format) автоматически генерирует metadata в формате Apache Iceberg и Apache Hudi при каждой записи в Delta-таблицу. Это позволяет другим вычислительным движкам (Trino, Presto, Snowflake) читать Delta-таблицу через привычный им Iceberg или Hudi интерфейс без конвертации данных. Решает проблему vendor lock-in -- данные физически хранятся в Delta, но доступны через любой формат."
+/>
+
+## Anti-patterns
+
+<Callout type="warning">
+**Частые ошибки при работе с Delta Lake**
+
+1. **Не запускать VACUUM** -- старые файлы данных накапливаются бесконечно, потребляя хранилище. Настройте VACUUM с retention period (минимум 7 дней для safety).
+
+2. **Не указывать retention period** -- `VACUUM` без `RETAIN N HOURS` может удалить файлы, нужные для активных транзакций. Всегда указывайте retention >= времени самого длинного запроса.
+
+3. **Слишком частый OPTIMIZE** -- каждый OPTIMIZE переписывает файлы данных. Для append-heavy таблиц запускайте 1 раз в день, не каждый час.
+
+4. **Z-ORDER по high-cardinality колонкам** -- Z-ORDER по `user_id` с миллионами уникальных значений неэффективен. Используйте колонки с medium cardinality (date, region, category).
+</Callout>
+
+## Когда использовать Delta Lake
+
+**Лучший выбор, когда:**
+- Вы работаете в Databricks экосистеме
+- Вам нужна лучшая интеграция со Spark (Delta -- default lakehouse-формат Spark 4.0)
+- Хотите UniForm для мультиdвижкового доступа
+- Нужны простые в настройке ACID-транзакции
+
+**Не лучший выбор, когда:**
+- Вам критична vendor-нейтральность (рассмотрите Iceberg)
+- Основная нагрузка -- upserts с incremental pull (рассмотрите Hudi)
+- Streaming-first архитектура с changelog CDC (рассмотрите Paimon)
+
+## Что дальше?
+
+В следующем уроке мы разберём **Apache Iceberg** -- формат, разработанный Netflix для мультиdвижковых сред. Ключевая фича Iceberg -- **partition evolution** без перезаписи данных.

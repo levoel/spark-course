@@ -1,0 +1,164 @@
+---
+title: "Форматы файлов: Parquet, ORC, Avro"
+description: "Сравнение колоночных и строковых форматов, predicate pushdown, сжатие и выбор формата для разных workloads"
+order: 1
+difficulty: "intermediate"
+estimatedTime: 14
+topics: ["Parquet", "ORC", "Avro", "Columnar Format", "Row Format", "Compression"]
+---
+
+import { ParquetStructureDiagram } from '../../../components/diagrams/module7';
+
+# Форматы файлов: Parquet, ORC, Avro
+
+## Почему формат файла важен
+
+Выбор формата хранения данных напрямую влияет на **три ключевых показателя**: скорость чтения, размер на диске и гибкость схемы. Для аналитических нагрузок правильный формат может ускорить запросы в **10-100x** по сравнению с CSV/JSON.
+
+## Колоночные vs строковые форматы
+
+Существуют два фундаментально разных подхода к хранению данных:
+
+### Строковый формат (Row-based)
+
+Данные хранятся **строка за строкой**:
+
+```
+Строка 1: [id=1, name="Alice", salary=50000, dept="IT"]
+Строка 2: [id=2, name="Bob",   salary=60000, dept="HR"]
+Строка 3: [id=3, name="Carol", salary=55000, dept="IT"]
+```
+
+**Преимущества:** быстрая запись, эффективен для OLTP (вставка/обновление отдельных строк), хорош для потоковых данных, где нужно записывать по одной записи.
+
+### Колоночный формат (Columnar)
+
+Данные хранятся **столбец за столбцом**:
+
+```
+Column "id":     [1, 2, 3]
+Column "name":   ["Alice", "Bob", "Carol"]
+Column "salary": [50000, 60000, 55000]
+Column "dept":   ["IT", "HR", "IT"]
+```
+
+**Преимущества:**
+- **Column pruning**: запрос `SELECT salary FROM ...` читает **только** столбец salary, пропуская остальные
+- **Лучшее сжатие**: однотипные данные в столбце сжимаются эффективнее (dictionary encoding для строк, delta encoding для чисел)
+- **Predicate pushdown**: фильтры применяются на уровне формата (min/max statistics per row group)
+
+## Три формата: Parquet, ORC, Avro
+
+### Apache Parquet
+
+**Тип:** колоночный.
+**Разработан:** Twitter + Cloudera (2013), стандарт de facto для Spark.
+
+Parquet организует данные в **row groups** (обычно 128MB), каждый из которых содержит **column chunks**. Для каждого column chunk хранятся **min/max statistics**, что позволяет пропускать целые блоки при фильтрации.
+
+<ParquetStructureDiagram client:visible />
+
+**Когда использовать:** аналитика, ETL, data warehouse, любые колоночные запросы. **Формат по умолчанию в Spark.**
+
+### Apache ORC (Optimized Row Columnar)
+
+**Тип:** колоночный.
+**Разработан:** Hortonworks (2013) для экосистемы Hive.
+
+ORC аналогичен Parquet по архитектуре (stripes вместо row groups), но имеет встроенную поддержку **ACID-транзакций** в Hive. Stripe-level и row-level indexes обеспечивают эффективный data skipping.
+
+**Когда использовать:** Hive-экосистема, legacy Hadoop-кластеры, ACID-транзакции в Hive. Для новых Spark-проектов Parquet предпочтительнее.
+
+### Apache Avro
+
+**Тип:** строковый (row-based).
+**Разработан:** Doug Cutting (создатель Hadoop), 2009.
+
+Avro хранит данные по строкам с **встроенной схемой** в заголовке файла. Ключевая особенность -- мощная **schema evolution**: добавление, удаление и переименование полей без перезаписи данных.
+
+**Когда использовать:** потоковые данные (Kafka, schema registry), межсервисное взаимодействие, ситуации с частым изменением схемы.
+
+## Сравнительная таблица
+
+| Характеристика | Parquet | ORC | Avro |
+|---------------|---------|-----|------|
+| **Тип** | Колоночный | Колоночный | Строковый |
+| **Чтение аналитических запросов** | Отлично | Отлично | Плохо |
+| **Запись** | Средне | Средне | Быстро |
+| **Column pruning** | Да | Да | Нет |
+| **Predicate pushdown** | Да (min/max) | Да (indexes) | Нет |
+| **Сжатие** | Отличное | Отличное | Хорошее |
+| **Schema evolution** | Ограниченная | Ограниченная | Отличная |
+| **ACID** | Через Delta Lake | Встроенный (Hive) | Нет |
+| **Spark default** | Да | Нет | Нет |
+| **Экосистема** | Широкая | Hive-centric | Kafka/streaming |
+
+<Callout type="tip">
+**Правило выбора формата:**
+- **Аналитика, ETL, data warehouse** → Parquet (default)
+- **Hive-экосистема с ACID** → ORC
+- **Streaming, Kafka, частая schema evolution** → Avro
+- **Никогда в production** → CSV, JSON (нет schema, нет pushdown, огромный размер)
+</Callout>
+
+## Кодеки сжатия
+
+Все три формата поддерживают различные кодеки сжатия:
+
+| Кодек | Скорость | Степень сжатия | Когда использовать |
+|-------|----------|----------------|-------------------|
+| **Snappy** | Очень быстрый | Средняя | Default в Spark, оптимален для горячих данных |
+| **LZ4** | Очень быстрый | Средняя | Альтернатива Snappy, чуть быстрее |
+| **Zstd** | Быстрый | Высокая | Лучший ratio, хорош для cold storage |
+| **Gzip** | Медленный | Высокая | Совместимость, не рекомендуется для Spark |
+
+```python
+# Запись Parquet с разными кодеками
+df.write.option("compression", "snappy").parquet("/data/fast/")     # default
+df.write.option("compression", "zstd").parquet("/data/archived/")   # лучше сжатие
+df.write.option("compression", "none").parquet("/data/temp/")       # без сжатия
+```
+
+```python
+# Глобальная настройка
+spark.conf.set("spark.sql.parquet.compression.codec", "zstd")
+```
+
+## Анти-паттерн: CSV/JSON в production
+
+```python
+# ПЛОХО: CSV в production pipeline
+df.write.csv("/data/daily_report/")
+# Проблемы:
+# - Нет schema: типы угадываются при чтении (inferSchema=true медленный)
+# - Нет predicate pushdown: Spark читает ВСЕ данные для любого фильтра
+# - Огромный размер: 1TB Parquet = 3-5TB CSV
+# - Нет column pruning: SELECT одного столбца читает всю строку
+
+# ХОРОШО: Parquet
+df.write.parquet("/data/daily_report/")
+# - Schema в metadata: instant, без inferSchema
+# - Predicate pushdown: фильтры пропускают row groups
+# - 3-5x меньше: columnar + compression
+# - Column pruning: читает только нужные столбцы
+```
+
+На датасете 1TB с 100 столбцами запрос `SELECT avg(salary) FROM employees WHERE department = 'IT'`:
+- **CSV**: читает 1TB (все столбцы, все строки) → **~20 минут**
+- **Parquet**: читает ~10GB (1 столбец + predicate pushdown) → **~12 секунд**
+
+Разница: **100x**.
+
+<KnowledgeCheck
+  question="Почему колоночный формат (Parquet) даёт лучшее сжатие, чем строковый (CSV)?"
+  answer="В колоночном формате данные одного типа хранятся непрерывно: столбец 'department' содержит ['IT', 'HR', 'IT', 'IT', 'HR'...]. Одинаковые значения группируются, и Parquet применяет dictionary encoding (заменяет повторяющиеся строки числовыми ID) и run-length encoding (сжимает последовательности одинаковых значений). В строковом формате рядом хранятся разнотипные данные (число, строка, дата), что не позволяет применить type-specific сжатие. Результат: Parquet сжимает данные в 3-5 раз сильнее CSV."
+/>
+
+<KnowledgeCheck
+  question="Когда Avro предпочтительнее Parquet?"
+  answer="Avro предпочтителен в трёх сценариях: (1) Потоковые данные (Kafka + Schema Registry) -- Avro строковый, поэтому записывается быстрее и подходит для append-only потоков; (2) Частая schema evolution -- Avro поддерживает добавление, удаление, переименование и перемещение полей с обратной совместимостью; (3) Межсервисное взаимодействие (RPC, serialization) -- Avro имеет компактный бинарный формат и богатую поддержку schema negotiation. Для аналитических запросов Parquet всегда лучше благодаря column pruning и predicate pushdown."
+/>
+
+## Что дальше?
+
+В следующем уроке мы изучим **Z-ordering и data skipping** -- как организовать данные внутри Parquet-файлов для максимально эффективного пропуска ненужных блоков при фильтрации.

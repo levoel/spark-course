@@ -1,0 +1,229 @@
+---
+title: "Spark Declarative Pipelines (SDP)"
+description: "Декларативный ETL в Spark 4.1: @dp.materialized_view, @dp.table, flows, автоматическое управление зависимостями"
+order: 7
+difficulty: "advanced"
+estimatedTime: 12
+topics: ["SDP", "Declarative Pipelines", "materialized_view", "table", "Flow", "Spark 4.1"]
+---
+
+# Spark Declarative Pipelines (SDP) <VersionBadge version="4.1" />
+
+<Callout type="warning">
+**Spark 4.1+ only**
+
+Spark Declarative Pipelines (SDP) доступны начиная с **Spark 4.1** (декабрь 2025). Код из этого урока не будет работать на Spark 4.0 и ниже.
+</Callout>
+
+## Что такое SDP?
+
+**Spark Declarative Pipelines (SDP)** -- открытая версия Databricks Delta Live Tables (DLT). Вместо императивного кода ("прочитай -> трансформируй -> запиши"), вы **декларативно описываете таблицы и их зависимости**, а Spark автоматически:
+- Определяет порядок выполнения (dependency resolution)
+- Управляет инкрементальной обработкой
+- Применяет data quality expectations
+- Оптимизирует выполнение пайплайна
+
+```python
+# Императивный подход (до SDP):
+raw = spark.readStream.format("kafka").load()
+parsed = raw.select(from_json(...))
+parsed.writeStream.format("delta").start("/silver/orders")
+
+# Декларативный подход (SDP):
+@dp.materialized_view
+def silver_orders():
+    return spark.table("bronze_raw_events") \
+        .filter(col("event_type") == "order") \
+        .select("order_id", "customer_id", "amount", "ts")
+```
+
+## Import Path
+
+```python
+from pyspark import pipelines as dp
+```
+
+<Callout type="warning">
+**Anti-pattern: DLT import path**
+
+НЕ используйте `import dlt` -- это Databricks-проприетарный import. В open-source Spark используется:
+```python
+from pyspark import pipelines as dp  # правильно
+# import dlt  # НЕПРАВИЛЬНО -- Databricks only
+```
+</Callout>
+
+## Ключевые концепции
+
+### @dp.materialized_view (batch recompute)
+
+**Materialized view** -- таблица, которая полностью пересчитывается при каждом запуске пайплайна. Подходит для batch ETL:
+
+```python
+from pyspark import pipelines as dp
+from pyspark.sql.functions import col, sum as _sum, count
+
+@dp.materialized_view
+def silver_orders():
+    """Валидированные заказы из bronze."""
+    return (
+        spark.table("bronze_raw_events")
+        .filter(col("event_type") == "order")
+        .filter(col("amount") > 0)
+        .select(
+            col("order_id"),
+            col("customer_id"),
+            col("amount").cast("double"),
+            col("ts").cast("timestamp")
+        )
+    )
+
+@dp.materialized_view
+def gold_daily_revenue():
+    """Ежедневная выручка -- агрегат из silver."""
+    return (
+        spark.table("silver_orders")
+        .groupBy(col("ts").cast("date").alias("order_date"))
+        .agg(
+            _sum("amount").alias("total_revenue"),
+            count("*").alias("order_count")
+        )
+    )
+```
+
+Spark автоматически определяет зависимость: `gold_daily_revenue` зависит от `silver_orders`, которая зависит от `bronze_raw_events`. Порядок выполнения определяется автоматически.
+
+### @dp.table (streaming append)
+
+**Table** -- streaming-таблица, куда данные дописываются инкрементально:
+
+```python
+@dp.table
+def streaming_orders():
+    """Streaming append из Kafka."""
+    return (
+        spark.readStream
+        .format("kafka")
+        .option("subscribe", "orders")
+        .option("kafka.bootstrap.servers", "kafka:9092")
+        .load()
+        .select(
+            from_json(
+                col("value").cast("string"),
+                order_schema
+            ).alias("data")
+        )
+        .select("data.*")
+    )
+```
+
+Разница с `materialized_view`: `@dp.table` использует `readStream` и дописывает новые данные инкрементально, а `@dp.materialized_view` полностью пересчитывает таблицу.
+
+<KnowledgeCheck
+  question="В чём разница между @dp.materialized_view и @dp.table в SDP?"
+  answer="@dp.materialized_view -- batch пересчёт: таблица полностью пересчитывается при каждом запуске пайплайна. Подходит для агрегатов, отчётов, витрин данных. @dp.table -- streaming append: данные дописываются инкрементально через readStream. Подходит для ingestion из Kafka, streaming pipelines. Materialized view гарантирует согласованность всех данных, а table -- минимальную задержку для новых данных."
+/>
+
+### Flows (custom processing)
+
+**Flow** -- механизм для кастомной обработки между таблицами, когда стандартного `materialized_view` / `table` недостаточно:
+
+```python
+@dp.table
+def raw_events():
+    """Target table для custom flow."""
+    return spark.readStream.format("kafka").load()
+
+@dp.flow(target="enriched_events", mode="append")
+def enrich_events():
+    """Custom flow: обогащение событий dimension-данными."""
+    events = spark.table("raw_events")
+    dimensions = spark.table("dim_customers")
+    return events.join(dimensions, "customer_id", "left")
+```
+
+### Expectations (Data Quality)
+
+SDP поддерживает **expectations** -- декларативные правила качества данных:
+
+```python
+@dp.materialized_view
+@dp.expect("amount_positive", "amount > 0")
+@dp.expect("customer_not_null", "customer_id IS NOT NULL")
+@dp.expect_or_drop("valid_status", "status IN ('new', 'paid', 'shipped')")
+def validated_orders():
+    return spark.table("bronze_orders")
+```
+
+Типы expectations:
+- `@dp.expect` -- предупреждение (данные проходят, ошибка логгируется)
+- `@dp.expect_or_drop` -- фильтрация (невалидные записи отбрасываются)
+- `@dp.expect_or_fail` -- hard fail (пайплайн останавливается при нарушении)
+
+<KnowledgeCheck
+  question="Как SDP решает проблему порядка выполнения в ETL-пайплайне?"
+  answer="SDP использует автоматический dependency resolution. Каждая функция с декоратором @dp.materialized_view или @dp.table читает данные через spark.table('other_table'). SDP анализирует эти зависимости и автоматически строит DAG выполнения: определяет, какие таблицы нужно обработать первыми. Разработчик описывает WHAT (что вычислить), а SDP определяет HOW (в каком порядке). Это исключает ручное управление порядком запуска."
+/>
+
+## Связь с медальонной архитектурой
+
+SDP идеально ложится на medallion architecture:
+
+```python
+from pyspark import pipelines as dp
+
+# Bronze: raw ingestion
+@dp.table
+def bronze_events():
+    return spark.readStream.format("kafka") \
+        .option("subscribe", "events").load()
+
+# Silver: validation + dedup
+@dp.materialized_view
+@dp.expect_or_drop("has_event_id", "event_id IS NOT NULL")
+def silver_events():
+    return spark.table("bronze_events") \
+        .dropDuplicates(["event_id"]) \
+        .select("event_id", "user_id", "amount", "event_time")
+
+# Gold: business aggregates
+@dp.materialized_view
+def gold_user_totals():
+    return spark.table("silver_events") \
+        .groupBy("user_id") \
+        .agg(sum("amount").alias("lifetime_value"))
+```
+
+SDP автоматически: определяет порядок bronze -> silver -> gold, управляет streaming checkpoints для bronze, полностью пересчитывает gold при обновлении silver.
+
+## Связь с Delta Live Tables (DLT)
+
+| Характеристика | DLT (Databricks) | SDP (Open Source) |
+|----------------|-------------------|-------------------|
+| Import | `import dlt` | `from pyspark import pipelines as dp` |
+| Платформа | Databricks only | Любой Spark 4.1+ |
+| Доступность | С 2020 | С декабря 2025 |
+| Expectations | Полные | Полные (тот же API) |
+| Движок | Databricks Runtime | Apache Spark |
+
+<Callout type="tip">
+**Миграция DLT -> SDP**
+
+Если у вас есть DLT-пайплайны в Databricks, миграция на SDP требует замены `import dlt` на `from pyspark import pipelines as dp` и замены `dlt.table()` / `dlt.view()` на `@dp.table` / `@dp.materialized_view`. Логика трансформаций остаётся идентичной.
+</Callout>
+
+## Anti-patterns
+
+<Callout type="warning">
+**Частые ошибки при работе с SDP**
+
+1. **Использование `import dlt`** -- это Databricks-проприетарный import. В open-source Spark 4.1 используйте `from pyspark import pipelines as dp`.
+
+2. **Императивный pipeline management в SDP** -- не используйте `writeStream.start()` внутри `@dp.table`. SDP сам управляет lifecycle streaming queries.
+
+3. **Циклические зависимости** -- `table_a` читает из `table_b`, а `table_b` из `table_a`. SDP не разрешит циклы в DAG зависимостей.
+</Callout>
+
+## Что дальше?
+
+В последнем уроке модуля мы соберём **лучшие практики Lakehouse**: стратегии партиционирования, расписания compaction, политики retention и контроль качества данных на каждом слое медальонной архитектуры.

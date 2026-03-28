@@ -1,0 +1,114 @@
+{
+  "lessonSlug": "02-catalyst-tungsten/05-tungsten-memory",
+  "moduleId": "02-catalyst-tungsten",
+  "_meta": {
+    "idPrefix": "spark-m02-05",
+    "description": "Use IDs: m02-05-q1, m02-05-q2, ... for MC/TF; m02-05-code-1 for code challenges"
+  },
+  "questions": [
+    {
+      "id": "spark-m02-05-q1",
+      "type": "multiple-choice",
+      "question": "Какую основную проблему JVM решает формат UnsafeRow в Tungsten?",
+      "options": [
+        {
+          "id": "a",
+          "text": "UnsafeRow ускоряет парсинг SQL-запросов"
+        },
+        {
+          "id": "b",
+          "text": "UnsafeRow шифрует данные для безопасности"
+        },
+        {
+          "id": "c",
+          "text": "UnsafeRow сжимает данные для уменьшения объёма хранения"
+        },
+        {
+          "id": "d",
+          "text": "UnsafeRow хранит данные как компактный бинарный блок вместо Java-объектов, устраняя GC overhead, object header costs и обеспечивая cache locality"
+        }
+      ],
+      "correctAnswer": "d",
+      "explanation": "До Tungsten каждая строка хранилась как массив Java-объектов: Integer (16 байт вместо 4), String с header и pointer. Для таблицы с 10 колонками -- 10+ объектов на строку, каждый отслеживается GC. UnsafeRow хранит строку как непрерывный массив байтов: null bitmap + fixed-length values + variable-length data. Это устраняет: (1) object headers (16 байт каждый); (2) GC tracking миллионов мелких объектов; (3) pointer chasing (данные рядом в памяти = cache friendly).",
+      "bloomLevel": "conceptual"
+    },
+    {
+      "id": "spark-m02-05-q2",
+      "type": "multiple-choice",
+      "question": "Production-кластер с 50 executors обрабатывает 2 ТБ данных. Full GC паузы достигают 30 секунд, executors теряют heartbeat. Включение off-heap памяти (spark.memory.offHeap.enabled=true) решит проблему. Почему?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Off-heap память управляется Spark через sun.misc.Unsafe напрямую, а не JVM GC; данные в off-heap не отслеживаются Garbage Collector, что устраняет Full GC паузы на больших объёмах данных"
+        },
+        {
+          "id": "b",
+          "text": "Off-heap память работает быстрее, чем on-heap"
+        },
+        {
+          "id": "c",
+          "text": "Off-heap увеличивает общий объём памяти executor"
+        },
+        {
+          "id": "d",
+          "text": "Off-heap память автоматически сжимает данные"
+        }
+      ],
+      "correctAnswer": "a",
+      "explanation": "On-heap: все UnsafeRow-объекты выделяются на JVM heap и отслеживаются GC. При 2 ТБ данных GC сканирует миллиарды объектов, вызывая длительные Full GC паузы (stop-the-world). Off-heap: Spark выделяет память через sun.misc.Unsafe вне JVM heap. GC не видит эту память и не сканирует её. Это радикально снижает GC pressure и устраняет паузы. Компромисс: off-heap не защищён JVM от memory leaks, и управление памятью полностью на Spark.",
+      "bloomLevel": "applied"
+    },
+    {
+      "id": "spark-m02-05-q3",
+      "type": "multiple-choice",
+      "question": "Почему UnsafeRow формат ускоряет shuffle-операции по сравнению с Java Object Model?",
+      "options": [
+        {
+          "id": "a",
+          "text": "UnsafeRow использует более быстрые сетевые протоколы"
+        },
+        {
+          "id": "b",
+          "text": "UnsafeRow -- уже бинарный формат; при shuffle данные передаются как сырые байты без сериализации/десериализации, что устраняет overhead Java serialization"
+        },
+        {
+          "id": "c",
+          "text": "UnsafeRow сжимает данные перед передачей по сети"
+        },
+        {
+          "id": "d",
+          "text": "UnsafeRow кэширует результаты shuffle в off-heap памяти"
+        }
+      ],
+      "correctAnswer": "b",
+      "explanation": "В Java Object Model shuffle требует: (1) сериализация объектов -> байты; (2) передача по сети; (3) десериализация байты -> объекты. Java serialization медленна и создаёт CPU overhead. UnsafeRow уже хранит данные как непрерывный блок байтов -- при shuffle Spark просто копирует эти байты без конвертации. Это формат и хранения, и передачи (zero-copy semantics для shuffle).",
+      "bloomLevel": "analytical"
+    },
+    {
+      "id": "spark-m02-05-q4",
+      "type": "multiple-choice",
+      "question": "Data engineer рассматривает включение off-heap памяти. Executor имеет 8 ГБ on-heap (spark.executor.memory=8g). Какие параметры нужно настроить для off-heap?",
+      "options": [
+        {
+          "id": "a",
+          "text": "Достаточно spark.memory.offHeap.enabled=true -- Spark автоматически выделит off-heap"
+        },
+        {
+          "id": "b",
+          "text": "Off-heap включается автоматически для executor memory > 4 ГБ"
+        },
+        {
+          "id": "c",
+          "text": "spark.memory.offHeap.enabled=true И spark.memory.offHeap.size (например, 4g) -- нужно явно указать объём off-heap памяти; без size Spark не выделит off-heap"
+        },
+        {
+          "id": "d",
+          "text": "Нужно только увеличить spark.executor.memory -- off-heap выделяется из heap"
+        }
+      ],
+      "correctAnswer": "c",
+      "explanation": "Off-heap требует двух параметров: (1) spark.memory.offHeap.enabled=true -- активирует режим; (2) spark.memory.offHeap.size -- задаёт объём off-heap в байтах. Без указания size off-heap не будет использоваться. Off-heap память выделяется ДОПОЛНИТЕЛЬНО к on-heap, поэтому общее потребление executor = spark.executor.memory + spark.memory.offHeap.size. Это важно учитывать при планировании ресурсов кластера.",
+      "bloomLevel": "applied"
+    }
+  ]
+}
