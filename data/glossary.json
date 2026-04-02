@@ -1,0 +1,884 @@
+{
+  "categories": [
+    {
+      "id": "architecture",
+      "name": "Архитектура и ядро",
+      "terms": [
+        {
+          "term": "SparkSession",
+          "termEn": "Spark Session",
+          "definition": "Унифицированная точка входа в Spark (с версии 2.0). Объединяет SparkContext, SQLContext и HiveContext в единый API. Через SparkSession регистрируются таблицы, выполняются SQL-запросы и настраиваются параметры приложения.",
+          "example": "from pyspark.sql import SparkSession\n\nspark = SparkSession.builder \\\n    .appName(\"MyApp\") \\\n    .config(\"spark.sql.adaptive.enabled\", \"true\") \\\n    .getOrCreate()\n\ndf = spark.sql(\"SELECT 1 AS id\")\ndf.show()",
+          "relatedLessons": [
+            {
+              "title": "SparkSession и SparkContext",
+              "slug": "01-architecture-internals/03-sparksession-sparkcontext"
+            },
+            {
+              "title": "Обзор архитектуры Spark",
+              "slug": "01-architecture-internals/01-spark-overview"
+            }
+          ]
+        },
+        {
+          "term": "Driver",
+          "termEn": "Driver Program",
+          "definition": "Процесс, который координирует выполнение Spark-приложения. Driver запускает SparkContext, создаёт DAG из трансформаций, разбивает его на stage-и и распределяет task-и по executor-ам. Содержит метаданные о всех partition-ах и текущем состоянии выполнения.",
+          "example": "# Driver — это процесс, где выполняется ваш main()\n# Код внутри spark.sql() / df.filter() описывает DAG\n# Реальная работа происходит на executor-ах\n\nspark = SparkSession.builder.master(\"yarn\").getOrCreate()\n\n# Это описание DAG (на driver-е)\nresult = spark.read.parquet(\"/data\") \\\n    .filter(\"age > 30\") \\\n    .groupBy(\"city\").count()\n\n# Это запуск выполнения (driver отправляет task-и)\nresult.show()",
+          "relatedLessons": [
+            {
+              "title": "Модель Driver-Executor",
+              "slug": "01-architecture-internals/02-driver-executor-model"
+            },
+            {
+              "title": "Обзор архитектуры Spark",
+              "slug": "01-architecture-internals/01-spark-overview"
+            }
+          ]
+        },
+        {
+          "term": "Executor",
+          "termEn": "Executor",
+          "definition": "JVM-процесс на worker-ноде, выполняющий task-и и хранящий данные в памяти или на диске. Каждое Spark-приложение получает собственные executor-ы, изолированные друг от друга. Executor управляет пулом потоков для параллельного выполнения task-ов и блочным менеджером для кеширования.",
+          "example": "# Настройка executor-ов\nspark = SparkSession.builder \\\n    .config(\"spark.executor.instances\", \"10\") \\\n    .config(\"spark.executor.memory\", \"8g\") \\\n    .config(\"spark.executor.cores\", \"4\") \\\n    .getOrCreate()\n\n# Каждый executor получит 8 GB RAM и 4 ядра\n# 10 executor-ов = 40 параллельных task-ов",
+          "relatedLessons": [
+            {
+              "title": "Модель Driver-Executor",
+              "slug": "01-architecture-internals/02-driver-executor-model"
+            },
+            {
+              "title": "Управление памятью",
+              "slug": "01-architecture-internals/07-memory-management"
+            }
+          ]
+        },
+        {
+          "term": "DAG (Directed Acyclic Graph)",
+          "termEn": "Directed Acyclic Graph",
+          "definition": "Граф зависимостей между RDD-партициями, описывающий полный план вычислений. DAGScheduler анализирует граф и разбивает его на stage-и по shuffle-границам. Каждый вызов action (collect, count, write) порождает отдельный job в DAG.",
+          "example": "# DAG строится из цепочки трансформаций\ndf = spark.read.parquet(\"/events\")\n\n# Stage 1: scan + filter (narrow)\nfiltered = df.filter(\"event_type = 'purchase'\")\n\n# Shuffle boundary → Stage 2\ngrouped = filtered.groupBy(\"user_id\").agg(\n    F.sum(\"amount\").alias(\"total\")\n)\n\n# Action запускает DAG\ngrouped.write.parquet(\"/output\")",
+          "relatedLessons": [
+            {
+              "title": "DAG Scheduler",
+              "slug": "01-architecture-internals/04-dag-scheduler"
+            },
+            {
+              "title": "Task Scheduler и Stage-и",
+              "slug": "01-architecture-internals/05-task-scheduler-stages"
+            }
+          ]
+        },
+        {
+          "term": "Stage",
+          "termEn": "Stage",
+          "definition": "Набор task-ов, которые могут выполняться параллельно без shuffle. Stage-и разделяются shuffle-границами — каждая wide-трансформация (groupBy, join, repartition) создаёт новый stage. DAGScheduler создаёт stage-и и определяет порядок их выполнения.",
+          "example": "-- Просмотр stage-ей через EXPLAIN\nEXPLAIN EXTENDED\nSELECT dept, AVG(salary)\nFROM employees\nWHERE active = true\nGROUP BY dept;\n\n-- Stage 0: Scan + Filter (narrow transformations)\n-- Shuffle (Exchange hashpartitioning(dept))\n-- Stage 1: Aggregate (после shuffle)",
+          "relatedLessons": [
+            {
+              "title": "Task Scheduler и Stage-и",
+              "slug": "01-architecture-internals/05-task-scheduler-stages"
+            },
+            {
+              "title": "DAG Scheduler",
+              "slug": "01-architecture-internals/04-dag-scheduler"
+            }
+          ]
+        },
+        {
+          "term": "Task",
+          "termEn": "Task",
+          "definition": "Минимальная единица выполнения в Spark — обработка одной partition на одном ядре executor-а. Количество task-ов в stage равно количеству partition-ов. Task получает код для выполнения от driver-а и оперирует только своей локальной partition-ой данных.",
+          "example": "# Число task-ов = число partition-ов\ndf = spark.read.parquet(\"/data\")  # 200 файлов → 200 partition → 200 task-ов\n\n# Контроль параллелизма через repartition\ndf_repart = df.repartition(50)  # 50 task-ов в следующем stage\n\n# Просмотр числа partition-ов\nprint(f\"Partitions: {df.rdd.getNumPartitions()}\")",
+          "relatedLessons": [
+            {
+              "title": "Task Scheduler и Stage-и",
+              "slug": "01-architecture-internals/05-task-scheduler-stages"
+            },
+            {
+              "title": "Модель Driver-Executor",
+              "slug": "01-architecture-internals/02-driver-executor-model"
+            }
+          ]
+        },
+        {
+          "term": "Partition",
+          "termEn": "Partition",
+          "definition": "Логическая единица параллелизма в Spark. Данные распределяются по partition-ам, и каждая partition обрабатывается отдельным task-ом на одном ядре. Число partition-ов определяет степень параллелизма и влияет на утилизацию ресурсов кластера.",
+          "example": "from pyspark.sql import functions as F\n\ndf = spark.read.parquet(\"/data\")\nprint(f\"Partitions: {df.rdd.getNumPartitions()}\")\n\n# Увеличить partition-ы (shuffle)\ndf_more = df.repartition(200)\n\n# Уменьшить partition-ы (без shuffle)\ndf_less = df.coalesce(10)\n\n# Partition по колонке для оптимизации join\ndf_part = df.repartition(100, \"user_id\")",
+          "relatedLessons": [
+            {
+              "title": "Стратегии партиционирования",
+              "slug": "04-performance-tuning/02-partitioning-strategies"
+            },
+            {
+              "title": "Обзор архитектуры Spark",
+              "slug": "01-architecture-internals/01-spark-overview"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "catalyst-tungsten",
+      "name": "Catalyst и Tungsten",
+      "terms": [
+        {
+          "term": "Catalyst Optimizer",
+          "termEn": "Catalyst Optimizer",
+          "definition": "Rule-based и cost-based оптимизатор в Spark SQL. Трансформирует логический план запроса в оптимальный физический план через 4 фазы: Analysis → Logical Optimization → Physical Planning → Code Generation. Использует pattern-matching для применения правил оптимизации.",
+          "example": "-- Просмотр всех фаз оптимизации\nEXPLAIN EXTENDED\nSELECT u.name, COUNT(o.id)\nFROM users u\nJOIN orders o ON u.id = o.user_id\nWHERE u.active = true\nGROUP BY u.name;\n\n-- Покажет: Parsed → Analyzed → Optimized → Physical Plan",
+          "relatedLessons": [
+            {
+              "title": "Обзор Catalyst",
+              "slug": "02-catalyst-tungsten/01-catalyst-overview"
+            },
+            {
+              "title": "Правила оптимизации",
+              "slug": "02-catalyst-tungsten/03-optimization-rules"
+            }
+          ]
+        },
+        {
+          "term": "Logical Plan",
+          "termEn": "Logical Plan",
+          "definition": "Декларативное дерево операций, описывающее «что» нужно сделать без указания «как». Содержит узлы: Scan, Filter, Project, Aggregate, Join, Sort. Catalyst применяет правила оптимизации (predicate pushdown, column pruning, constant folding) к логическому плану перед генерацией физического.",
+          "example": "# Просмотр логического плана в PySpark\ndf = spark.read.parquet(\"/sales\") \\\n    .filter(\"amount > 100\") \\\n    .groupBy(\"region\").sum(\"amount\")\n\n# Нераcпарсенный план\nprint(df._jdf.queryExecution().logical())\n\n# Оптимизированный план\nprint(df._jdf.queryExecution().optimizedPlan())",
+          "relatedLessons": [
+            {
+              "title": "Анализ логического плана",
+              "slug": "02-catalyst-tungsten/02-logical-plan-analysis"
+            },
+            {
+              "title": "Обзор Catalyst",
+              "slug": "02-catalyst-tungsten/01-catalyst-overview"
+            }
+          ]
+        },
+        {
+          "term": "Physical Plan",
+          "termEn": "Physical Plan",
+          "definition": "Исполняемое дерево операторов, определяющее конкретный способ выполнения запроса. Physical Plan выбирает стратегии join (BroadcastHashJoin, SortMergeJoin), режимы сканирования и способы агрегации на основе статистик и cost-based оптимизации.",
+          "example": "-- Просмотр физического плана с метриками\nEXPLAIN COST\nSELECT *\nFROM orders o\nJOIN products p ON o.product_id = p.id\nWHERE p.category = 'electronics';\n\n-- Результат покажет выбранную стратегию join:\n-- BroadcastHashJoin (если products < broadcast threshold)\n-- или SortMergeJoin (если обе таблицы большие)",
+          "relatedLessons": [
+            {
+              "title": "Physical Plan и CodeGen",
+              "slug": "02-catalyst-tungsten/04-physical-plan-codegen"
+            },
+            {
+              "title": "Обзор Catalyst",
+              "slug": "02-catalyst-tungsten/01-catalyst-overview"
+            }
+          ]
+        },
+        {
+          "term": "Tungsten",
+          "termEn": "Project Tungsten",
+          "definition": "Проект оптимизации производительности Spark, фокусирующийся на CPU и памяти. Включает: off-heap memory management (обход GC), UnsafeRow (компактная бинарная сериализация строк), cache-aware вычисления и whole-stage code generation. Устраняет основные JVM overhead-ы.",
+          "example": "// Tungsten использует UnsafeRow для компактного хранения\n// Вместо Java-объектов — бинарный формат\n\n// Настройка off-heap памяти Tungsten\nspark.conf.set(\"spark.memory.offHeap.enabled\", \"true\")\nspark.conf.set(\"spark.memory.offHeap.size\", \"4g\")\n\n// Tungsten автоматически активен в DataFrame/SQL API\n// RDD API не использует Tungsten-оптимизации",
+          "relatedLessons": [
+            {
+              "title": "Tungsten и управление памятью",
+              "slug": "02-catalyst-tungsten/05-tungsten-memory"
+            },
+            {
+              "title": "Управление памятью",
+              "slug": "01-architecture-internals/07-memory-management"
+            }
+          ]
+        },
+        {
+          "term": "Whole-Stage CodeGen",
+          "termEn": "Whole-Stage Code Generation",
+          "definition": "Техника генерации Java-байткода из цепочки операторов Catalyst-плана. Вместо итерации по виртуальным вызовам операторов, генерируется один метод, обрабатывающий строку от scan до финального оператора. Устраняет overhead виртуальных вызовов и улучшает CPU cache locality.",
+          "example": "-- Звёздочка (*) в EXPLAIN означает CodeGen\nEXPLAIN\nSELECT name, age\nFROM users\nWHERE age > 30;\n\n-- *(1) Filter (age > 30)        ← CodeGen\n--   *(1) ColumnarToRow           ← CodeGen (одна цепочка)\n--     Scan parquet [name, age]\n\n-- Отключение для отладки:\n-- SET spark.sql.codegen.wholeStage = false;",
+          "relatedLessons": [
+            {
+              "title": "Whole-Stage CodeGen",
+              "slug": "02-catalyst-tungsten/06-whole-stage-codegen"
+            },
+            {
+              "title": "Physical Plan и CodeGen",
+              "slug": "02-catalyst-tungsten/04-physical-plan-codegen"
+            }
+          ]
+        },
+        {
+          "term": "UnsafeRow",
+          "termEn": "Unsafe Row",
+          "definition": "Компактный бинарный формат представления строки данных в Tungsten. Хранит данные в непрерывном блоке off-heap памяти без Java-объектов, что устраняет GC-давление и позволяет прямое сравнение байтов. Каждая строка содержит null-bitmap, fixed-length данные и variable-length область.",
+          "example": "// UnsafeRow — внутренний формат, но можно наблюдать\n// через метрики в Spark UI:\n//   - \"peak memory\" в sort/aggregate операторах\n//   - \"spill size\" при нехватке памяти\n\n// Размер UnsafeRow зависит от схемы:\n// INT: 8 байт (aligned), STRING: 8 байт offset + длина\n// NULL bitmap: ceil(numFields / 64) * 8 байт\n\n// Пример: строка (id INT, name STRING, age INT)\n// = 8 (bitmap) + 8 + 8 + 8 = 32 байт fixed\n// + variable length для name",
+          "relatedLessons": [
+            {
+              "title": "Tungsten и управление памятью",
+              "slug": "02-catalyst-tungsten/05-tungsten-memory"
+            },
+            {
+              "title": "Whole-Stage CodeGen",
+              "slug": "02-catalyst-tungsten/06-whole-stage-codegen"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "dataframes-sql",
+      "name": "DataFrame и Spark SQL",
+      "terms": [
+        {
+          "term": "DataFrame",
+          "termEn": "DataFrame",
+          "definition": "Распределённая коллекция данных с именованными колонками, аналогичная таблице в реляционной БД. Основной API для работы с данными в Spark. DataFrame оптимизируется через Catalyst и выполняется через Tungsten, что делает его значительно быстрее RDD API.",
+          "example": "from pyspark.sql import SparkSession\nfrom pyspark.sql import functions as F\n\nspark = SparkSession.builder.getOrCreate()\n\n# Создание DataFrame из файла\ndf = spark.read.parquet(\"/data/users\")\n\n# Операции с DataFrame\nresult = df.select(\"name\", \"age\") \\\n    .filter(F.col(\"age\") > 25) \\\n    .withColumn(\"age_group\", \n        F.when(F.col(\"age\") < 30, \"young\").otherwise(\"senior\"))",
+          "relatedLessons": [
+            {
+              "title": "Создание DataFrame и схема",
+              "slug": "03-dataframes-spark-sql/01-dataframe-creation-schema"
+            },
+            {
+              "title": "Трансформации: select, filter",
+              "slug": "03-dataframes-spark-sql/02-transformations-select-filter"
+            }
+          ]
+        },
+        {
+          "term": "Dataset",
+          "termEn": "Dataset",
+          "definition": "Типизированный DataFrame, доступный только в Scala и Java. Dataset[T] обеспечивает compile-time проверку типов и позволяет использовать лямбда-функции с сохранением Catalyst-оптимизаций. В PySpark DataFrame эквивалентен Dataset[Row].",
+          "example": "// Scala: типизированный Dataset\ncase class User(name: String, age: Int)\n\nval users: Dataset[User] = spark.read\n  .parquet(\"/data/users\")\n  .as[User]  // compile-time type safety\n\n// Типизированные операции\nval adults = users\n  .filter(_.age >= 18)\n  .map(u => u.copy(name = u.name.toUpperCase))\n\n// В PySpark нет Dataset[T], только DataFrame = Dataset[Row]",
+          "relatedLessons": [
+            {
+              "title": "Создание DataFrame и схема",
+              "slug": "03-dataframes-spark-sql/01-dataframe-creation-schema"
+            },
+            {
+              "title": "UDF-ы: введение",
+              "slug": "03-dataframes-spark-sql/07-udfs-introduction"
+            }
+          ]
+        },
+        {
+          "term": "Transformation",
+          "termEn": "Transformation",
+          "definition": "Операция, создающая новый DataFrame из существующего без запуска вычислений (lazy). Бывает narrow (без shuffle: filter, select, map) и wide (с shuffle: groupBy, join, repartition). Трансформации записываются в DAG и выполняются только при вызове action.",
+          "example": "df = spark.read.parquet(\"/events\")\n\n# Narrow transformations (без shuffle)\nfiltered = df.filter(\"event_type = 'click'\")\nprojected = filtered.select(\"user_id\", \"timestamp\")\n\n# Wide transformations (вызывают shuffle)\ngrouped = projected.groupBy(\"user_id\").count()\njoined = df.join(other_df, \"id\")\n\n# Ничего не выполнено! Всё lazy.\n# Выполнение начнётся только при action:\ngrouped.show()  # ← action запускает DAG",
+          "relatedLessons": [
+            {
+              "title": "Трансформации: select, filter",
+              "slug": "03-dataframes-spark-sql/02-transformations-select-filter"
+            },
+            {
+              "title": "Shuffle Deep Dive",
+              "slug": "01-architecture-internals/06-shuffle-deep-dive"
+            }
+          ]
+        },
+        {
+          "term": "Action",
+          "termEn": "Action",
+          "definition": "Операция, которая запускает выполнение DAG и возвращает результат driver-у или записывает данные. Примеры: collect(), count(), show(), write(). Без вызова action ни одна трансформация не выполняется (lazy evaluation). Каждый action создаёт новый job.",
+          "example": "df = spark.read.parquet(\"/data\")\nfiltered = df.filter(\"age > 30\")  # Трансформация — ничего не выполняется\n\n# Actions — запускают выполнение:\nfiltered.count()           # → число строк (Long)\nfiltered.show(5)           # → вывод 5 строк в консоль\nfiltered.collect()         # → все строки в driver (осторожно с OOM!)\nfiltered.first()           # → первая строка\nfiltered.write.parquet(\"/output\")  # → запись на диск",
+          "relatedLessons": [
+            {
+              "title": "Трансформации: select, filter",
+              "slug": "03-dataframes-spark-sql/02-transformations-select-filter"
+            },
+            {
+              "title": "DAG Scheduler",
+              "slug": "01-architecture-internals/04-dag-scheduler"
+            }
+          ]
+        },
+        {
+          "term": "Lazy Evaluation",
+          "termEn": "Lazy Evaluation",
+          "definition": "Стратегия отложенного выполнения: трансформации не выполняются сразу, а записываются в DAG. Выполнение начинается только при вызове action. Это позволяет Catalyst оптимизировать весь план целиком — убирать ненужные колонки, проталкивать фильтры ближе к источнику данных.",
+          "example": "# Все трансформации — lazy (описание плана)\ndf = spark.read.parquet(\"/huge_table\")  # Не читает данные!\nfiltered = df.filter(\"date = '2024-01-01'\")  # Не фильтрует!\nresult = filtered.select(\"id\", \"amount\")  # Не проецирует!\n\n# Catalyst оптимизирует: pushdown фильтра + column pruning\n# В итоге читаются только 2 колонки за 1 день\n\nresult.show()  # ← Только здесь начинается чтение и обработка",
+          "relatedLessons": [
+            {
+              "title": "Создание DataFrame и схема",
+              "slug": "03-dataframes-spark-sql/01-dataframe-creation-schema"
+            },
+            {
+              "title": "Обзор Catalyst",
+              "slug": "02-catalyst-tungsten/01-catalyst-overview"
+            }
+          ]
+        },
+        {
+          "term": "Window Functions",
+          "termEn": "Window Functions",
+          "definition": "Функции, выполняющие вычисления над набором строк (окном), связанных с текущей строкой. В отличие от groupBy, window functions не схлопывают строки — каждая строка сохраняется с добавленным результатом. Поддерживают ranking (row_number, rank), аналитику (lag, lead) и агрегации (sum, avg) по окнам.",
+          "example": "from pyspark.sql import Window\nfrom pyspark.sql import functions as F\n\n# Окно по отделу, сортировка по зарплате\nw = Window.partitionBy(\"dept\").orderBy(F.desc(\"salary\"))\n\ndf.withColumn(\"rank\", F.row_number().over(w)) \\\n  .withColumn(\"dept_avg\", F.avg(\"salary\").over(\n      Window.partitionBy(\"dept\")\n  )) \\\n  .withColumn(\"prev_salary\", F.lag(\"salary\", 1).over(w))",
+          "relatedLessons": [
+            {
+              "title": "Window Functions",
+              "slug": "03-dataframes-spark-sql/05-window-functions"
+            },
+            {
+              "title": "GroupBy и агрегации",
+              "slug": "03-dataframes-spark-sql/04-groupby-aggregations"
+            }
+          ]
+        },
+        {
+          "term": "Spark SQL Catalog",
+          "termEn": "Spark SQL Catalog",
+          "definition": "Реестр метаданных, хранящий информацию о базах данных, таблицах, представлениях и функциях. Catalog поддерживает как временные (session-scoped) объекты, так и постоянные (Hive Metastore). С Spark 3.x DataSourceV2 позволяет подключать внешние каталоги (Iceberg, Delta).",
+          "example": "# Работа с каталогом\nspark.sql(\"CREATE DATABASE IF NOT EXISTS analytics\")\nspark.sql(\"USE analytics\")\n\n# Регистрация таблицы\ndf.write.saveAsTable(\"events\")\n\n# Просмотр метаданных\nspark.catalog.listDatabases()\nspark.catalog.listTables(\"analytics\")\nspark.catalog.listColumns(\"events\")\n\n# Временное представление (session-scoped)\ndf.createOrReplaceTempView(\"temp_events\")",
+          "relatedLessons": [
+            {
+              "title": "Spark SQL Catalog",
+              "slug": "03-dataframes-spark-sql/06-spark-sql-catalog"
+            },
+            {
+              "title": "Создание DataFrame и схема",
+              "slug": "03-dataframes-spark-sql/01-dataframe-creation-schema"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "performance",
+      "name": "Performance и оптимизация",
+      "terms": [
+        {
+          "term": "AQE (Adaptive Query Execution)",
+          "termEn": "Adaptive Query Execution",
+          "definition": "Механизм динамической оптимизации в Spark 3.x, который адаптирует план выполнения на основе runtime-статистик после каждого shuffle. Включает: автоматическое объединение маленьких partition-ов (coalesce), обработку data skew в join-ах и dynamic partition pruning.",
+          "example": "# Включение AQE (по умолчанию с Spark 3.2)\nspark.conf.set(\"spark.sql.adaptive.enabled\", \"true\")\n\n# Автоматическое объединение мелких partition-ов\nspark.conf.set(\n    \"spark.sql.adaptive.coalescePartitions.enabled\", \"true\"\n)\nspark.conf.set(\n    \"spark.sql.adaptive.advisoryPartitionSizeInBytes\", \"128m\"\n)\n\n# Обработка skew в join\nspark.conf.set(\n    \"spark.sql.adaptive.skewJoin.enabled\", \"true\"\n)",
+          "relatedLessons": [
+            {
+              "title": "Обзор AQE и конфигурация",
+              "slug": "05-aqe-deep-dive/01-aqe-overview-config"
+            },
+            {
+              "title": "Coalesce Shuffle Partitions",
+              "slug": "05-aqe-deep-dive/02-coalesce-shuffle-partitions"
+            }
+          ]
+        },
+        {
+          "term": "Broadcast Join",
+          "termEn": "Broadcast Join",
+          "definition": "Стратегия join, при которой маленькая таблица (dimension) целиком рассылается всем executor-ам, избегая shuffle большой таблицы (fact). Значительно быстрее SortMergeJoin для случаев, когда одна сторона помещается в память. Порог контролируется параметром autoBroadcastJoinThreshold.",
+          "example": "from pyspark.sql import functions as F\n\n# Автоматический broadcast (таблица < 10 MB по умолчанию)\nresult = big_df.join(small_df, \"id\")\n\n# Явный broadcast hint\nresult = big_df.join(\n    F.broadcast(small_df), \"id\"\n)\n\n# Настройка порога\nspark.conf.set(\n    \"spark.sql.autoBroadcastJoinThreshold\", \"50m\"\n)  # broadcast таблицы до 50 MB\n\n# Отключение broadcast\nspark.conf.set(\n    \"spark.sql.autoBroadcastJoinThreshold\", \"-1\"\n)",
+          "relatedLessons": [
+            {
+              "title": "Broadcast Hints",
+              "slug": "04-performance-tuning/04-broadcast-hints"
+            },
+            {
+              "title": "Joins Deep Dive",
+              "slug": "03-dataframes-spark-sql/03-joins-deep-dive"
+            }
+          ]
+        },
+        {
+          "term": "Bucketing",
+          "termEn": "Bucketing",
+          "definition": "Техника предварительного распределения данных по bucket-ам (корзинам) на основе хеш-функции от ключевых колонок. При join двух таблиц, bucketed по одному ключу, Spark пропускает shuffle — данные уже распределены корректно. Эффективно для повторяющихся join-ов по одним и тем же ключам.",
+          "example": "# Запись с bucketing\ndf.write \\\n    .bucketBy(32, \"user_id\") \\\n    .sortBy(\"user_id\") \\\n    .saveAsTable(\"bucketed_orders\")\n\n# Join без shuffle (bucket-to-bucket)\norders = spark.table(\"bucketed_orders\")  # 32 buckets by user_id\nusers = spark.table(\"bucketed_users\")    # 32 buckets by user_id\n\nresult = orders.join(users, \"user_id\")  # No shuffle!",
+          "relatedLessons": [
+            {
+              "title": "Bucketing",
+              "slug": "04-performance-tuning/03-bucketing"
+            },
+            {
+              "title": "Стратегии партиционирования",
+              "slug": "04-performance-tuning/02-partitioning-strategies"
+            }
+          ]
+        },
+        {
+          "term": "Data Skew",
+          "termEn": "Data Skew",
+          "definition": "Неравномерное распределение данных по partition-ам, при котором один или несколько task-ов обрабатывают значительно больше данных, чем остальные. Data skew — основная причина «зависших» stage-ей и OOM-ошибок. Диагностируется в Spark UI по разнице между median и max task duration.",
+          "example": "# Диагностика skew\ndf.groupBy(\"key\").count().orderBy(\n    F.desc(\"count\")\n).show(10)  # Покажет самые частые ключи\n\n# Решение 1: AQE skew join (Spark 3.x)\nspark.conf.set(\"spark.sql.adaptive.skewJoin.enabled\", \"true\")\n\n# Решение 2: Salting (ручное)\nfrom pyspark.sql.functions import rand, concat, lit\ndf_salted = df.withColumn(\n    \"salted_key\", concat(\"key\", lit(\"_\"), (rand() * 10).cast(\"int\"))\n)",
+          "relatedLessons": [
+            {
+              "title": "Обработка Data Skew",
+              "slug": "04-performance-tuning/05-data-skew-handling"
+            },
+            {
+              "title": "Skew Join оптимизация",
+              "slug": "05-aqe-deep-dive/03-skew-join-optimization"
+            }
+          ]
+        },
+        {
+          "term": "Dynamic Partition Pruning (DPP)",
+          "termEn": "Dynamic Partition Pruning",
+          "definition": "Оптимизация, при которой фильтр из dimension-таблицы join-а применяется к fact-таблице на этапе scan. Если dimension-таблица после фильтрации содержит 3 значения ключа, то из fact-таблицы будут прочитаны только partition-ы с этими ключами. Значительно снижает объём I/O.",
+          "example": "-- DPP автоматически применяется в star-schema join-ах\nSELECT f.*, d.category_name\nFROM fact_sales f\nJOIN dim_category d ON f.category_id = d.id\nWHERE d.department = 'Electronics';\n\n-- Без DPP: читает ВСЕ partition-ы fact_sales\n-- С DPP: читает только partition-ы где category_id IN (\n--   SELECT id FROM dim_category WHERE department = 'Electronics'\n-- )\n\n-- Конфигурация\n-- spark.sql.optimizer.dynamicPartitionPruning.enabled = true",
+          "relatedLessons": [
+            {
+              "title": "Dynamic Partition Pruning",
+              "slug": "05-aqe-deep-dive/04-dynamic-partition-pruning"
+            },
+            {
+              "title": "Стратегии партиционирования",
+              "slug": "04-performance-tuning/02-partitioning-strategies"
+            }
+          ]
+        },
+        {
+          "term": "Shuffle",
+          "termEn": "Shuffle",
+          "definition": "Перераспределение данных между executor-ами по сети. Самая дорогая операция в Spark: данные сериализуются, записываются на диск, передаются по сети и десериализуются. Возникает при groupBy(), join(), repartition(), distinct(). Оптимизация shuffle — ключ к производительности.",
+          "example": "# Операции, вызывающие shuffle\ndf.groupBy(\"key\").count()     # shuffle по key\ndf.join(other, \"id\")          # shuffle обеих таблиц\ndf.repartition(200)           # полный shuffle\ndf.distinct()                 # shuffle для дедупликации\n\n# Операции БЕЗ shuffle\ndf.filter(\"age > 30\")         # narrow\ndf.select(\"name\", \"age\")      # narrow\ndf.coalesce(10)               # без shuffle (уменьшение)\n\n# Настройка числа shuffle-partition-ов\nspark.conf.set(\"spark.sql.shuffle.partitions\", \"200\")",
+          "relatedLessons": [
+            {
+              "title": "Shuffle Deep Dive",
+              "slug": "01-architecture-internals/06-shuffle-deep-dive"
+            },
+            {
+              "title": "Оптимизация Shuffle",
+              "slug": "04-performance-tuning/01-shuffle-optimization"
+            }
+          ]
+        },
+        {
+          "term": "Caching",
+          "termEn": "Caching / Persistence",
+          "definition": "Механизм сохранения промежуточных результатов в памяти или на диске для повторного использования. cache() сохраняет DataFrame в MEMORY_AND_DISK. persist() позволяет выбрать уровень хранения. Кешированные данные хранятся на executor-ах и доступны без повторного вычисления.",
+          "example": "from pyspark import StorageLevel\n\n# Кеширование в память (MEMORY_AND_DISK)\ndf_cached = df.filter(\"active = true\").cache()\ndf_cached.count()  # Материализует кеш\n\n# Разные уровни persistence\ndf.persist(StorageLevel.MEMORY_ONLY)\ndf.persist(StorageLevel.DISK_ONLY)\ndf.persist(StorageLevel.MEMORY_AND_DISK_SER)  # Сжатый\n\n# Освобождение кеша\ndf_cached.unpersist()\n\n# Проверка в Spark UI → Storage tab",
+          "relatedLessons": [
+            {
+              "title": "Caching и Persistence",
+              "slug": "04-performance-tuning/06-caching-persistence"
+            },
+            {
+              "title": "Управление памятью",
+              "slug": "01-architecture-internals/07-memory-management"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "storage",
+      "name": "Форматы и хранение",
+      "terms": [
+        {
+          "term": "Parquet",
+          "termEn": "Apache Parquet",
+          "definition": "Колоночный формат файлов, де-факто стандарт для аналитических workload-ов. Поддерживает predicate pushdown (чтение только нужных row-group-ов), column pruning (чтение только нужных колонок), встроенную компрессию (Snappy, Zstd) и статистики (min/max) для data skipping.",
+          "example": "# Запись в Parquet с партиционированием\ndf.write \\\n    .partitionBy(\"year\", \"month\") \\\n    .option(\"compression\", \"zstd\") \\\n    .mode(\"overwrite\") \\\n    .parquet(\"/data/events\")\n\n# Чтение с predicate pushdown\ndf = spark.read.parquet(\"/data/events\") \\\n    .filter(\"year = 2024 AND month = 1\")  # Читает только нужные partition-ы\n\n# Просмотр схемы без чтения данных\nspark.read.parquet(\"/data/events\").printSchema()",
+          "relatedLessons": [
+            {
+              "title": "Сравнение файловых форматов",
+              "slug": "07-storage-optimization/01-file-formats-comparison"
+            },
+            {
+              "title": "Стратегии партиционирования",
+              "slug": "04-performance-tuning/02-partitioning-strategies"
+            }
+          ]
+        },
+        {
+          "term": "Delta Lake",
+          "termEn": "Delta Lake",
+          "definition": "Open-source lakehouse формат от Databricks, построенный поверх Parquet. Обеспечивает ACID-транзакции, time travel (запросы к предыдущим версиям данных), schema enforcement/evolution, Z-ordering для оптимизации чтения и MERGE (upsert) операции. Транзакционный лог хранится в _delta_log/.",
+          "example": "# Запись в Delta\ndf.write.format(\"delta\").save(\"/data/events_delta\")\n\n# Time travel — чтение предыдущей версии\nspark.read.format(\"delta\") \\\n    .option(\"versionAsOf\", 5) \\\n    .load(\"/data/events_delta\")\n\n# MERGE (upsert)\nfrom delta.tables import DeltaTable\ndelta_t = DeltaTable.forPath(spark, \"/data/events_delta\")\ndelta_t.alias(\"t\").merge(\n    updates.alias(\"u\"), \"t.id = u.id\"\n).whenMatchedUpdateAll().whenNotMatchedInsertAll().execute()",
+          "relatedLessons": [
+            {
+              "title": "Delta Lake",
+              "slug": "10-lakehouse-formats/02-delta-lake"
+            },
+            {
+              "title": "Архитектура Lakehouse",
+              "slug": "10-lakehouse-formats/01-lakehouse-architecture"
+            }
+          ]
+        },
+        {
+          "term": "Apache Iceberg",
+          "termEn": "Apache Iceberg",
+          "definition": "Lakehouse формат с hidden partitioning, schema evolution и time travel. Iceberg использует catalog-based управление таблицами и хранит метаданные в иерархии: catalog → metadata files → manifest lists → manifest files → data files. Поддерживает partition evolution без перезаписи данных.",
+          "example": "-- Создание Iceberg-таблицы\nCREATE TABLE catalog.db.events (\n    id BIGINT,\n    event_type STRING,\n    ts TIMESTAMP\n) USING iceberg\nPARTITIONED BY (days(ts));\n\n-- Hidden partitioning — не нужно указывать partition-колонку\nSELECT * FROM catalog.db.events\nWHERE ts > '2024-01-01';  -- Автоматический partition pruning\n\n-- Time travel\nSELECT * FROM catalog.db.events\n  VERSION AS OF 1234567890;",
+          "relatedLessons": [
+            {
+              "title": "Apache Iceberg",
+              "slug": "10-lakehouse-formats/03-apache-iceberg"
+            },
+            {
+              "title": "Сравнение форматов",
+              "slug": "10-lakehouse-formats/06-multi-format-comparison"
+            }
+          ]
+        },
+        {
+          "term": "Z-ordering",
+          "termEn": "Z-ordering / Data Skipping",
+          "definition": "Техника упорядочивания данных внутри файлов по нескольким колонкам одновременно с помощью Z-кривой (space-filling curve). Улучшает data skipping — запросы с фильтрами по Z-ordered колонкам пропускают файлы, не содержащие релевантных значений. Особенно эффективна для высококардинальных колонок.",
+          "example": "-- Z-ordering в Delta Lake\nOPTIMIZE events\nZORDER BY (user_id, event_date);\n\n-- После Z-ordering запросы по user_id и/или event_date\n-- пропускают файлы, где min/max не пересекаются с фильтром\nSELECT * FROM events\nWHERE user_id = 'abc' AND event_date = '2024-01-01';\n-- Читает ~1% файлов вместо 100%",
+          "relatedLessons": [
+            {
+              "title": "Z-ordering и Data Skipping",
+              "slug": "07-storage-optimization/02-z-ordering-data-skipping"
+            },
+            {
+              "title": "Delta Lake",
+              "slug": "10-lakehouse-formats/02-delta-lake"
+            }
+          ]
+        },
+        {
+          "term": "Compaction",
+          "termEn": "Compaction / Optimize",
+          "definition": "Процесс объединения мелких файлов в крупные для улучшения производительности чтения. Мелкие файлы создают overhead на открытие/закрытие файлов и метаданные. В Delta Lake выполняется через OPTIMIZE, в Iceberg — через rewriteDataFiles(). Рекомендуемый размер файла: 128 MB — 1 GB.",
+          "example": "-- Compaction в Delta Lake\nOPTIMIZE '/data/events_delta';\n\n-- С Z-ordering\nOPTIMIZE '/data/events_delta'\nZORDER BY (user_id);\n\n-- Удаление старых версий после compaction\nVACUUM '/data/events_delta' RETAIN 168 HOURS;\n\n-- В Iceberg (через Spark procedure)\nCALL catalog.system.rewrite_data_files(\n    table => 'db.events',\n    options => map('target-file-size-bytes', '134217728')\n);",
+          "relatedLessons": [
+            {
+              "title": "Compaction и Vacuum",
+              "slug": "07-storage-optimization/04-compaction-vacuum"
+            },
+            {
+              "title": "Проблема мелких файлов",
+              "slug": "07-storage-optimization/05-small-file-problem"
+            }
+          ]
+        },
+        {
+          "term": "Small Files Problem",
+          "termEn": "Small Files Problem",
+          "definition": "Проблема производительности при наличии множества мелких файлов (< 1-10 MB). Каждый файл создаёт отдельный task в Spark, overhead на метаданные в NameNode (HDFS) и замедляет listing в object storage (S3). Возникает при частых записях, streaming и неправильном партиционировании.",
+          "example": "# Диагностика\nimport os\npath = \"/data/events/\"\nfiles = spark.read.parquet(path).inputFiles()\nprint(f\"Файлов: {len(files)}\")\nprint(f\"Partitions: {spark.read.parquet(path).rdd.getNumPartitions()}\")\n\n# Решение 1: coalesce перед записью\ndf.coalesce(10).write.parquet(\"/output\")\n\n# Решение 2: repartition по колонке\ndf.repartition(\"date\").write.partitionBy(\"date\").parquet(\"/output\")\n\n# Решение 3: OPTIMIZE (Delta Lake)\n# OPTIMIZE '/data/events_delta'",
+          "relatedLessons": [
+            {
+              "title": "Проблема мелких файлов",
+              "slug": "07-storage-optimization/05-small-file-problem"
+            },
+            {
+              "title": "Compaction и Vacuum",
+              "slug": "07-storage-optimization/04-compaction-vacuum"
+            }
+          ]
+        },
+        {
+          "term": "Lakehouse",
+          "termEn": "Lakehouse Architecture",
+          "definition": "Архитектурный паттерн, объединяющий надёжность data warehouse (ACID, схема) с масштабируемостью data lake (дешёвое хранилище, open formats). Реализуется через табличные форматы (Delta Lake, Iceberg, Hudi) поверх объектного хранилища (S3, GCS, ADLS). Устраняет необходимость в отдельном ETL между lake и warehouse.",
+          "example": "-- Типичная Lakehouse архитектура в Spark\n\n-- Bronze layer: сырые данные\nraw_df.write.format(\"delta\").save(\"/lakehouse/bronze/events\")\n\n-- Silver layer: очищенные данные\ncleaned_df.write.format(\"delta\").save(\"/lakehouse/silver/events\")\n\n-- Gold layer: агрегаты для аналитики\nagg_df.write.format(\"delta\").save(\"/lakehouse/gold/daily_metrics\")\n\n-- Все слои используют ACID, time travel, schema enforcement",
+          "relatedLessons": [
+            {
+              "title": "Архитектура Lakehouse",
+              "slug": "10-lakehouse-formats/01-lakehouse-architecture"
+            },
+            {
+              "title": "Best Practices Lakehouse",
+              "slug": "10-lakehouse-formats/08-lakehouse-best-practices"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "streaming",
+      "name": "Structured Streaming",
+      "terms": [
+        {
+          "term": "Structured Streaming",
+          "termEn": "Structured Streaming",
+          "definition": "Потоковый API Spark, построенный на DataFrame/Dataset. Трактует поток данных как бесконечную таблицу, к которой применяются те же операции, что и к batch-данным. Поддерживает exactly-once семантику через checkpointing и three output modes: Append, Update, Complete.",
+          "example": "# Чтение потока из Kafka\nstream_df = spark.readStream \\\n    .format(\"kafka\") \\\n    .option(\"kafka.bootstrap.servers\", \"broker:9092\") \\\n    .option(\"subscribe\", \"events\") \\\n    .load()\n\n# Обработка (тот же API, что и batch)\nparsed = stream_df.selectExpr(\n    \"CAST(value AS STRING)\",\n    \"timestamp\"\n)\n\n# Запись результата\nquery = parsed.writeStream \\\n    .outputMode(\"append\") \\\n    .format(\"delta\") \\\n    .option(\"checkpointLocation\", \"/cp/events\") \\\n    .start(\"/data/events\")",
+          "relatedLessons": [
+            {
+              "title": "Основы Streaming",
+              "slug": "09-structured-streaming/01-streaming-fundamentals"
+            },
+            {
+              "title": "Sources и Sinks",
+              "slug": "09-structured-streaming/02-sources-sinks"
+            }
+          ]
+        },
+        {
+          "term": "Watermark",
+          "termEn": "Watermark",
+          "definition": "Механизм отслеживания прогресса event time в потоковой обработке. Watermark определяет порог — данные с event time старше watermark-а считаются «поздними» и могут быть отброшены. Это позволяет Spark очищать state store от устаревших состояний и ограничивать потребление памяти.",
+          "example": "from pyspark.sql import functions as F\n\n# Watermark: данные опаздывают максимум на 10 минут\nstream_df = stream_df \\\n    .withWatermark(\"event_time\", \"10 minutes\")\n\n# Агрегация с watermark\nresult = stream_df \\\n    .groupBy(\n        F.window(\"event_time\", \"5 minutes\"),\n        \"user_id\"\n    ).count()\n\n# Без watermark state растёт бесконечно!\n# С watermark: окна старше 10 мин очищаются автоматически",
+          "relatedLessons": [
+            {
+              "title": "Watermark и поздние данные",
+              "slug": "09-structured-streaming/04-watermarks-late-data"
+            },
+            {
+              "title": "Windowing",
+              "slug": "09-structured-streaming/05-windowing"
+            }
+          ]
+        },
+        {
+          "term": "Trigger",
+          "termEn": "Trigger",
+          "definition": "Определяет, когда запускать следующий micro-batch в Structured Streaming. Варианты: processingTime (фиксированный интервал), once (однократный запуск для backfill), availableNow (обработать всё доступное и остановиться), continuous (экспериментальный low-latency режим с ~1 мс задержкой).",
+          "example": "from pyspark.sql.streaming import Trigger\n\n# Micro-batch каждые 30 секунд\nquery = df.writeStream \\\n    .trigger(processingTime=\"30 seconds\") \\\n    .start()\n\n# Однократный запуск (для backfill)\nquery = df.writeStream \\\n    .trigger(once=True) \\\n    .start()\n\n# Обработать всё доступное и остановиться\nquery = df.writeStream \\\n    .trigger(availableNow=True) \\\n    .start()\n\n# Continuous (экспериментальный, ~1 мс latency)\nquery = df.writeStream \\\n    .trigger(continuous=\"1 second\") \\\n    .start()",
+          "relatedLessons": [
+            {
+              "title": "Основы Streaming",
+              "slug": "09-structured-streaming/01-streaming-fundamentals"
+            },
+            {
+              "title": "Sources и Sinks",
+              "slug": "09-structured-streaming/02-sources-sinks"
+            }
+          ]
+        },
+        {
+          "term": "Output Mode",
+          "termEn": "Output Mode",
+          "definition": "Определяет, какие строки записываются в sink после каждого micro-batch. Append — только новые строки (для фильтров, map). Update — только изменившиеся строки (для агрегаций с watermark). Complete — полный результат целиком (для агрегаций без watermark). Выбор режима зависит от типа запроса.",
+          "example": "# Append: только новые строки (подходит для ETL)\ndf.writeStream.outputMode(\"append\").start()\n\n# Update: только изменённые агрегаты\ndf.groupBy(\"category\").count() \\\n    .writeStream.outputMode(\"update\").start()\n\n# Complete: весь результат каждый раз\ndf.groupBy(\"category\").count() \\\n    .writeStream.outputMode(\"complete\").start()\n\n# Append + aggregation требует watermark:\ndf.withWatermark(\"ts\", \"10 min\") \\\n    .groupBy(F.window(\"ts\", \"5 min\")).count() \\\n    .writeStream.outputMode(\"append\").start()",
+          "relatedLessons": [
+            {
+              "title": "Output Modes",
+              "slug": "09-structured-streaming/03-output-modes"
+            },
+            {
+              "title": "Основы Streaming",
+              "slug": "09-structured-streaming/01-streaming-fundamentals"
+            }
+          ]
+        },
+        {
+          "term": "Checkpoint",
+          "termEn": "Checkpoint",
+          "definition": "Механизм сохранения прогресса streaming query на надёжное хранилище (HDFS, S3). Checkpoint хранит offset-ы прочитанных данных, состояние state store и метаданные запроса. Обеспечивает exactly-once семантику при перезапуске — query продолжает с последнего записанного offset-а.",
+          "example": "# Обязательно для production streaming\nquery = df.writeStream \\\n    .format(\"delta\") \\\n    .option(\"checkpointLocation\", \"s3://bucket/checkpoints/my_query\") \\\n    .outputMode(\"append\") \\\n    .start(\"/data/output\")\n\n# Checkpoint содержит:\n# - offsets/    — какие данные прочитаны\n# - commits/    — какие batch-и завершены\n# - state/      — state store snapshots\n# - metadata    — query metadata\n\n# ВАЖНО: один checkpointLocation = один query\n# Нельзя переиспользовать между разными запросами",
+          "relatedLessons": [
+            {
+              "title": "Основы Streaming",
+              "slug": "09-structured-streaming/01-streaming-fundamentals"
+            },
+            {
+              "title": "Stateful Operations",
+              "slug": "09-structured-streaming/06-stateful-operations"
+            }
+          ]
+        },
+        {
+          "term": "State Store",
+          "termEn": "State Store",
+          "definition": "Key-value хранилище для stateful-операций в Structured Streaming: агрегаций, дедупликации, session windows, stream-to-stream join. По умолчанию — HDFS-backed (HDFSBackedStateStoreProvider). Для production рекомендуется RocksDB backend, который хранит state на диске executor-а с LRU-кешем в памяти.",
+          "example": "# Включение RocksDB state store (рекомендуется)\nspark.conf.set(\n    \"spark.sql.streaming.stateStore.providerClass\",\n    \"org.apache.spark.sql.execution.streaming.\"\n    \"state.RocksDBStateStoreProvider\"\n)\n\n# Stateful операции используют state store:\n# - groupBy().count() (running aggregation)\n# - dropDuplicatesWithinWatermark()\n# - stream-to-stream join\n# - flatMapGroupsWithState (custom state)\n\n# Мониторинг state store:\n# Spark UI → Structured Streaming → State Store metrics",
+          "relatedLessons": [
+            {
+              "title": "Stateful Operations",
+              "slug": "09-structured-streaming/06-stateful-operations"
+            },
+            {
+              "title": "Watermark и поздние данные",
+              "slug": "09-structured-streaming/04-watermarks-late-data"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "monitoring",
+      "name": "Мониторинг и наблюдаемость",
+      "terms": [
+        {
+          "term": "Spark UI",
+          "termEn": "Spark Web UI",
+          "definition": "Встроенный веб-интерфейс для мониторинга Spark-приложений. Доступен на порту 4040 во время работы приложения. Показывает job-ы, stage-и, task-и, SQL-планы, метрики памяти и storage. Основной инструмент для диагностики performance-проблем: data skew, spill, shuffle overhead.",
+          "example": "# Spark UI доступен автоматически\n# http://driver-host:4040\n\n# Ключевые вкладки:\n# - Jobs: список job-ов и их stage-ей\n# - Stages: task-и, метрики (shuffle read/write, GC time)\n# - SQL: планы выполнения SQL-запросов\n# - Storage: кешированные DataFrame-ы\n# - Environment: конфигурация Spark\n\n# Для YARN: http://yarn-rm:8088 → Application → Tracking URL",
+          "relatedLessons": [
+            {
+              "title": "Spark UI Deep Dive",
+              "slug": "08-monitoring-observability/01-spark-ui-deep-dive"
+            },
+            {
+              "title": "History Server",
+              "slug": "08-monitoring-observability/02-history-server"
+            }
+          ]
+        },
+        {
+          "term": "History Server",
+          "termEn": "Spark History Server",
+          "definition": "Сервис для просмотра завершённых Spark-приложений. Читает event log-файлы из указанной директории (HDFS, S3) и предоставляет UI, идентичный Spark UI, для post-mortem анализа. Позволяет исследовать performance-проблемы после завершения job-а.",
+          "example": "# Настройка event log\nspark.conf.set(\"spark.eventLog.enabled\", \"true\")\nspark.conf.set(\"spark.eventLog.dir\", \"hdfs:///spark-logs\")\n\n# Запуск History Server\n# $SPARK_HOME/sbin/start-history-server.sh\n\n# Конфигурация History Server\n# spark.history.fs.logDirectory = hdfs:///spark-logs\n# spark.history.ui.port = 18080\n\n# Доступ: http://history-server:18080\n# Показывает все завершённые приложения с полным UI",
+          "relatedLessons": [
+            {
+              "title": "History Server",
+              "slug": "08-monitoring-observability/02-history-server"
+            },
+            {
+              "title": "Spark UI Deep Dive",
+              "slug": "08-monitoring-observability/01-spark-ui-deep-dive"
+            }
+          ]
+        },
+        {
+          "term": "SparkListener",
+          "termEn": "Spark Listener",
+          "definition": "Интерфейс для перехвата событий жизненного цикла Spark-приложения: запуск/завершение job-ов, stage-ей, task-ов, получение метрик executor-ов. Позволяет реализовать кастомный мониторинг, алертинг и logging. Регистрируется через SparkContext.addSparkListener().",
+          "example": "// Scala: кастомный SparkListener\nimport org.apache.spark.scheduler._\n\nclass MyListener extends SparkListener {\n  override def onStageCompleted(\n    event: SparkListenerStageCompleted\n  ): Unit = {\n    val info = event.stageInfo\n    val duration = info.completionTime.get - info.submissionTime.get\n    println(s\"Stage ${info.stageId} completed in ${duration}ms\")\n    \n    // Алерт если stage занял > 5 минут\n    if (duration > 300000)\n      alertSlack(s\"Slow stage: ${info.stageId}\")\n  }\n}\n\nspark.sparkContext.addSparkListener(new MyListener())",
+          "relatedLessons": [
+            {
+              "title": "Custom Metrics и Listeners",
+              "slug": "08-monitoring-observability/05-custom-metrics-listeners"
+            },
+            {
+              "title": "Метрики и Prometheus",
+              "slug": "08-monitoring-observability/03-metrics-prometheus"
+            }
+          ]
+        },
+        {
+          "term": "Prometheus Metrics",
+          "termEn": "Prometheus Integration",
+          "definition": "Интеграция Spark с Prometheus для сбора метрик в time-series формате. Spark 3.x поддерживает встроенный PrometheusServlet, экспортирующий метрики executor-ов, JVM, shuffle и streaming. Метрики собираются в pull-модели через HTTP-endpoint и визуализируются в Grafana.",
+          "example": "# Конфигурация Prometheus sink\nspark.conf.set(\"spark.metrics.conf.*.sink.prometheusServlet.class\",\n    \"org.apache.spark.metrics.sink.PrometheusServlet\")\nspark.conf.set(\"spark.metrics.conf.*.sink.prometheusServlet.path\",\n    \"/metrics/prometheus\")\nspark.conf.set(\"spark.ui.prometheus.enabled\", \"true\")\n\n# Endpoint: http://driver:4040/metrics/prometheus\n# Метрики: executor memory, GC time, shuffle bytes,\n#          task duration, streaming batch duration\n\n# prometheus.yml scrape config:\n# - job_name: 'spark'\n#   metrics_path: '/metrics/prometheus'\n#   static_configs:\n#     - targets: ['driver:4040']",
+          "relatedLessons": [
+            {
+              "title": "Метрики и Prometheus",
+              "slug": "08-monitoring-observability/03-metrics-prometheus"
+            },
+            {
+              "title": "Grafana Dashboards",
+              "slug": "08-monitoring-observability/04-grafana-dashboards"
+            }
+          ]
+        },
+        {
+          "term": "Grafana Dashboard",
+          "termEn": "Grafana Dashboard",
+          "definition": "Визуализация метрик Spark-приложений через Grafana, подключённую к Prometheus. Позволяет создавать dashboards с графиками executor memory usage, GC pressure, shuffle read/write throughput, task duration distribution и streaming lag. Обеспечивает real-time наблюдаемость кластера.",
+          "example": "# Ключевые панели Grafana для Spark:\n#\n# 1. Executor Overview:\n#    - Active executors count\n#    - JVM heap usage per executor\n#    - GC time percentage\n#\n# 2. Job Performance:\n#    - Task duration p50/p95/p99\n#    - Shuffle read/write bytes\n#    - Spill to disk bytes\n#\n# 3. Streaming (если используется):\n#    - Batch processing time\n#    - Input rows per second\n#    - State store memory usage\n#\n# Пример PromQL: rate(spark_executor_gc_time_total[5m])",
+          "relatedLessons": [
+            {
+              "title": "Grafana Dashboards",
+              "slug": "08-monitoring-observability/04-grafana-dashboards"
+            },
+            {
+              "title": "Метрики и Prometheus",
+              "slug": "08-monitoring-observability/03-metrics-prometheus"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "production",
+      "name": "Production и экосистема",
+      "terms": [
+        {
+          "term": "Apache Arrow",
+          "termEn": "Apache Arrow",
+          "definition": "Columnar in-memory формат данных для эффективного обмена между Spark (JVM) и Python/pandas. Используется в pandas UDF (vectorized UDF) для передачи данных без сериализации Java-объектов. Arrow Flight протокол используется в Spark Connect для клиент-серверной архитектуры.",
+          "example": "# Arrow ускоряет toPandas() и pandas UDF\nspark.conf.set(\"spark.sql.execution.arrow.pyspark.enabled\", \"true\")\n\n# Без Arrow: Java → Pickle → Python (медленно)\n# С Arrow: Java → Arrow IPC → Python (zero-copy)\n\npdf = df.toPandas()  # В 10-100x быстрее с Arrow\n\n# Pandas UDF (vectorized) использует Arrow\nimport pandas as pd\nfrom pyspark.sql.functions import pandas_udf\n\n@pandas_udf(\"double\")\ndef normalize(s: pd.Series) -> pd.Series:\n    return (s - s.mean()) / s.std()",
+          "relatedLessons": [
+            {
+              "title": "Arrow Columnar Format",
+              "slug": "11-arrow-module/01-arrow-columnar-format"
+            },
+            {
+              "title": "PyArrow и Spark",
+              "slug": "11-arrow-module/05-pyarrow-spark"
+            }
+          ]
+        },
+        {
+          "term": "Spark Connect",
+          "termEn": "Spark Connect",
+          "definition": "Клиент-серверная архитектура (с Spark 3.4), разделяющая клиентское приложение и Spark-кластер через gRPC. Клиент отправляет логический план, сервер выполняет и возвращает результаты через Arrow Flight. Позволяет тонкий клиент на Python/Scala без полного SparkSession на стороне клиента.",
+          "example": "# Запуск Spark Connect Server\n# ./sbin/start-connect-server.sh --packages \\\n#   org.apache.spark:spark-connect_2.12:3.5.0\n\n# Подключение клиента (тонкий — без JVM)\nfrom pyspark.sql import SparkSession\n\nspark = SparkSession.builder \\\n    .remote(\"sc://spark-server:15002\") \\\n    .getOrCreate()\n\n# Тот же API, что и локальный Spark\ndf = spark.sql(\"SELECT * FROM events\")\ndf.show()",
+          "relatedLessons": [
+            {
+              "title": "Spark Connect",
+              "slug": "14-advanced-topics/01-spark-connect"
+            },
+            {
+              "title": "Spark Connect и Arrow",
+              "slug": "11-arrow-module/04-spark-connect-arrow"
+            }
+          ]
+        },
+        {
+          "term": "YARN",
+          "termEn": "Apache YARN",
+          "definition": "Yet Another Resource Negotiator — менеджер ресурсов в Hadoop-экосистеме. Spark на YARN работает в двух режимах: cluster (driver на YARN) и client (driver на submitting machine). YARN распределяет контейнеры с executor-ами по нодам кластера на основе запрошенных ресурсов.",
+          "example": "# Запуск Spark на YARN\nspark-submit \\\n    --master yarn \\\n    --deploy-mode cluster \\\n    --num-executors 20 \\\n    --executor-memory 8g \\\n    --executor-cores 4 \\\n    --conf spark.yarn.maxAppAttempts=2 \\\n    my_app.py\n\n# Режимы деплоя:\n# cluster: driver в YARN контейнере (для production)\n# client: driver на машине отправки (для отладки)\n\n# Мониторинг: YARN ResourceManager UI → Applications",
+          "relatedLessons": [
+            {
+              "title": "Cluster Managers",
+              "slug": "12-production-operations/02-cluster-managers"
+            },
+            {
+              "title": "Обзор архитектуры Spark",
+              "slug": "01-architecture-internals/01-spark-overview"
+            }
+          ]
+        },
+        {
+          "term": "Kubernetes",
+          "termEn": "Kubernetes",
+          "definition": "Контейнерный оркестратор, поддерживаемый Spark как cluster manager (с Spark 2.3, GA в 3.1). Spark создаёт pod-ы для driver-а и executor-ов в namespace Kubernetes. Преимущества: auto-scaling, resource isolation, CI/CD интеграция, единая инфраструктура для всех workload-ов.",
+          "example": "# Запуск Spark на Kubernetes\nspark-submit \\\n    --master k8s://https://k8s-apiserver:443 \\\n    --deploy-mode cluster \\\n    --conf spark.kubernetes.container.image=spark:3.5.0 \\\n    --conf spark.kubernetes.namespace=spark-jobs \\\n    --conf spark.executor.instances=10 \\\n    --conf spark.kubernetes.executor.request.cores=2 \\\n    --conf spark.kubernetes.executor.limit.cores=4 \\\n    local:///opt/spark/my_app.py\n\n# Dynamic allocation на K8s\n# spark.dynamicAllocation.enabled=true\n# spark.dynamicAllocation.shuffleTracking.enabled=true",
+          "relatedLessons": [
+            {
+              "title": "Cluster Managers",
+              "slug": "12-production-operations/02-cluster-managers"
+            },
+            {
+              "title": "Cloud Deployment",
+              "slug": "12-production-operations/03-cloud-deployment"
+            }
+          ]
+        },
+        {
+          "term": "Great Expectations",
+          "termEn": "Great Expectations",
+          "definition": "Python-фреймворк для валидации данных и data quality. Определяет «ожидания» (expectations) — декларативные проверки значений, типов, уникальности, ranges и распределений. Интегрируется с Spark через SparkDFDataset для валидации DataFrame-ов прямо в pipeline.",
+          "example": "import great_expectations as gx\n\n# Создание контекста\ncontext = gx.get_context()\n\n# Подключение Spark DataFrame как data source\ndatasource = context.data_sources.add_spark(\"my_spark\")\nasset = datasource.add_dataframe_asset(\"events\")\nbatch = asset.add_batch_definition_whole_dataframe(\"full\")\n\n# Определение expectations\nsuite = context.suites.add(\n    gx.ExpectationSuite(name=\"events_quality\")\n)\nsuite.add_expectation(\n    gx.expectations.ExpectColumnValuesToNotBeNull(column=\"id\")\n)\nsuite.add_expectation(\n    gx.expectations.ExpectColumnValuesToBeBetween(\n        column=\"amount\", min_value=0, max_value=1000000\n    )\n)",
+          "relatedLessons": [
+            {
+              "title": "Great Expectations",
+              "slug": "13-testing-data-quality/04-great-expectations"
+            },
+            {
+              "title": "Data Quality Pipelines",
+              "slug": "13-testing-data-quality/06-data-quality-pipelines"
+            }
+          ]
+        },
+        {
+          "term": "Deequ",
+          "termEn": "Amazon Deequ",
+          "definition": "Библиотека для data quality от Amazon, написанная на Scala для Spark. Вычисляет метрики (completeness, uniqueness, compliance), проверяет constraints и предлагает автоматические проверки через profiling. В отличие от Great Expectations, работает нативно на Spark без Python overhead.",
+          "example": "// Scala: проверка качества данных с Deequ\nimport com.amazon.deequ.VerificationSuite\nimport com.amazon.deequ.checks.{Check, CheckLevel}\n\nval result = VerificationSuite()\n  .onData(df)\n  .addCheck(\n    Check(CheckLevel.Error, \"data quality\")\n      .isComplete(\"id\")           // не NULL\n      .isUnique(\"id\")             // уникальные значения\n      .isPositive(\"amount\")       // > 0\n      .isContainedIn(\"status\",    // допустимые значения\n        Array(\"active\", \"inactive\"))\n      .hasSize(_ > 1000)          // минимум строк\n  )\n  .run()\n\n// PySpark: через PyDeequ wrapper\n// from pydeequ.checks import Check",
+          "relatedLessons": [
+            {
+              "title": "Deequ Overview",
+              "slug": "13-testing-data-quality/05-deequ-overview"
+            },
+            {
+              "title": "Data Quality Pipelines",
+              "slug": "13-testing-data-quality/06-data-quality-pipelines"
+            }
+          ]
+        },
+        {
+          "term": "Celeborn",
+          "termEn": "Apache Celeborn",
+          "definition": "Remote shuffle service (бывший RemoteShuffleService от Alibaba), хранящий shuffle-данные на выделенных worker-нодах вместо executor-ов. Устраняет зависимость между shuffle-данными и executor lifecycle — executor может быть убит или перезапущен без потери shuffle-результатов. Критичен для Kubernetes-деплоя со dynamic allocation.",
+          "example": "# Подключение Celeborn к Spark\nspark-submit \\\n    --conf spark.shuffle.manager=org.apache.celeborn.client.spark.SparkShuffleManager \\\n    --conf spark.celeborn.master.endpoints=celeborn-master:9097 \\\n    --conf spark.celeborn.client.spark.push.data.timeout=120s \\\n    my_app.py\n\n# Преимущества:\n# - Executor-ы могут быть пересозданы без потери shuffle\n# - Лучше для K8s + dynamic allocation\n# - Снижает давление на локальные диски executor-ов\n# - Поддерживает memory + disk storage на Celeborn workers",
+          "relatedLessons": [
+            {
+              "title": "Apache Celeborn",
+              "slug": "16-external-shuffle-service/02-apache-celeborn"
+            },
+            {
+              "title": "Shuffle Fundamentals и ESS",
+              "slug": "16-external-shuffle-service/01-shuffle-fundamentals-ess"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

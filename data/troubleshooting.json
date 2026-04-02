@@ -1,0 +1,494 @@
+{
+  "title": "Решение проблем Apache Spark",
+  "description": "Частые ошибки и проблемы при работе с Apache Spark — симптомы, причины и пошаговые решения.",
+  "filters": {
+    "primary": {
+      "label": "Область",
+      "field": "area",
+      "options": [
+        { "id": "architecture", "label": "Архитектура", "icon": "cube", "color": "blue" },
+        { "id": "sql", "label": "SQL / DataFrame", "icon": "code", "color": "purple" },
+        { "id": "performance", "label": "Производительность", "icon": "rocket", "color": "cyan" },
+        { "id": "storage", "label": "Хранение данных", "icon": "layers", "color": "orange" },
+        { "id": "streaming", "label": "Structured Streaming", "icon": "wave", "color": "teal" },
+        { "id": "deployment", "label": "Развёртывание", "icon": "gear", "color": "green" },
+        { "id": "testing", "label": "Тестирование", "icon": "wrench", "color": "gray" }
+      ]
+    },
+    "secondary": {
+      "label": "Категория",
+      "field": "category",
+      "options": [
+        { "id": "runtime", "label": "Ошибки выполнения", "icon": "lightning", "color": "amber" },
+        { "id": "configuration", "label": "Конфигурация", "icon": "gear", "color": "indigo" },
+        { "id": "performance", "label": "Производительность", "icon": "rocket", "color": "cyan" },
+        { "id": "data", "label": "Данные / Схема", "icon": "cube", "color": "blue" },
+        { "id": "memory", "label": "Память / OOM", "icon": "alert", "color": "red" }
+      ]
+    }
+  },
+  "entries": [
+    {
+      "errorMessage": "java.lang.OutOfMemoryError: Java heap space (executor)",
+      "area": "architecture",
+      "category": "memory",
+      "symptoms": [
+        "Executor падает с OOM при обработке больших партиций",
+        "Задачи shuffle-стадии завершаются с ошибкой памяти",
+        "В Spark UI видно, что пиковое потребление памяти одного executor превышает лимит"
+      ],
+      "cause": "Executor получает партицию данных, которая не помещается в JVM heap. Часто возникает при data skew (одна партиция значительно больше остальных), неправильной конфигурации spark.executor.memory, или при широких трансформациях (explode, crossJoin).",
+      "solution": [
+        "Увеличьте spark.executor.memory и spark.executor.memoryOverhead",
+        "Проверьте распределение данных: df.groupBy(spark_partition_id()).count().show()",
+        "Включите AQE: spark.sql.adaptive.enabled=true для автоматического перераспределения",
+        "Используйте repartition() для более равномерного распределения данных по партициям"
+      ],
+      "relatedLessons": [
+        { "title": "Memory Management", "slug": "01-architecture-internals/07-memory-management" },
+        { "title": "Tungsten Memory", "slug": "02-catalyst-tungsten/05-tungsten-memory" }
+      ]
+    },
+    {
+      "errorMessage": "java.lang.OutOfMemoryError: GC overhead limit exceeded",
+      "area": "performance",
+      "category": "memory",
+      "symptoms": [
+        "Задача работает крайне медленно, затем падает с GC overhead",
+        "В логах executor видно частые Full GC циклы",
+        "Spark UI показывает GC Time > 50% от Task Time"
+      ],
+      "cause": "JVM тратит более 98% времени на сборку мусора, восстанавливая менее 2% памяти. Обычно вызвано кэшированием слишком большого объёма данных в memory, утечкой ссылок в UDF, или неоптимальной сериализацией (Java вместо Kryo).",
+      "solution": [
+        "Замените .cache() на .persist(StorageLevel.MEMORY_AND_DISK) для автоматического сброса на диск",
+        "Переключите сериализацию на Kryo: spark.serializer=org.apache.spark.serializer.KryoSerializer",
+        "Настройте G1GC: -XX:+UseG1GC -XX:InitiatingHeapOccupancyPercent=35",
+        "Мониторьте GC через Prometheus: spark.metrics.conf.*.sink.prometheusServlet.class"
+      ],
+      "relatedLessons": [
+        { "title": "Caching and Persistence", "slug": "04-performance-tuning/06-caching-persistence" },
+        { "title": "Metrics and Prometheus", "slug": "08-monitoring-observability/03-metrics-prometheus" }
+      ]
+    },
+    {
+      "errorMessage": "org.apache.spark.shuffle.FetchFailedException: Failed to connect to host:port",
+      "area": "architecture",
+      "category": "runtime",
+      "symptoms": [
+        "Задачи reduce-стадии падают с FetchFailedException",
+        "В логах — 'Connection refused' или 'Connection reset' при чтении shuffle-данных",
+        "Задача перезапускается несколько раз, затем стадия отмечается как failed"
+      ],
+      "cause": "Executor, записавший shuffle-данные, упал или стал недоступен до того, как другие executor прочитали его shuffle-файлы. Частые причины: OOM на executor-источнике, сетевые таймауты, нехватка дисковой квоты для shuffle-файлов.",
+      "solution": [
+        "Увеличьте spark.shuffle.io.maxRetries и spark.shuffle.io.retryWait",
+        "Включите External Shuffle Service: spark.shuffle.service.enabled=true",
+        "Рассмотрите Apache Celeborn для push-based shuffle в больших кластерах",
+        "Проверьте, не падают ли executor-источники из-за OOM (см. предыдущую ошибку)"
+      ],
+      "relatedLessons": [
+        { "title": "Shuffle Deep Dive", "slug": "01-architecture-internals/06-shuffle-deep-dive" },
+        { "title": "Shuffle Fundamentals & ESS", "slug": "16-external-shuffle-service/01-shuffle-fundamentals-ess" }
+      ]
+    },
+    {
+      "errorMessage": "org.apache.spark.SparkException: Task not serializable (java.io.NotSerializableException)",
+      "area": "architecture",
+      "category": "runtime",
+      "symptoms": [
+        "Задача не запускается — ошибка сериализации при отправке closure на executor",
+        "В стектрейсе — NotSerializableException с указанием класса, захваченного в closure",
+        "Ошибка появляется при использовании внешних объектов внутри map/filter/foreach"
+      ],
+      "cause": "Spark сериализует closure (лямбду) целиком для передачи на executor. Если closure захватывает ссылку на несериализуемый объект (соединение с БД, SparkContext, логгер), сериализация падает. Часто возникает при обращении к полям класса внутри трансформации.",
+      "solution": [
+        "Используйте локальные переменные вместо полей класса внутри трансформаций",
+        "Оберните нужные значения в broadcast-переменные: val bc = sc.broadcast(config)",
+        "Для подключений к внешним системам используйте foreachPartition с созданием коннекта внутри",
+        "Добавьте extends Serializable к классам, если их поля действительно сериализуемы"
+      ],
+      "relatedLessons": [
+        { "title": "Driver-Executor Model", "slug": "01-architecture-internals/02-driver-executor-model" },
+        { "title": "UDFs Introduction", "slug": "03-dataframes-spark-sql/07-udfs-introduction" }
+      ]
+    },
+    {
+      "errorMessage": "Stage X contains tasks with 10x+ variance in execution time (data skew detected)",
+      "area": "performance",
+      "category": "performance",
+      "symptoms": [
+        "Одна задача стадии выполняется в 10-100x дольше остальных",
+        "В Spark UI — Summary Metrics показывает огромную разницу между Min и Max duration",
+        "Общее время стадии определяется одной 'отстающей' задачей"
+      ],
+      "cause": "Неравномерное распределение данных по ключу группировки или JOIN. Один ключ (например, NULL, '', популярный ID) содержит непропорционально много записей, и одна задача обрабатывает большую часть данных.",
+      "solution": [
+        "Включите AQE skew join: spark.sql.adaptive.skewJoin.enabled=true",
+        "Используйте salting: добавьте случайный суффикс к ключу, затем агрегируйте в два этапа",
+        "Отфильтруйте или обработайте NULL-ключи отдельно перед JOIN",
+        "Диагностируйте через Spark UI → Stage → Task Metrics → Shuffle Read Size"
+      ],
+      "relatedLessons": [
+        { "title": "Data Skew Handling", "slug": "04-performance-tuning/05-data-skew-handling" },
+        { "title": "Skew Join Optimization", "slug": "05-aqe-deep-dive/03-skew-join-optimization" }
+      ]
+    },
+    {
+      "errorMessage": "org.apache.spark.sql.AnalysisException: cannot resolve 'column_name' given input columns",
+      "area": "sql",
+      "category": "data",
+      "symptoms": [
+        "SQL-запрос или DataFrame-операция падает с 'cannot resolve'",
+        "Колонка существует, но имя не совпадает из-за регистра или пробелов",
+        "После JOIN появляются дублированные имена колонок"
+      ],
+      "cause": "Имя колонки в выражении не совпадает с реальными именами в схеме DataFrame. Причины: case sensitivity (spark.sql.caseSensitive=true), пробелы в именах колонок из CSV/JSON, потеря квалификатора после JOIN, переименование при alias().",
+      "solution": [
+        "Проверьте схему: df.printSchema() и df.columns",
+        "Для колонок с пробелами/спецсимволами используйте backtick: `column name`",
+        "После JOIN явно выбирайте колонки: df.select(left['id'], right['id'].alias('right_id'))",
+        "Установите spark.sql.caseSensitive=false (по умолчанию) для нечувствительности к регистру"
+      ],
+      "relatedLessons": [
+        { "title": "DataFrame Creation and Schema", "slug": "03-dataframes-spark-sql/01-dataframe-creation-schema" },
+        { "title": "Joins Deep Dive", "slug": "03-dataframes-spark-sql/03-joins-deep-dive" }
+      ]
+    },
+    {
+      "errorMessage": "Job aborted: Total size of serialized results of N tasks is bigger than spark.driver.maxResultSize",
+      "area": "architecture",
+      "category": "memory",
+      "symptoms": [
+        "Задача collect() или take() на большом DataFrame падает на стороне драйвера",
+        "В логах драйвера — OutOfMemoryError после успешного выполнения всех задач",
+        "Результат запроса слишком велик для передачи на драйвер"
+      ],
+      "cause": "Операции collect(), toPandas(), show() с большим limit переносят все данные на драйвер. Если результат превышает spark.driver.maxResultSize (по умолчанию 1g) или доступную память драйвера, задание падает.",
+      "solution": [
+        "Замените collect() на take(N) или limit(N) для получения только нужного количества строк",
+        "Используйте df.write для записи результата в файл вместо передачи на драйвер",
+        "Увеличьте spark.driver.memory и spark.driver.maxResultSize при необходимости",
+        "Для анализа используйте df.describe() или df.summary() вместо полного collect()"
+      ],
+      "relatedLessons": [
+        { "title": "Driver-Executor Model", "slug": "01-architecture-internals/02-driver-executor-model" },
+        { "title": "Spark UI Deep Dive", "slug": "08-monitoring-observability/01-spark-ui-deep-dive" }
+      ]
+    },
+    {
+      "errorMessage": "spark.sql.shuffle.partitions=200 causing 200 tasks for 10MB of data",
+      "area": "performance",
+      "category": "configuration",
+      "symptoms": [
+        "Маленькие запросы создают 200 задач, большинство из которых обрабатывают 0 строк",
+        "Overhead от планирования задач превышает время обработки данных",
+        "В Spark UI — Shuffle Read Size/Records показывает 0 для большинства задач"
+      ],
+      "cause": "Значение spark.sql.shuffle.partitions по умолчанию (200) рассчитано на средние нагрузки. Для малых данных это создаёт избыточные пустые задачи, а для больших — слишком крупные партиции. Параметр применяется ко всем shuffle-операциям в сессии.",
+      "solution": [
+        "Включите AQE: spark.sql.adaptive.enabled=true — автоматически объединяет мелкие партиции",
+        "Для малых данных: spark.sql.shuffle.partitions=20 или coalesce() после широких трансформаций",
+        "Для больших данных: установите partitions = total_shuffle_data / 128MB",
+        "Используйте AQE advisory: spark.sql.adaptive.advisoryPartitionSizeInBytes=128m"
+      ],
+      "relatedLessons": [
+        { "title": "Partitioning Strategies", "slug": "04-performance-tuning/02-partitioning-strategies" },
+        { "title": "Coalesce Shuffle Partitions", "slug": "05-aqe-deep-dive/02-coalesce-shuffle-partitions" }
+      ]
+    },
+    {
+      "errorMessage": "java.io.IOException: Failed to read checkpoint data from path hdfs://.../_checkpoint",
+      "area": "streaming",
+      "category": "runtime",
+      "symptoms": [
+        "Streaming-запрос не перезапускается после сбоя — ошибка чтения чекпоинта",
+        "В директории чекпоинта — повреждённые или неполные файлы",
+        "Смена схемы или логики запроса приводит к несовместимости с существующим чекпоинтом"
+      ],
+      "cause": "Checkpoint содержит сериализованное состояние запроса, включая схему, оффсеты и operator state. При изменении схемы данных, добавлении/удалении агрегаций или смене источника существующий чекпоинт становится несовместимым.",
+      "solution": [
+        "Для изменения логики — удалите старый чекпоинт и перезапустите с начала (потеря состояния)",
+        "Используйте отдельные checkpoint-директории для разных версий запроса",
+        "Настройте надёжное хранилище: HDFS/S3 вместо локальной файловой системы",
+        "Для HDFS: проверьте права доступа и доступность NameNode"
+      ],
+      "relatedLessons": [
+        { "title": "Streaming Fundamentals", "slug": "09-structured-streaming/01-streaming-fundamentals" },
+        { "title": "Stateful Operations", "slug": "09-structured-streaming/06-stateful-operations" }
+      ]
+    },
+    {
+      "errorMessage": "io.delta.exceptions.ConcurrentAppendException: Files were added by a concurrent update",
+      "area": "storage",
+      "category": "runtime",
+      "symptoms": [
+        "Параллельные записи в Delta-таблицу завершаются с ConcurrentAppendException",
+        "Streaming и batch одновременно пишут в одну таблицу — один из них падает",
+        "MERGE INTO конфликтует с параллельным INSERT"
+      ],
+      "cause": "Delta Lake использует оптимистичную блокировку через _delta_log. Две транзакции пытаются записать файлы, которые конфликтуют (перекрываются по партиции). Конфликт детектируется при коммите второй транзакции.",
+      "solution": [
+        "Разделите записи по партициям: каждый writer пишет в свой partition",
+        "Включите автоматические ретраи: spark.databricks.delta.retryWriteConflict.enabled=true",
+        "Для streaming + batch: используйте разные целевые директории и объединяйте через UNION VIEW",
+        "Рассмотрите Isolation Level: SET spark.databricks.delta.isolationLevel = WriteSerializable"
+      ],
+      "relatedLessons": [
+        { "title": "Delta Lake", "slug": "10-lakehouse-formats/02-delta-lake" },
+        { "title": "Lakehouse Best Practices", "slug": "10-lakehouse-formats/08-lakehouse-best-practices" }
+      ]
+    },
+    {
+      "errorMessage": "Python worker exited unexpectedly (crashed) / PySpark UDF takes 10x longer than built-in",
+      "area": "sql",
+      "category": "performance",
+      "symptoms": [
+        "PySpark UDF работает в 10-100x медленнее, чем эквивалентная встроенная функция",
+        "Python worker периодически падает с сигналом SIGKILL при больших данных",
+        "В Spark UI — время Task значительно больше, чем Shuffle Read/Write"
+      ],
+      "cause": "Стандартные Python UDF требуют сериализации каждой строки из JVM в Python (через pickle) и обратно. Это создаёт O(n) overhead на сериализацию/десериализацию и исключает оптимизации Catalyst и Tungsten.",
+      "solution": [
+        "Замените Python UDF на встроенные функции PySpark: pyspark.sql.functions.*",
+        "Если UDF необходим — используйте Pandas UDF (@pandas_udf) с Arrow-сериализацией",
+        "Для scalar-операций: @pandas_udf(returnType, PandasUDFType.SCALAR)",
+        "Включите Arrow: spark.sql.execution.arrow.pyspark.enabled=true"
+      ],
+      "relatedLessons": [
+        { "title": "Python UDF Overhead", "slug": "06-udf-performance/02-python-udf-overhead" },
+        { "title": "PyArrow and Spark", "slug": "11-arrow-module/05-pyarrow-spark" }
+      ]
+    },
+    {
+      "errorMessage": "SparkException: Cannot broadcast the table that is larger than 8GB: table size = X GB",
+      "area": "performance",
+      "category": "memory",
+      "symptoms": [
+        "JOIN с broadcast hint падает из-за превышения лимита размера таблицы",
+        "Автоматический broadcast join выбирается для таблицы, которая выросла за порог",
+        "Ошибка при BroadcastHashJoin — executor не может принять broadcast-переменную"
+      ],
+      "cause": "Spark пытается broadcast'ить таблицу, размер которой превышает spark.sql.autoBroadcastJoinThreshold (по умолчанию 10MB) или абсолютный лимит 8GB. Если таблица неожиданно выросла, автоматический broadcast перестаёт работать.",
+      "solution": [
+        "Уменьшите spark.sql.autoBroadcastJoinThreshold или установите -1 для отключения auto-broadcast",
+        "Явно укажите стратегию: df.join(other.hint('shuffle_hash'), ...)",
+        "Для больших таблиц используйте SortMergeJoin — он не требует размещения в памяти",
+        "Проверьте актуальный размер: spark.catalog.cacheTable('t'); spark.table('t').count()"
+      ],
+      "relatedLessons": [
+        { "title": "Broadcast Hints", "slug": "04-performance-tuning/04-broadcast-hints" },
+        { "title": "Joins Deep Dive", "slug": "03-dataframes-spark-sql/03-joins-deep-dive" }
+      ]
+    },
+    {
+      "errorMessage": "WARN TaskSchedulerImpl: Initial job has not accepted any resources; check your cluster UI",
+      "area": "deployment",
+      "category": "runtime",
+      "symptoms": [
+        "Spark-приложение зависает на старте — executor'ы не выделяются",
+        "В YARN UI — приложение в статусе ACCEPTED, но контейнеры не запускаются",
+        "Логи ResourceManager показывают нехватку ресурсов в очереди"
+      ],
+      "cause": "Кластер не может выделить запрошенные ресурсы. Причины: запрошено больше памяти/ядер, чем доступно; другие приложения заняли все ресурсы; неправильная конфигурация YARN-очереди; максимальная аллокация контейнера меньше, чем запрошенные ресурсы executor.",
+      "solution": [
+        "Проверьте доступные ресурсы: yarn application -list или YARN ResourceManager UI",
+        "Уменьшите spark.executor.memory и spark.executor.cores до лимитов очереди",
+        "Настройте yarn.scheduler.maximum-allocation-mb >= spark.executor.memory + memoryOverhead",
+        "Используйте dynamic allocation: spark.dynamicAllocation.enabled=true"
+      ],
+      "relatedLessons": [
+        { "title": "Cluster Managers", "slug": "12-production-operations/02-cluster-managers" },
+        { "title": "Cost Optimization", "slug": "12-production-operations/04-cost-optimization" }
+      ]
+    },
+    {
+      "errorMessage": "ExecutorLostFailure: Executor N exited caused by one of the running tasks (K8s pod evicted)",
+      "area": "deployment",
+      "category": "configuration",
+      "symptoms": [
+        "Executor-поды в Kubernetes периодически завершаются с статусом Evicted или OOMKilled",
+        "Задачи перезапускаются на новых executor'ах, общее время задания растёт",
+        "kubectl describe pod показывает Reason: OOMKilled или Evicted"
+      ],
+      "cause": "Kubernetes OOM Killer завершает контейнер, если его RSS превышает limits.memory. Spark off-heap память (Tungsten, overhead) не учитывается в spark.executor.memory, но потребляет реальную RAM контейнера. Также возможно eviction из-за ephemeral-storage shuffle-файлами.",
+      "solution": [
+        "Установите spark.executor.memoryOverhead = max(384m, 0.1 * executor.memory)",
+        "Настройте K8s resource limits: memory = executor.memory + memoryOverhead + 512m (запас)",
+        "Для shuffle на локальных дисках: увеличьте ephemeral-storage limits",
+        "Рассмотрите External Shuffle Service или Celeborn для уменьшения нагрузки на локальные диски"
+      ],
+      "relatedLessons": [
+        { "title": "Cluster Managers", "slug": "12-production-operations/02-cluster-managers" },
+        { "title": "Cloud Deployment", "slug": "12-production-operations/03-cloud-deployment" }
+      ]
+    },
+    {
+      "errorMessage": "com.esotericsoftware.kryo.KryoException: Unable to find class / Class is not registered",
+      "area": "architecture",
+      "category": "runtime",
+      "symptoms": [
+        "Ошибка сериализации при shuffle или broadcast с Kryo-сериализатором",
+        "Kryo не может найти класс, используемый в RDD/DataFrame",
+        "Ошибка появляется только при spark.serializer=KryoSerializer, но не с Java-сериализацией"
+      ],
+      "cause": "Kryo требует явной регистрации классов для эффективной сериализации. Если spark.kryo.registrationRequired=true, незарегистрированный класс вызывает ошибку. Также возможна проблема с classpath — класс отсутствует на executor.",
+      "solution": [
+        "Зарегистрируйте классы: spark.kryo.classesToRegister=com.example.MyClass",
+        "Или отключите обязательную регистрацию: spark.kryo.registrationRequired=false",
+        "Убедитесь, что JAR с классами доступен на всех executor: --jars или spark.jars",
+        "Для сложных случаев реализуйте кастомный KryoRegistrator"
+      ],
+      "relatedLessons": [
+        { "title": "Shuffle Deep Dive", "slug": "01-architecture-internals/06-shuffle-deep-dive" },
+        { "title": "Spark Configuration Reference", "slug": "18-appendix/01-spark-configuration-reference" }
+      ]
+    },
+    {
+      "errorMessage": "SortMergeJoin selected instead of BroadcastHashJoin for small table (suboptimal plan)",
+      "area": "sql",
+      "category": "performance",
+      "symptoms": [
+        "EXPLAIN показывает SortMergeJoin для таблицы размером 5MB",
+        "Catalyst не выбирает broadcast join, хотя таблица маленькая",
+        "Время JOIN-запроса в 5-10x больше ожидаемого из-за shuffle"
+      ],
+      "cause": "Catalyst оценивает размер таблицы по статистике каталога. Если статистика устарела или отсутствует (например, для view, subquery, или фильтрованной таблицы), оптимизатор не может определить реальный размер и выбирает безопасный SortMergeJoin.",
+      "solution": [
+        "Обновите статистику: ANALYZE TABLE t COMPUTE STATISTICS",
+        "Явно укажите hint: SELECT /*+ BROADCAST(small_table) */ ... FROM ...",
+        "В DataFrame API: large_df.join(broadcast(small_df), 'key')",
+        "Увеличьте порог: spark.sql.autoBroadcastJoinThreshold=50m (если таблица стабильно мала)"
+      ],
+      "relatedLessons": [
+        { "title": "Optimization Rules", "slug": "02-catalyst-tungsten/03-optimization-rules" },
+        { "title": "Physical Plan and Codegen", "slug": "02-catalyst-tungsten/04-physical-plan-codegen" }
+      ]
+    },
+    {
+      "errorMessage": "Listing leaf files and directories for N paths took X ms / Too many small files",
+      "area": "storage",
+      "category": "performance",
+      "symptoms": [
+        "Чтение таблицы с тысячами мелких файлов занимает минуты только на листинг",
+        "Spark UI показывает 50000+ задач для таблицы размером 1GB",
+        "Driver зависает на этапе File Listing перед началом вычислений"
+      ],
+      "cause": "Каждый файл создаёт минимум одну задачу. Тысячи мелких файлов (< 1MB) создают overhead на планирование, открытие файлов и сетевые запросы к хранилищу. Типичная причина — частые append-операции без compaction.",
+      "solution": [
+        "Запустите compaction: OPTIMIZE table_name (для Delta Lake)",
+        "Настройте coalesce перед записью: df.coalesce(target_files).write.parquet(...)",
+        "Установите spark.sql.files.maxPartitionBytes=128m для объединения мелких файлов при чтении",
+        "Для регулярных загрузок: настройте автоматический VACUUM и OPTIMIZE по расписанию"
+      ],
+      "relatedLessons": [
+        { "title": "Small File Problem", "slug": "07-storage-optimization/05-small-file-problem" },
+        { "title": "Compaction and Vacuum", "slug": "07-storage-optimization/04-compaction-vacuum" }
+      ]
+    },
+    {
+      "errorMessage": "Late data dropped: watermark = X, event time = Y (Y < X)",
+      "area": "streaming",
+      "category": "data",
+      "symptoms": [
+        "Streaming-агрегация теряет поздние события без явных ошибок",
+        "Результаты оконных функций неполные — пропущены записи с опозданием",
+        "В метриках запроса — numRowsDroppedByWatermark > 0"
+      ],
+      "cause": "Watermark определяет порог, после которого поздние данные отбрасываются. Если данные приходят с задержкой, превышающей watermark delay, они не попадают в результат. Слишком агрессивный watermark отбрасывает валидные данные; слишком мягкий — увеличивает state и задержку.",
+      "solution": [
+        "Увеличьте watermark delay: .withWatermark('event_time', '30 minutes') вместо '10 minutes'",
+        "Анализируйте реальную задержку данных перед выбором watermark: df.selectExpr('current_timestamp() - event_time')",
+        "Для критичных данных: используйте output mode 'update' + внешнее хранилище состояния",
+        "Мониторьте numRowsDroppedByWatermark через StreamingQueryListener"
+      ],
+      "relatedLessons": [
+        { "title": "Watermarks and Late Data", "slug": "09-structured-streaming/04-watermarks-late-data" },
+        { "title": "Windowing", "slug": "09-structured-streaming/05-windowing" }
+      ]
+    },
+    {
+      "errorMessage": "org.apache.spark.sql.AnalysisException: Parquet column cannot be converted. Column: [X], Expected: StringType, Found: INT32",
+      "area": "storage",
+      "category": "data",
+      "symptoms": [
+        "Чтение Parquet-файлов после изменения схемы падает с AnalysisException",
+        "Старые файлы содержат тип INT, новые — STRING для одной и той же колонки",
+        "Schema evolution не работает между несовместимыми типами"
+      ],
+      "cause": "Parquet поддерживает ограниченную schema evolution: добавление новых колонок и расширение типов (int→long). Но смена типа колонки (int→string) несовместима — старые и новые файлы не могут быть прочитаны одной схемой.",
+      "solution": [
+        "Включите schema merging: spark.sql.parquet.mergeSchema=true (для совместимых изменений)",
+        "Для несовместимых изменений: создайте новую таблицу и мигрируйте данные с CAST",
+        "Используйте Delta Lake или Iceberg — они поддерживают безопасную schema evolution",
+        "Для чтения смешанных файлов: задайте схему явно через .schema(explicit_schema)"
+      ],
+      "relatedLessons": [
+        { "title": "File Formats Comparison", "slug": "07-storage-optimization/01-file-formats-comparison" },
+        { "title": "Lakehouse Architecture", "slug": "10-lakehouse-formats/01-lakehouse-architecture" }
+      ]
+    },
+    {
+      "errorMessage": "IllegalStateException: Cannot call methods on a stopped SparkContext / Multiple SparkContext detected",
+      "area": "testing",
+      "category": "configuration",
+      "symptoms": [
+        "Тесты PySpark падают при параллельном запуске — конфликт SparkSession",
+        "Второй тест получает уже остановленный SparkContext",
+        "Ошибка 'Only one SparkContext may be running' при создании новой сессии"
+      ],
+      "cause": "SparkContext — синглтон внутри JVM. При параллельном запуске тестов или неправильном lifecycle (создание нового контекста без остановки предыдущего) возникают конфликты. Pytest с xdist запускает тесты в одной JVM по умолчанию.",
+      "solution": [
+        "Используйте фикстуру с session scope: @pytest.fixture(scope='session') для SparkSession",
+        "Не вызывайте spark.stop() между тестами — переиспользуйте одну сессию",
+        "Для изоляции: создавайте временные view/database для каждого теста, а не новую сессию",
+        "Рассмотрите spark-testing-base для управления lifecycle в тестах"
+      ],
+      "relatedLessons": [
+        { "title": "Unit Testing PySpark", "slug": "13-testing-data-quality/01-unit-testing-pyspark" },
+        { "title": "Spark Testing Base", "slug": "13-testing-data-quality/03-spark-testing-base" }
+      ]
+    },
+    {
+      "errorMessage": "great_expectations.exceptions.CheckpointError: Validation failed — X of Y expectations were not met",
+      "area": "testing",
+      "category": "runtime",
+      "symptoms": [
+        "Great Expectations checkpoint возвращает failed — часть expectations не выполнена",
+        "Data Docs показывают красные ячейки в отчёте валидации",
+        "Pipeline останавливается из-за проваленной проверки качества данных"
+      ],
+      "cause": "Данные не соответствуют определённым expectations. Типичные причины: изменение формата данных в источнике, NULL-значения в обязательных полях, нарушение уникальности, выход числовых значений за допустимые границы.",
+      "solution": [
+        "Просмотрите Data Docs для деталей: great_expectations docs build && open uncommitted/data_docs/local_site/index.html",
+        "Обновите expectations, если изменение данных ожидаемо: great_expectations suite edit",
+        "Для pipeline: настройте severity levels — warn vs fail для разных expectations",
+        "Добавьте slack/email алерты при checkpoint failure: action_list в checkpoint config"
+      ],
+      "relatedLessons": [
+        { "title": "Great Expectations", "slug": "13-testing-data-quality/04-great-expectations" },
+        { "title": "Data Quality Pipelines", "slug": "13-testing-data-quality/06-data-quality-pipelines" }
+      ]
+    },
+    {
+      "errorMessage": "KafkaConsumer: OffsetOutOfRangeException: offsets out of range with no configured reset policy",
+      "area": "streaming",
+      "category": "configuration",
+      "symptoms": [
+        "Streaming-запрос из Kafka не запускается — оффсеты вне диапазона",
+        "После длительного простоя чекпоинт указывает на удалённые сегменты",
+        "Kafka-топик имеет retention меньше, чем время простоя streaming-приложения"
+      ],
+      "cause": "Чекпоинт хранит оффсеты, которые уже удалены из Kafka (retention policy). При перезапуске Spark пытается прочитать с несуществующего оффсета. Без failOnDataLoss=false запрос падает.",
+      "solution": [
+        "Установите failOnDataLoss=false для автоматического сброса на earliest/latest доступный оффсет",
+        "Настройте Kafka retention >= максимальное время простоя приложения",
+        "Используйте startingOffsets='latest' при первом запуске для пропуска исторических данных",
+        "Для гарантий: настройте мониторинг lag через kafka-consumer-groups.sh --describe"
+      ],
+      "relatedLessons": [
+        { "title": "Sources and Sinks", "slug": "09-structured-streaming/02-sources-sinks" },
+        { "title": "Output Modes", "slug": "09-structured-streaming/03-output-modes" }
+      ]
+    }
+  ]
+}
