@@ -152,6 +152,27 @@ IPC поддерживает два режима:
 Для углублённого изучения внутренней архитектуры Arrow (memory layout, type system, IPC format, Feather) см. курс [Storage Formats Deep-Dive](/storage-formats/07-arrow/01-memory-layout/).
 </Callout>
 
+<CrossCourseRef
+  courseId="storage-formats"
+  lessonSlug="07-arrow/01-memory-layout"
+  label="Arrow memory layout: bit-level"
+  preview="Как именно Arrow раскладывает данные в памяти — validity bitmaps, offsets buffers, Run-End Encoding. Это фундамент SIMD и zero-copy."
+/>
+
+<CrossCourseRef
+  courseId="datafusion-course"
+  lessonSlug="01-arrow-foundation/01-columnar-format"
+  label="DataFusion: Arrow как фундамент"
+  preview="Как DataFusion (Rust query engine) использует Arrow в качестве in-memory модели — параллельный взгляд на ту же абстракцию из не-JVM мира."
+/>
+
+<CrossCourseRef
+  courseId="python-course"
+  lessonSlug="09-file-io-formats/04-binary-formats-overview"
+  label="Бинарные форматы в Python"
+  preview="Обзор Pickle, Protobuf, MessagePack, Arrow IPC, Feather — где Arrow уместен, а где нет."
+/>
+
 ## Что дальше?
 
 В следующем уроке мы разберём **zero-copy transfer** -- механизм, который позволяет Arrow передавать гигабайты данных между процессами без единого копирования. Вы узнаете, как shared memory и memory-mapped files делают это возможным.

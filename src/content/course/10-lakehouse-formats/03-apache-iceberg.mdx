@@ -223,6 +223,16 @@ spark.sql("""
 Для углублённого изучения внутренней архитектуры Iceberg (трёхуровневые метаданные, manifest files, partition evolution) см. курс [Storage Formats Deep-Dive](/storage-formats/12-iceberg/01-catalog-architecture-metadata/).
 </Callout>
 
-## Что дальше?
+<CrossCourseRef
+  courseId="storage-formats"
+  lessonSlug="12-iceberg/01-catalog-architecture-metadata"
+  label="Iceberg: catalog и metadata layer"
+  preview="Manifest files, manifest list, snapshots, REST catalog (Polaris/Lakekeeper/Unity Catalog OSS) — как устроен metadata-tier Iceberg на уровне файлов."
+/>
 
-В следующем уроке мы разберём **Apache Hudi** -- формат, разработанный Uber для upsert-heavy нагрузок. Ключевые фичи: COW/MOR table types и incremental queries.
+<CrossCourseRef
+  courseId="clickhouse-course"
+  lessonSlug="15-integrations/04-iceberg-integration"
+  label="ClickHouse + Iceberg: чтение и запись"
+  preview="Как ClickHouse читает (и теперь пишет) Iceberg-таблицы через DataLakeCatalog — практический lakehouse-сценарий вне Spark."
+/>

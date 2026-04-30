@@ -110,6 +110,20 @@ Optimizer итеративно применяет набор правил до *
 
 В следующем уроке мы подробно разберем первые две стадии: как Parser создает Unresolved Logical Plan и как Analyzer разрешает ссылки через Catalog. Вы научитесь читать секции `Parsed Logical Plan` и `Analyzed Logical Plan` в выводе `explain(true)`.
 
+<CrossCourseRef
+  courseId="datafusion-course"
+  lessonSlug="02-architecture/01-query-pipeline"
+  label="DataFusion: pipeline запроса"
+  preview="Альтернативный взгляд: тот же шаблон Logical → Physical в Rust-движке DataFusion. Полезно для сравнения дизайн-решений Catalyst и DataFusion."
+/>
+
+<CrossCourseRef
+  courseId="datafusion-course"
+  lessonSlug="06-query-optimization/01-optimizer-architecture"
+  label="DataFusion Optimizer: архитектура"
+  preview="Как устроен оптимизатор в DataFusion и почему многие правила (predicate pushdown, projection pushdown) совпадают с Catalyst по идеологии."
+/>
+
 <KnowledgeCheck
   question="Почему Catalyst использует гибридный подход (rule-based + cost-based), а не только один из них?"
   answer="Rule-based оптимизации (predicate pushdown, column pruning) — детерминированные и всегда улучшают план, но они не учитывают размеры данных. Cost-based оптимизации (порядок join, выбор стратегии) зависят от статистик таблиц и могут выбрать оптимальную стратегию для конкретного набора данных. Гибридный подход гарантирует базовые оптимизации (RBO) и адаптируется к реальным объемам данных (CBO)."

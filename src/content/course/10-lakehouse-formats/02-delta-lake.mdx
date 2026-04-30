@@ -212,6 +212,9 @@ spark.sql("""
 Для углублённого изучения внутренней архитектуры Delta Lake (transaction log, checkpoints, data skipping) см. курс [Storage Formats Deep-Dive](/storage-formats/11-delta-lake/01-transaction-log-architecture/).
 </Callout>
 
-## Что дальше?
-
-В следующем уроке мы разберём **Apache Iceberg** -- формат, разработанный Netflix для мультиdвижковых сред. Ключевая фича Iceberg -- **partition evolution** без перезаписи данных.
+<CrossCourseRef
+  courseId="storage-formats"
+  lessonSlug="11-delta-lake/01-transaction-log-architecture"
+  label="Delta Lake transaction log: внутренности"
+  preview="Как устроен _delta_log/ — JSON-коммиты, parquet checkpoints, протокол версионирования, конкурентные writer'ы и conflict resolution."
+/>

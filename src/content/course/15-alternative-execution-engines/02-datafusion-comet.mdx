@@ -211,3 +211,17 @@ Apache DataFusion Comet -- Spark-плагин на Rust, который:
 - Поддерживает Spark 3.4+ с 97% совместимостью Spark SQL тестов
 
 В следующем уроке мы разберём **Apache Gluten** -- второй нативный движок, использующий C++/Velox или ClickHouse как execution backend.
+
+<CrossCourseRef
+  courseId="datafusion-course"
+  lessonSlug="07-comet/01-comet-overview"
+  label="Comet с точки зрения DataFusion"
+  preview="Как Comet встроен в DataFusion со стороны Rust-движка: plan translation, native scan/shuffle, тонкости конфигурации и производительность."
+/>
+
+<CrossCourseRef
+  courseId="datafusion-course"
+  lessonSlug="07-comet/02-plan-translation"
+  label="Comet: трансляция планов"
+  preview="Подробный взгляд на то, как Spark-план превращается в DataFusion ExecutionPlan через Protobuf — какие операторы поддержаны, где fallback."
+/>

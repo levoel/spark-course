@@ -228,3 +228,10 @@ df = spark.createDataFrame([(1, "Alice"), (None, "Bob")], schema)
 ## Что дальше?
 
 В следующем уроке мы разберём **трансформации** -- select, filter, withColumn, withColumnRenamed -- операции, которые вы будете использовать в каждом Spark-приложении. Вы увидите, как одну и ту же логику можно выразить через PySpark API и Spark SQL.
+
+<CrossCourseRef
+  courseId="python-course"
+  lessonSlug="10-data-libraries-conceptual/01-pandas-concept"
+  label="Pandas vs Spark DataFrame: концептуальная разница"
+  preview="Где заканчивается pandas (single-machine, eager) и начинается Spark DataFrame (distributed, lazy). Полезно для миграции мышления из pandas в PySpark."
+/>
