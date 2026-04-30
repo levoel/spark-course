@@ -201,6 +201,10 @@ df4.show()  # action -- Spark строит план и выполняет всё
 
 **Spark 4.0: ANSI mode по умолчанию.** Начиная с Spark 4.0, ANSI mode включён по умолчанию (`spark.sql.ansi.enabled=true`). Это означает, что неявное приведение типов (например, `StringType` к `IntegerType`) теперь вызывает ошибку вместо тихого преобразования или NULL. Всегда указывайте типы явно в StructType, чтобы избежать runtime exceptions.
 
+<VersionBadge version="4.0" />
+
+**Spark 4.0: VARIANT как первоклассный тип данных.** Spark 4.0 ввёл `VariantType` как primitive Spark SQL type (не только Delta-фичу) для semi-structured данных JSON-like формы. В отличие от хранения JSON в `StringType`, VARIANT использует компактный binary layout с lazy parsing, columnar pruning и predicate pushdown -- это даёт до 8x ускорение на nested и flat-схемах по сравнению со строковыми колонками. Поддерживается arbitrary nesting (массивы, maps), сохранение типов в глубоко вложенных полях, совместимость с Delta Lake, Structured Streaming и Spark Connect. Используйте функции `parse_json`, `variant_get`, `try_variant_get`, `schema_of_variant` для работы с VARIANT-колонками. Это устраняет необходимость выбирать между schema-on-write (StructType) и schema-on-read (StringType + JSON-парсинг) для динамических данных.
+
 ## Schema Enforcement и nullable
 
 Spark проверяет соответствие данных схеме при чтении. Если колонка помечена как `nullable=False`, а данные содержат NULL -- Spark выбросит ошибку (в ANSI mode) или подставит значение по умолчанию.

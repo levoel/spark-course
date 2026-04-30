@@ -15,7 +15,7 @@ topics: ["DataFusion Comet", "Rust", "Spark Plugin", "Native Execution", "Arrow 
 
 <VersionBadge version="3.4" /> Comet поддерживает Spark 3.4.3--3.5.8 (полная поддержка) и Spark 4.0.1 (экспериментальная). Java 11/17, Scala 2.12/2.13.
 
-Последний релиз -- **0.13.0** (январь 2026), 169 PR от 15 контрибьюторов. Comet проходит **97% тестов Spark SQL** (24,000+ тестов по состоянию на v0.9.0), что делает его одним из наиболее совместимых нативных ускорителей.
+Последний релиз -- **0.14.0** (18 марта 2026), 189 PR от 21 контрибьютора. Ключевые улучшения: расширенная нативная Iceberg-интеграция (per-partition plan serialization, vended credentials) и нативная columnar-to-row конвертация по умолчанию (Rust вместо JVM). Comet проходит **97% тестов Spark SQL** (24,000+ тестов по состоянию на v0.9.0), что делает его одним из наиболее совместимых нативных ускорителей.
 
 ## Архитектура
 
@@ -101,9 +101,9 @@ Comet намеренно **избегает частичной замены** о
 
 ```bash
 spark-submit \
-  --jars comet-spark-spark3.5_2.12-0.13.0.jar \
-  --conf spark.driver.extraClassPath=comet-spark-spark3.5_2.12-0.13.0.jar \
-  --conf spark.executor.extraClassPath=comet-spark-spark3.5_2.12-0.13.0.jar \
+  --jars comet-spark-spark3.5_2.12-0.14.0.jar \
+  --conf spark.driver.extraClassPath=comet-spark-spark3.5_2.12-0.14.0.jar \
+  --conf spark.executor.extraClassPath=comet-spark-spark3.5_2.12-0.14.0.jar \
   --conf spark.plugins=org.apache.spark.CometPlugin \
   --conf spark.shuffle.manager=org.apache.spark.sql.comet.execution.shuffle.CometShuffleManager \
   --conf spark.memory.offHeap.enabled=true \

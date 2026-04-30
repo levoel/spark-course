@@ -155,7 +155,7 @@ spark.conf.get("spark.sql.codegen.maxFields")  # 100
 spark.conf.get("spark.sql.codegen.hugeMethodLimit")  # 8000
 ```
 
-<VersionBadge version="3.5+" /> Whole-Stage CodeGen стабилен и включен по умолчанию с Spark 2.0. В Spark 3.5.x он поддерживает все основные операторы: Filter, Project, HashAggregate, SortMergeJoin, BroadcastHashJoin, Sort.
+<VersionBadge version="3.5+" /> Whole-Stage CodeGen стабилен и включен по умолчанию с Spark 2.0. В Spark 4.0 GA (2025) и 4.1 (текущая) он поддерживает все основные операторы: Filter, Project, HashAggregate, SortMergeJoin, BroadcastHashJoin, Sort. Поведение совместимо со Spark 3.5 LTS.
 
 ### Анти-паттерн: отключение CodeGen
 
