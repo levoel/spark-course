@@ -105,3 +105,127 @@ topics: ["Конфигурация", "Memory", "Shuffle", "SQL", "Streaming", "A
 4. **Документируйте** — фиксируйте изменения конфигурации и их причины
 
 > **Совет:** Используйте `spark.conf.get("spark.sql.shuffle.partitions")` для проверки текущего значения параметра в runtime.
+
+---
+
+## Migration guide: Spark 3.5 LTS → 4.0/4.1
+
+<VersionBadge version="4.0" />
+
+Spark 4.0 — первая major-версия за пять лет (3.0 вышел в 2020). Между 3.5 LTS и 4.0 есть набор breaking changes, которые требуют явного внимания при миграции production-нагрузок.
+
+### Breaking change 1: ANSI SQL mode включён по умолчанию
+
+Самое большое изменение. До 4.0 `spark.sql.ansi.enabled = false` означало, что Spark при ошибочных операциях возвращал `NULL` вместо исключения. В 4.0 дефолт перевернулся: `spark.sql.ansi.enabled = true`.
+
+| Операция | Spark 3.x | Spark 4.0 (ANSI) |
+|----------|-----------|-------------------|
+| `SELECT 10 / 0` | `NULL` | `ArithmeticException: Division by zero` |
+| `SELECT CAST('abc' AS INT)` | `NULL` | `Cannot cast 'abc' to INT` |
+| `SELECT CAST(2147483648 AS INT)` | overflow → `-2147483648` | `Overflow in cast` |
+| `SELECT INT '5' + INT '2147483647'` | overflow silent | `Overflow in arithmetic` |
+| `SELECT a[i]` для `i >= length(a)` | `NULL` | `Array index out of bounds` |
+
+```python
+# Откатить дефолт на legacy-поведение (на время миграции)
+spark.conf.set("spark.sql.ansi.enabled", "false")
+
+# Лучшая стратегия: включить ANSI на 3.5 заранее
+# и пройтись по всем pipeline для отлова latent bugs
+spark = SparkSession.builder \
+    .config("spark.sql.ansi.enabled", "true") \
+    .getOrCreate()
+```
+
+**Migration strategy:**
+1. Включить `spark.sql.ansi.enabled=true` на стенде Spark 3.5
+2. Прогнать полный набор регрессионных тестов
+3. Зафиксировать каждое исключение, которое раньше "молча" возвращало NULL
+4. Решить: business-defect (исправить) или legacy-семантика (обернуть в `try_cast`/`try_divide`)
+5. Только после этого мигрировать сам кластер
+
+### Breaking change 2: новые typed-функции для безопасных операций
+
+Spark 4.0 формализует "try*" семейство функций — версии операций, которые возвращают NULL вместо exception (как было в 3.x):
+
+```python
+from pyspark.sql.functions import try_cast, try_divide, try_add
+
+# До 4.0: cast возвращал NULL при ошибке
+df.withColumn("amount_int", col("amount").cast("int"))
+
+# В 4.0 ANSI: throws -> используйте try_cast
+df.withColumn("amount_int", try_cast(col("amount"), "int"))
+
+# Безопасное деление
+df.withColumn("ratio", try_divide(col("a"), col("b")))  # NULL если b=0
+```
+
+### Breaking change 3: удалённые APIs
+
+| Удалено в 4.0 | Замена |
+|---------------|--------|
+| `SQLContext` (deprecated с 2.0) | `SparkSession` |
+| `HiveContext` | `SparkSession.builder.enableHiveSupport()` |
+| `mapred`-ориентированные APIs | `mapreduce`-эквиваленты |
+| Scala 2.12 binary | Scala 2.13 (default) |
+| Java 8 | Java 17 (минимум 11 для cluster, 17 рекомендуется) |
+| Python 3.8 | Python 3.9+ |
+
+### Breaking change 4: изменения в data sources
+
+```python
+# Spark 3.x: read.json делал schema inference по умолчанию
+df = spark.read.json("path")
+
+# Spark 4.0: всё ещё работает, но schema inference -- более строгая
+# Recommendation: явно задавать схему
+df = spark.read.schema(known_schema).json("path")
+```
+
+JSON inference в 4.0:
+- Числа без знака не приводятся к LongType автоматически (стало честное определение типа)
+- `dropFieldIfAllNull` сейчас работает корректно (3.5 имел бажный edge case)
+- Encoding по умолчанию -- `UTF-8` (раньше зависело от platform)
+
+### Breaking change 5: timestamp семантика
+
+```python
+# Spark 3.x: TIMESTAMP без timezone был ambiguous
+# Spark 4.0: TIMESTAMP_NTZ (без timezone) и TIMESTAMP_LTZ (local) -- разделены
+spark.sql("SELECT CAST('2026-01-15 10:00:00' AS TIMESTAMP_NTZ)")  // 4.0
+```
+
+`spark.sql.timestampType` -- `TIMESTAMP_LTZ` (default) или `TIMESTAMP_NTZ`. Если вы храните "wall clock" события — переключитесь на `TIMESTAMP_NTZ`.
+
+### Compatibility flags для постепенной миграции
+
+| Флаг | Дефолт 4.0 | Назначение |
+|------|------------|------------|
+| `spark.sql.ansi.enabled` | `true` | Откатить на `false` для legacy-семантики |
+| `spark.sql.legacy.timeParserPolicy` | `CORRECTED` | `LEGACY` для старого парсинга дат |
+| `spark.sql.storeAssignmentPolicy` | `ANSI` | `LEGACY` для silent-cast при INSERT |
+| `spark.sql.legacy.allowNegativeScaleOfDecimal` | `false` | Restore decimal с отрицательным scale |
+| `spark.sql.legacy.respectNullableInTextDatasetConversion` | `false` | Preserve nullable в text-readers |
+| `spark.sql.legacy.charVarcharAsString` | `false` | CHAR/VARCHAR как STRING без padding |
+
+### 10-step migration playbook
+
+1. **Audit** — пройтись по pipeline, найти все `cast()`, division, array-indexing, JSON-readers без явной схемы.
+2. **Enable ANSI на 3.5** — в staging-окружении с `spark.sql.ansi.enabled=true`.
+3. **Fix или wrap** — каждое падение либо исправить логику, либо обернуть в `try_*`.
+4. **Update connectors** — Delta 4.0 (требует Spark 4.0), Iceberg 1.5+, Hudi 1.0+.
+5. **Update Java/Scala/Python** — поднять runtime до Java 17, Scala 2.13, Python 3.9+.
+6. **Test deprecation paths** — убрать `SQLContext` и `HiveContext` ещё до миграции.
+7. **Migrate cluster** — обновить Spark binary до 4.0 (или 4.1 если уже доступен).
+8. **Re-run regression suite** — zero-error baseline на 4.0.
+9. **Re-enable optimizations** — Spark Connect, ANSI, `TIMESTAMP_NTZ` где уместно.
+10. **Remove compat flags** — после стабилизации убрать все `legacy.*` флаги.
+
+<Callout type="warning">
+**Не пытайтесь мигрировать "одним подходом".** На production-нагрузках с тысячами SQL-запросов миграция занимает 4-8 недель. ANSI mode выявляет latent bugs, которые годами были скрыты. Лучшая практика: enable ANSI в 3.5, исправить все ошибки, и только потом переключать кластер на 4.0.
+</Callout>
+
+<Callout type="info">
+Spark 4.1 — minor-релиз поверх 4.0 без дополнительных breaking changes (политика API stability в major-line). Если вы переходите на 4.x, целиться сразу на последний 4.x — нет смысла застревать на 4.0.0. Между 4.0 и 4.1 добавлены новые pipe-операторы, дополнения в SQL UDFs и улучшения Spark Connect, но никаких удалений APIs.
+</Callout>

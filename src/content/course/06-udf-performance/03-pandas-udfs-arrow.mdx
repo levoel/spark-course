@@ -206,6 +206,118 @@ def good_pandas_udf(names: pd.Series) -> pd.Series:
   answer="Pandas UDF всё равно получит данные батчем через Arrow (а не per-row как Python UDF), что сокращает overhead сериализации. Однако Python for-loop внутри функции будет в 10-100x медленнее, чем vectorized pandas/NumPy операции. Вы получите benefit от Arrow transfer, но потеряете benefit от vectorized computation. Результат: быстрее Python UDF (из-за Arrow), но значительно медленнее правильно написанного Pandas UDF (из-за for-loop)."
 />
 
+## Polymorphic Python UDTFs (Spark 4.0)
+
+<VersionBadge version="4.0" />
+
+В дополнение к Pandas UDF, Spark 4.0 ввёл **Python User-Defined Table Functions (UDTFs)** -- функции, которые принимают вход (skalary, columns или таблицу целиком) и **возвращают таблицу** из произвольного числа строк. Это принципиально новый instrument: UDF возвращает скаляр, UDTF возвращает rows.
+
+Главная новинка 4.0 -- **polymorphic UDTFs**, у которых выходная схема определяется не статической аннотацией, а вычисляется самой функцией в зависимости от входных аргументов.
+
+### Базовый UDTF: фиксированная схема
+
+```python
+from pyspark.sql.functions import udtf
+
+@udtf(returnType="word: string, length: int")
+class TokenizeUDTF:
+    def eval(self, text: str):
+        for word in text.split():
+            yield (word, len(word))
+
+# Использование как table-valued function
+spark.sql("SELECT * FROM TokenizeUDTF('hello world spark')").show()
+# +------+------+
+# |  word|length|
+# +------+------+
+# | hello|     5|
+# | world|     5|
+# | spark|     5|
+# +------+------+
+```
+
+`eval()` -- generator-метод, который yields rows. Каждая входная строка может породить N выходных строк (включая 0).
+
+### Polymorphic UDTF: динамическая схема
+
+В polymorphic режиме UDTF реализует classmethod `analyze()`, который получает мета-информацию об аргументах (тип каждого, литеральное значение если scalar) и **возвращает StructType** для выходной схемы. Spark вызывает `analyze()` один раз во время planning -- результат используется как outputSchema конкретного вызова.
+
+```python
+from pyspark.sql.functions import udtf, AnalyzeArgument, AnalyzeResult
+from pyspark.sql.types import StructType, StructField, StringType, IntegerType
+
+@udtf
+class SplitColumnsUDTF:
+    @staticmethod
+    def analyze(text_arg: AnalyzeArgument, n_arg: AnalyzeArgument) -> AnalyzeResult:
+        # text_arg.value может быть None (column reference) или конкретное значение (literal)
+        n = n_arg.value  # сколько колонок-частей вернуть -- известно на planning-фазе
+        fields = [StructField(f"part_{i}", StringType(), True) for i in range(n)]
+        fields.append(StructField("remainder", StringType(), True))
+        return AnalyzeResult(schema=StructType(fields))
+
+    def eval(self, text: str, n: int):
+        parts = text.split(",", n)
+        # Pad до n частей и положить остаток в remainder
+        head = parts[:n] + [None] * max(0, n - len(parts))
+        remainder = parts[n] if len(parts) > n else None
+        yield tuple(head + [remainder])
+
+# n=2 -> схема (part_0, part_1, remainder)
+spark.sql("SELECT * FROM SplitColumnsUDTF('a,b,c,d,e', 2)").show()
+# +------+------+---------+
+# |part_0|part_1|remainder|
+# +------+------+---------+
+# |     a|     b|    c,d,e|
+# +------+------+---------+
+
+# n=4 -> схема (part_0, part_1, part_2, part_3, remainder)
+spark.sql("SELECT * FROM SplitColumnsUDTF('a,b,c,d,e', 4)").show()
+# +------+------+------+------+---------+
+# |part_0|part_1|part_2|part_3|remainder|
+# +------+------+------+------+---------+
+# |     a|     b|     c|     d|        e|
+# +------+------+------+------+---------+
+```
+
+Один и тот же UDTF возвращает разную outputSchema в зависимости от literal-аргумента `n`. Это и есть polymorphism: одна функция, разные структурные типы выхода.
+
+### Lazy evaluation и terminate()
+
+UDTF -- **lazy evaluation**: код в `eval()` не выполняется до тех пор, пока action не запустит план. Это касается и polymorphic-варианта: `analyze()` вызывается на planning, `eval()` -- только при materialization.
+
+Опциональный метод `terminate()` вызывается ПОСЛЕ обработки всех входных строк и может yield-ить дополнительные rows -- удобно для подведения итогов:
+
+```python
+@udtf(returnType="event_type: string, count: int")
+class EventCounterUDTF:
+    def __init__(self):
+        self._counts = {}
+
+    def eval(self, event_type: str):
+        self._counts[event_type] = self._counts.get(event_type, 0) + 1
+        # eval ничего не yield -- агрегируем in-memory
+
+    def terminate(self):
+        # finalization: отдаём агрегацию когда вход исчерпан
+        for event_type, count in self._counts.items():
+            yield (event_type, count)
+```
+
+### Когда UDTF vs alternatives
+
+| Сценарий | Инструмент | Причина |
+|----------|------------|---------|
+| Скаляр в скаляр | Built-in / Pandas UDF | Simpler, лучше оптимизация |
+| 1 row -> N rows фиксированной схемы | UDTF (фиксированная) | explode() работает только для arrays |
+| 1 row -> N rows динамической схемы | Polymorphic UDTF | Невозможно через explode/Pandas UDF |
+| Группа -> новый DataFrame | applyInPandas (Grouped Map) | UDTF работает per-row, не per-group |
+| Парсинг JSON в variant-колонки | Polymorphic UDTF | Схема зависит от schema-inferring аргумента |
+
+<Callout type="info">
+Polymorphic UDTF лучше всего подходят для случаев, где **схема выхода известна на planning-фазе** (зависит от literal-аргументов), но не известна на write-time UDTF-кода. Классические применения: schema-aware JSON-парсеры, конфигурируемые pivot-функции, динамическое разбиение строк по конфигу разделителей.
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы разберём **Scala UDF** -- как UDF на JVM-языке обходит проблему сериализации, обеспечивая производительность ~2x от встроенных функций.

@@ -176,6 +176,108 @@ spark.sql("""
 """)
 ```
 
+### Type widening <VersionBadge version="4.0" />
+
+Type widening -- возможность изменить тип колонки на более широкий (`INT` -> `BIGINT`, `FLOAT` -> `DOUBLE`, `DECIMAL(10,2)` -> `DECIMAL(20,2)`) **без переписывания parquet-файлов**. Доступно в preview с Delta 3.2 и **полностью production-ready в Delta 4.0**.
+
+Принципиальное отличие от классического `ALTER TABLE ALTER COLUMN`: широкий тип записывается в schema metadata, а старые parquet-файлы продолжают использовать узкий тип на физическом уровне. При чтении Delta автоматически промотирует значения. Никакого rewrite -- мутация почти бесплатная.
+
+```python
+# Включение type widening
+spark.sql("""
+    ALTER TABLE events
+    SET TBLPROPERTIES ('delta.enableTypeWidening' = 'true')
+""")
+
+# Расширение типа колонки -- мгновенная metadata-операция
+spark.sql("ALTER TABLE events ALTER COLUMN amount TYPE BIGINT")
+spark.sql("ALTER TABLE events ALTER COLUMN ratio TYPE DOUBLE")
+```
+
+Поддерживаемые widenings:
+
+| Из | В | Условие |
+|----|-----|---------|
+| `BYTE` | `SHORT`, `INT`, `LONG` | Безопасно (sign-preserving) |
+| `SHORT` | `INT`, `LONG` | Безопасно |
+| `INT` | `LONG` | Безопасно |
+| `FLOAT` | `DOUBLE` | Безопасно |
+| `DECIMAL(p1,s1)` | `DECIMAL(p2,s2)` | `p2-s2 >= p1-s1` и `s2 >= s1` |
+| `DATE` | `TIMESTAMP_NTZ` | Сохраняется wall-clock |
+
+Schema evolution на write автоматически использует widening, если включён `mergeSchema`:
+
+```python
+# Автоматическое расширение типа при write новых данных
+new_data_with_bigger_int.write.format("delta") \
+    .option("mergeSchema", "true") \
+    .mode("append") \
+    .save("/data/events")
+# amount был INT -> Delta автоматически продвинет к BIGINT
+```
+
+### Drop column / Drop feature <VersionBadge version="4.0" />
+
+Delta 4.0 формализует operation `DROP FEATURE` -- удаление table feature вместе с возможностью **снизить protocol version** для совместимости с старыми клиентами.
+
+```python
+# Удалить колонку (column mapping должен быть включён)
+spark.sql("ALTER TABLE events DROP COLUMN deprecated_field")
+```
+
+```sql
+-- Удалить целую table feature (например, deletion vectors)
+ALTER TABLE events DROP FEATURE deletionVectors;
+-- Если активные deletion vectors есть, Delta переписывает parquet-файлы,
+-- материализуя удаления. После этого feature можно безопасно убрать.
+```
+
+Drop feature workflow в 4.0 умнее, чем в 3.x: сохраняется set of "safe checkpoints", доступных и старым (downgrade-target), и новым клиентам, чтобы во время drop-операции table оставалась читаемой обоими протокольными версиями.
+
+```sql
+-- Полный workflow drop type widening:
+ALTER TABLE events DROP FEATURE typeWidening;
+-- Delta перезаписывает parquet-файлы, where применённое расширение типа
+-- было только в metadata. После завершения протокол can be downgraded.
+```
+
+### Deletion vectors evolution <VersionBadge version="4.0" />
+
+Deletion vectors -- storage optimization, появившаяся ещё до 4.0. Без них удаление одной строки из parquet-файла требует rewrite целого файла. С DV: Delta создаёт bitmap "deleted rows" в отдельном файле, parquet остаётся неизменным, а при чтении DV применяется поверх данных.
+
+```python
+# Включить deletion vectors на новой таблице
+spark.sql("""
+    CREATE TABLE events (
+        event_id STRING,
+        timestamp TIMESTAMP,
+        payload STRING
+    ) USING delta
+    TBLPROPERTIES ('delta.enableDeletionVectors' = 'true')
+""")
+
+# DELETE становится почти мгновенным
+spark.sql("DELETE FROM events WHERE event_id = 'abc-123'")
+# Delta пишет DV-файл вместо rewrite parquet
+```
+
+Что нового в 4.0 для deletion vectors:
+
+1. **`DROP FEATURE deletionVectors`** -- безопасный pathway удаления feature. Delta автоматически материализует все DV в parquet-уровне, после чего metadata-протокол можно downgrade.
+2. **Streaming-aware DV reads** -- structured streaming в 4.0 корректно учитывает DV при micro-batch-чтении (раньше DV пропускались, что приводило к чтению удалённых записей в стриминге).
+3. **DV + Z-ORDER coexistence** -- Z-ORDER теперь корректно re-applies DV при rewrite (раньше Z-ORDER обнулял DV, потеряв удаления).
+
+| Операция | Без DV | С DV |
+|----------|--------|------|
+| `DELETE WHERE id = X` (1 row) | Rewrite целого файла (~128 MB) | Append bitmap (~10 KB) |
+| `MERGE INTO ... DELETE` | Rewrite N файлов | Append N bitmaps |
+| Read performance | Native parquet read | Read parquet + apply DV (overhead ~5-10%) |
+| OPTIMIZE behavior | Standard | Materializes DVs, removes bitmap files |
+
+<Callout type="info">
+Deletion vectors радикально улучшают latency удалений в GDPR / right-to-be-forgotten пайплайнах: вместо переписывания терабайтов файлов из-за одной row, операция становится metadata-only. После накопления критической массы DV (например, 10% rows в файле помечены deleted) запустите `OPTIMIZE` -- он смержит изменения в новые parquet и обнулит DV.
+</Callout>
+
 <KnowledgeCheck
   question="Чем UniForm в Delta Lake полезен для мультиdвижковых архитектур?"
   answer="UniForm (Universal Format) автоматически генерирует metadata в формате Apache Iceberg и Apache Hudi при каждой записи в Delta-таблицу. Это позволяет другим вычислительным движкам (Trino, Presto, Snowflake) читать Delta-таблицу через привычный им Iceberg или Hudi интерфейс без конвертации данных. Решает проблему vendor lock-in -- данные физически хранятся в Delta, но доступны через любой формат."

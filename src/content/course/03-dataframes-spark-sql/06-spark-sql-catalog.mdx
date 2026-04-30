@@ -202,6 +202,122 @@ report.write.mode("overwrite").parquet("/reports/regional_sales/")
   answer="Оба API проходят через один и тот же Catalyst optimizer. DataFrame API строит логический план из вызовов методов (filter, join, groupBy), SQL-запрос парсится в логический план из текстового синтаксиса. После этого оба логических плана проходят одинаковые стадии оптимизации: analysis, logical optimization (predicate pushdown, constant folding), physical planning (выбор join-стратегии). Результат -- идентичный физический план и DAG из stages/tasks."
 />
 
+## Spark 4.0 SQL: новые возможности
+
+<VersionBadge version="4.0" />
+
+В Spark 4.0 SQL-движок получил три крупных языковых расширения, которые меняют сам способ написания запросов: pipe syntax для функциональной композиции, native SQL UDFs и first-class string collations.
+
+### Pipe syntax (`|>`): функциональная композиция в SQL
+
+Spark 4.0 ввёл pipe-оператор `|>`, который позволяет читать SQL-запрос сверху вниз -- так же, как трансформации в DataFrame API. Каждый pipe-этап получает на вход результат предыдущего и применяет к нему один SQL-оператор.
+
+```sql
+-- Классический SQL: читать снаружи внутрь, FROM-WHERE-GROUP-HAVING-SELECT-ORDER
+SELECT region, COUNT(*) AS sales_count, SUM(amount_usd) AS revenue
+FROM clean_sales
+WHERE amount_usd > 0
+GROUP BY region
+HAVING revenue > 100000
+ORDER BY revenue DESC;
+
+-- Pipe syntax: тот же запрос как линейная цепочка
+FROM clean_sales
+|> WHERE amount_usd > 0
+|> AGGREGATE COUNT(*) AS sales_count, SUM(amount_usd) AS revenue
+   GROUP BY region
+|> WHERE revenue > 100000
+|> ORDER BY revenue DESC;
+```
+
+Поддерживаемые операторы в pipe-цепочке: `SELECT`, `EXTEND`, `DROP`, `SET`, `WHERE`, `AGGREGATE`, `JOIN`, `ORDER BY`, `LIMIT`, `UNION`, `TABLESAMPLE`, `PIVOT`, `UNPIVOT`. Каждый pipe-шаг -- независимая лексическая единица, и предыдущий результат адресуется через позицию в цепочке.
+
+Главное преимущество -- **инкрементальное построение колонок**:
+
+```sql
+-- EXTEND добавляет колонку, опираясь на предыдущие шаги
+FROM orders
+|> EXTEND amount * 0.1 AS commission
+|> EXTEND commission + amount AS total_payable
+|> SELECT order_id, total_payable
+|> ORDER BY total_payable DESC;
+```
+
+Pipe syntax не заменяет классический SQL -- они полностью совместимы и могут смешиваться в одном запросе. На уровне Catalyst оба синтаксиса парсятся в одинаковый logical plan, поэтому никакого performance-overhead нет.
+
+### Native SQL UDFs
+
+До Spark 4.0 пользовательские функции на чистом SQL были невозможны: для повторного использования логики нужно было писать Scala/Python UDF, что несло overhead и ломало оптимизатор. Spark 4.0 добавил `CREATE FUNCTION ... LANGUAGE SQL` -- native SQL-функции, которые встраиваются прямо в Catalyst.
+
+```sql
+-- Temporary SQL UDF
+CREATE OR REPLACE TEMPORARY FUNCTION discount_amount(price DECIMAL(10,2), discount_pct INT)
+RETURNS DECIMAL(10,2)
+LANGUAGE SQL
+RETURN price - (price * discount_pct / 100);
+
+-- Permanent SQL UDF (сохраняется в catalog)
+CREATE OR REPLACE FUNCTION analytics.tier_label(amount DECIMAL(10,2))
+RETURNS STRING
+LANGUAGE SQL
+RETURN CASE
+    WHEN amount < 100 THEN 'bronze'
+    WHEN amount < 500 THEN 'silver'
+    WHEN amount < 2000 THEN 'gold'
+    ELSE 'platinum'
+END;
+
+-- Использование
+SELECT order_id,
+       discount_amount(price, 15) AS price_after,
+       analytics.tier_label(price) AS tier
+FROM orders;
+```
+
+Ключевое отличие от Python/Scala UDF: SQL UDF **inline в logical plan** при analysis-фазе. Catalyst видит тело функции как обычное выражение, применяет predicate pushdown, constant folding и whole-stage codegen. Никакой serialization-overhead Python-worker'а или JVM-callback не возникает.
+
+### String collations: language-aware сравнение
+
+В Spark 4.0 STRING-тип получил атрибут collation -- набор правил сравнения и сортировки, специфичный для locale или режима (case/accent insensitive).
+
+```sql
+-- Case-insensitive сравнение через UTF8_BINARY_LCASE
+SELECT * FROM users
+WHERE email = 'JOHN@EXAMPLE.COM' COLLATE UTF8_BINARY_LCASE;
+
+-- Unicode case-insensitive + accent-insensitive (для multi-lingual)
+SELECT name FROM customers
+WHERE name = 'andre' COLLATE UNICODE_CI_AI;
+-- Найдёт 'André', 'ANDRE', 'andré' одной операцией
+
+-- Collation на уровне колонки (вся таблица)
+CREATE TABLE products (
+    sku    STRING,
+    name   STRING COLLATE UNICODE_CI,  -- case-insensitive
+    region STRING COLLATE UTF8_BINARY  -- byte-exact (default)
+);
+
+-- Group by с правильным locale-aware ordering
+SELECT region, COUNT(*) FROM customers
+GROUP BY region COLLATE UNICODE_CI_AI;
+```
+
+Поддерживаемые collations: `UTF8_BINARY` (default, byte-exact), `UTF8_BINARY_LCASE` (case-insensitive ASCII), `UNICODE` (full Unicode-aware), `UNICODE_CI` (case-insensitive), `UNICODE_AI` (accent-insensitive), `UNICODE_CI_AI` (оба) -- плюс locale-specific варианты (`fr-FR`, `de-DE`, `tr-TR` и т.д.).
+
+<Callout type="info">
+Collation встроены в catalyst-операторы, а не реализуются через runtime-преобразование. При фильтрации с `COLLATE UTF8_BINARY_LCASE` Spark не делает `LOWER(col) = LOWER(literal)` -- он использует специализированный операторный код, что критично для производительности на больших таблицах. Это первоклассная фича на уровне типа, а не runtime-помощник.
+</Callout>
+
+```sql
+-- Сравнение производительности: collation vs UPPER()
+-- Без collation (классический подход): два UPPER() per row
+SELECT * FROM users WHERE UPPER(name) = UPPER('john');
+-- С collation: специализированный native сравниватель
+SELECT * FROM users WHERE name = 'john' COLLATE UTF8_BINARY_LCASE;
+```
+
+В типичных бенчмарках collation-based сравнение на 30-60% быстрее `UPPER()/LOWER()` обхода -- разница накапливается при join'ах с string-ключами.
+
 ## Что дальше?
 
 В следующем уроке мы разберём **UDF (User-Defined Functions)** -- как расширить Spark собственными функциями, когда встроенных недостаточно, и почему Python UDF значительно медленнее pandas UDF.
