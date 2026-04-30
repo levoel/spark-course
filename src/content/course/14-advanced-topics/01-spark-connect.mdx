@@ -240,7 +240,7 @@ df.show()
 | Pandas UDF + spark.range driving | Workaround | Средний | Python worker | Legacy-проекты на 3.x |
 | collect() -> spark.createDataFrame | Anti-pattern | Огромный | Driver | Только prototyping |
 
-Ключевая выгода Python Data Source API -- **нативная интеграция в Spark plan**. В отличие от UDF, которые требуют JVM <-> Python serialization on per-row basis, Python Data Source общается с executor через Arrow batch interface (как Pandas UDF), и Catalyst видит Source как обычный Scan-узел -- predicate pushdown, partition pruning, column pruning работают штатно (если reader реализует соответствующие capabilities).
+Ключевая выгода Python Data Source API -- **нативная интеграция в Spark plan**. В отличие от UDF, которые требуют JVM &lt;-&gt; Python serialization on per-row basis, Python Data Source общается с executor через Arrow batch interface (как Pandas UDF), и Catalyst видит Source как обычный Scan-узел -- predicate pushdown, partition pruning, column pruning работают штатно (если reader реализует соответствующие capabilities).
 
 ### Streaming-aware sources
 
