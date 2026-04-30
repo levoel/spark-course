@@ -94,6 +94,13 @@
     "streaming",
     "performance"
   ],
+  "prerequisites": {
+    "courses": [
+      {"slug": "python-course", "level": "required"},
+      {"slug": "storage-formats", "level": "required"}
+    ],
+    "external": []
+  },
   "estimatedHours": 80,
   "pricing": {
     "type": "free"
