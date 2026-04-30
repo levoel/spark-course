@@ -202,6 +202,10 @@ df.write \
   answer="Для 1M уникальных значений оптимален FPP = 0.01-0.05 (1-5%). При FPP=0.05 bloom filter занимает ~1.5MB на row group и пропускает 95% неподходящих блоков. FPP=0.01 даёт 99% skip rate, но увеличивает размер до ~2.4MB. FPP=0.001 (99.9%) даёт ~3.6MB -- marginal improvement за значительный storage cost. Выбор зависит от частоты точечных запросов: для частых lookups (OLTP-like) стоит FPP=0.01, для редких аналитических -- FPP=0.05 достаточно."
 />
 
+<Callout type="tip">
+Для углублённого изучения реализации bloom filters в форматах хранения см. курс [Storage Formats Deep-Dive](/storage-formats/02-parquet/01-row-groups/) — bloom filters в Parquet и [bloom filters в ORC](/storage-formats/03-orc/01-stripes/).
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы разберём **compaction и vacuum** -- как поддерживать оптимальный размер файлов и очищать устаревшие версии данных.

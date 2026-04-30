@@ -159,6 +159,10 @@ df.write.parquet("/data/daily_report/")
   answer="Avro предпочтителен в трёх сценариях: (1) Потоковые данные (Kafka + Schema Registry) -- Avro строковый, поэтому записывается быстрее и подходит для append-only потоков; (2) Частая schema evolution -- Avro поддерживает добавление, удаление, переименование и перемещение полей с обратной совместимостью; (3) Межсервисное взаимодействие (RPC, serialization) -- Avro имеет компактный бинарный формат и богатую поддержку schema negotiation. Для аналитических запросов Parquet всегда лучше благодаря column pruning и predicate pushdown."
 />
 
+<Callout type="tip">
+Для углублённого изучения внутренней структуры форматов см. курс [Storage Formats Deep-Dive](/storage-formats/02-parquet/01-row-groups/) — Parquet (row groups, page index, bloom filters), [ORC](/storage-formats/03-orc/01-stripes/) (stripes, индексы, PPD) и [Avro](/storage-formats/04-avro/01-container-format/) (контейнерный формат, Schema Registry, schema evolution).
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы изучим **Z-ordering и data skipping** -- как организовать данные внутри Parquet-файлов для максимально эффективного пропуска ненужных блоков при фильтрации.

@@ -179,6 +179,10 @@ for table in tables:
   answer="1) OPTIMIZE каждые 2-4 часа (не каждый час -- OPTIMIZE сам создаёт load). Можно настроить по количеству новых файлов: если накопилось > 100 мелких файлов, запускать OPTIMIZE. 2) VACUUM ежедневно с retention = 7 дней (default). 3) Запускать maintenance в off-peak часы (ночью). 4) OPTIMIZE с ZORDER BY для столбцов, часто используемых в WHERE. 5) Мониторить число файлов per partition: если > 500 -- OPTIMIZE нужен срочно."
 />
 
+<Callout type="tip">
+Для углублённого изучения maintenance-операций lakehouse-форматов см. курс [Storage Formats Deep-Dive](/storage-formats/11-delta-lake/01-transaction-log-architecture/) — compaction и vacuum в Delta Lake, и [maintenance в Iceberg](/storage-formats/12-iceberg/01-catalog-architecture-metadata/) (expire snapshots, rewrite data files).
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы подробно разберём **проблему маленьких файлов** -- почему она возникает, как диагностировать и какие инструменты Spark предоставляет для её решения помимо OPTIMIZE.

@@ -219,6 +219,10 @@ spark.sql("""
 - Нужны incremental queries для CDC (рассмотрите Hudi)
 - Streaming-first с changelog (рассмотрите Paimon)
 
+<Callout type="tip">
+Для углублённого изучения внутренней архитектуры Iceberg (трёхуровневые метаданные, manifest files, partition evolution) см. курс [Storage Formats Deep-Dive](/storage-formats/12-iceberg/01-catalog-architecture-metadata/).
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы разберём **Apache Hudi** -- формат, разработанный Uber для upsert-heavy нагрузок. Ключевые фичи: COW/MOR table types и incremental queries.

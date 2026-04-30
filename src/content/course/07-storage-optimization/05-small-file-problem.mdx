@@ -214,6 +214,10 @@ print(f"Максимальный: {max(sizes)/1024/1024:.1f} MB")
 
 Все эти техники работают **вместе** -- Z-ordering эффективен только после compaction, bloom filters дополняют min/max statistics, а AQE автоматически коалесцирует маленькие партиции.
 
+<Callout type="tip">
+Для углублённого изучения стратегий выбора форматов и оптимального размера файлов см. курс [Storage Formats Deep-Dive](/storage-formats/17-practical-choice/01-workload-decision-framework/) — decision framework для выбора формата под конкретную нагрузку.
+</Callout>
+
 ## Что дальше?
 
 В следующем модуле мы перейдём к **мониторингу и наблюдаемости** -- как использовать Spark UI, History Server, Prometheus и Grafana для диагностики production-проблем.

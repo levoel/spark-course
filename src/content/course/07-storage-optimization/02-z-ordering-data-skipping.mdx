@@ -161,6 +161,10 @@ Z-ordering эффективен для столбцов со **средней к
   answer="Сортировка по столбцу A группирует данные только по этому столбцу. Значения столбца B оказываются случайно распределены по row groups. Для запроса WHERE A = x AND B = y data skipping работает только по A (min/max узкие), но не по B (min/max охватывают весь диапазон в каждом row group). Z-ordering решает это, чередуя биты обоих столбцов, что обеспечивает кластеризацию данных одновременно по нескольким измерениям."
 />
 
+<Callout type="tip">
+Для углублённого изучения encoding-техник (dictionary, RLE, delta) и Parquet metadata (page index, column index) см. курс [Storage Formats Deep-Dive](/storage-formats/08-encoding/01-information-theory/) — модуль encoding и [модуль Parquet](/storage-formats/02-parquet/01-row-groups/).
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы изучим **bloom filters** -- вероятностные структуры данных, которые дополняют min/max statistics для высококардинальных столбцов (user_id, session_id), где Z-ordering неэффективен.

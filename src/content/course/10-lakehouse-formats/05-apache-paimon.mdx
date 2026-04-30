@@ -209,6 +209,10 @@ spark.sql("""
 - Databricks экосистема (Delta -- нативная интеграция)
 - Нужна partition evolution без rewrite (Iceberg)
 
+<Callout type="tip">
+Для углублённого изучения внутренней архитектуры Paimon (LSM-tree, changelog, merge engines) см. курс [Storage Formats Deep-Dive](/storage-formats/14-paimon/01-lsm-tree-architecture/).
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы сведём все четыре формата в **матрицу сравнения** и построим decision tree для выбора формата под ваш конкретный сценарий.

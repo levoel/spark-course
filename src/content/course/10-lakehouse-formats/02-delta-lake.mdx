@@ -208,6 +208,10 @@ spark.sql("""
 - Основная нагрузка -- upserts с incremental pull (рассмотрите Hudi)
 - Streaming-first архитектура с changelog CDC (рассмотрите Paimon)
 
+<Callout type="tip">
+Для углублённого изучения внутренней архитектуры Delta Lake (transaction log, checkpoints, data skipping) см. курс [Storage Formats Deep-Dive](/storage-formats/11-delta-lake/01-transaction-log-architecture/).
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы разберём **Apache Iceberg** -- формат, разработанный Netflix для мультиdвижковых сред. Ключевая фича Iceberg -- **partition evolution** без перезаписи данных.

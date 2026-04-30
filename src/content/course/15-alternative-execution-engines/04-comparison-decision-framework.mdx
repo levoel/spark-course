@@ -42,19 +42,17 @@ topics: ["Comparison", "Decision Framework", "Comet", "Gluten", "Photon", "Migra
 
 Используйте этот flowchart для быстрого определения подходящего движка:
 
-```
-Вы на Databricks?
-├── Да -> Photon (built-in, zero config, лучшая интеграция)
-└── Нет -> Open-source deployment?
-    ├── Нужна простейшая настройка?
-    │   └── Да -> Comet (single JAR, Rust safety, 97% test compat)
-    ├── Нужна максимальная производительность?
-    │   └── Да -> Gluten + Velox (3.3x TPC-H, ByteDance-proven)
-    ├── Есть ClickHouse экспертиза?
-    │   └── Да -> Gluten + ClickHouse бэкенд
-    └── Не уверены -> Начните с Comet (lower risk),
-                       оцените Gluten позже
-```
+**Вы на Databricks?**
+
+- **Да** → **Photon** — built-in, zero config, лучшая интеграция
+- **Нет** → open-source deployment, ответьте на следующий блок:
+
+**Что важнее всего в open-source сценарии?**
+
+- Простейшая настройка → **Comet** (single JAR, Rust safety, 97% test compat)
+- Максимальная производительность → **Gluten + Velox** (3.3× TPC-H, ByteDance-proven)
+- Есть ClickHouse-экспертиза → **Gluten + ClickHouse** backend
+- Не уверены → начните с **Comet** (lower risk), оцените Gluten позже
 
 **Ключевое правило:** если сомневаетесь -- **начните с Comet**. Более простой deployment, более высокая тест-совместимость, меньше risk. Если Comet не даёт достаточного ускорения для вашего workload -- evaluate Gluten + Velox.
 

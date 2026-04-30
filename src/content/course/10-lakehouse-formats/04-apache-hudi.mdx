@@ -210,6 +210,10 @@ spark.sql("""
 - Нужна vendor-нейтральность (рассмотрите Iceberg)
 - Streaming-first с native changelog (рассмотрите Paimon)
 
+<Callout type="tip">
+Для углублённого изучения внутренней архитектуры Hudi (timeline, COW/MOR internals, compaction) см. курс [Storage Formats Deep-Dive](/storage-formats/13-hudi/01-timeline-architecture/).
+</Callout>
+
 ## Что дальше?
 
 В следующем уроке мы разберём **Apache Paimon** -- самый молодой lakehouse-формат, разработанный Alibaba для streaming-first архитектуры. Ключевые фичи: LSM-tree хранилище и native changelog CDC.

@@ -54,19 +54,21 @@ result.show()
 
 Под капотом каждый вызов (`filter`, `groupBy`, `count`) **не выполняется локально** -- он сериализуется в Protocol Buffers и отправляется на сервер. Сервер разворачивает план, оптимизирует через Catalyst и запускает на кластере.
 
-```
-Spark Connect протокол:
-  Client                          Server
-    │                                │
-    ├──── AnalyzePlan (proto) ──────►│  Resolve имена, типы
-    │◄─── AnalyzePlanResponse ──────┤
-    │                                │
-    ├──── ExecutePlan (proto) ──────►│  Catalyst → Tungsten → Execute
-    │◄─── Arrow RecordBatch ────────┤  Результат через Apache Arrow
-    │◄─── Arrow RecordBatch ────────┤  (streaming chunks)
-    │◄─── ResultComplete ──────────┤
-    │                                │
-```
+<DiagramContainer title="Spark Connect: gRPC-протокол клиент ↔ сервер" className="my-6">
+  <SequenceDiagram
+    actors={[
+      { id: 'client', label: 'Client', variant: 'input', tooltip: 'Тонкий клиент (Python/Scala/Go/Rust). Не имеет JVM, Catalyst или executor-ов — только формирует план и отправляет.' },
+      { id: 'server', label: 'Server', variant: 'output', tooltip: 'Полноценный Spark cluster: Catalyst → Tungsten → executor-ы. Принимает протоколированные планы и возвращает Arrow.' },
+    ]}
+    messages={[
+      { id: 'm1', from: 'client', to: 'server', label: 'AnalyzePlan (proto)', variant: 'sync', tooltip: 'Запрос на резолв имён и типов до выполнения. Полезно для IDE-подсказок и проверки схемы перед execute.' },
+      { id: 'm2', from: 'server', to: 'client', label: 'AnalyzePlanResponse', variant: 'return', tooltip: 'Сервер возвращает разрешённую схему: типы колонок, доступные функции, метаданные.' },
+      { id: 'm3', from: 'client', to: 'server', label: 'ExecutePlan (proto)', variant: 'sync', tooltip: 'Запуск плана. Сервер прогоняет Catalyst → Tungsten → распределяет по executor-ам.' },
+      { id: 'm4', from: 'server', to: 'client', label: 'Arrow RecordBatch', variant: 'async', tooltip: 'Результат стримится в Apache Arrow IPC формате — zero-copy десериализация на клиенте, без построчного парсинга.' },
+      { id: 'm5', from: 'server', to: 'client', label: 'Arrow RecordBatch', variant: 'async' },
+      { id: 'm6', from: 'server', to: 'client', label: 'ResultComplete', variant: 'return', tooltip: 'Сигнал завершения стрима. Клиент знает: больше batch-ей не будет.' },
+    ]}
+  /></DiagramContainer>
 
 Данные возвращаются клиенту в формате **Apache Arrow** (cross-reference M11: Arrow и нативная интеграция) -- column-oriented, zero-copy десериализация.
 
