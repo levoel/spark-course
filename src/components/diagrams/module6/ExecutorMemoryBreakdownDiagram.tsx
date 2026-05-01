@@ -20,28 +20,28 @@ const segments: MemorySegment[] = [
   {
     label: 'Spark execution memory',
     size: '~2.4GB',
-    color: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300',
+    color: 'bg-emerald-500/20 border-emerald-500/30 text-emerald-700',
     tooltip: 'Основная память Spark: shuffle buffers, joins, sort, кэш.',
     flex: 6,
   },
   {
     label: 'Python worker 1',
     size: '~100MB',
-    color: 'bg-rose-500/20 border-rose-500/30 text-rose-300',
+    color: 'bg-rose-500/20 border-rose-500/30 text-rose-700',
     tooltip: 'Полноценный Python-интерпретатор: runtime + UDF + данные.',
     flex: 1,
   },
   {
     label: 'Python worker 2',
     size: '~100MB',
-    color: 'bg-rose-500/20 border-rose-500/30 text-rose-300',
+    color: 'bg-rose-500/20 border-rose-500/30 text-rose-700',
     tooltip: 'Второй Python worker для параллельных tasks.',
     flex: 1,
   },
   {
     label: 'Buffer memory',
     size: '~200MB',
-    color: 'bg-gray-500/20 border-gray-500/30 text-gray-300',
+    color: 'bg-[var(--bg-deep)] border-[var(--line-medium)] text-[var(--ink-default)]',
     tooltip: 'Буферная память для I/O и внутренних структур.',
     flex: 1,
   },
@@ -51,7 +51,7 @@ export function ExecutorMemoryBreakdownDiagram() {
   return (
     <DiagramContainer title="Executor JVM (4GB) с Python UDF" color="rose">
       <div className="flex flex-col gap-3">
-        <div className="flex w-full rounded-xl overflow-hidden border border-white/10">
+        <div className="flex w-full rounded-xl overflow-hidden border border-[var(--line-thin)]">
           {segments.map((s, i) => (
             <DiagramTooltip key={i} content={s.tooltip}>
               <div
@@ -64,7 +64,7 @@ export function ExecutorMemoryBreakdownDiagram() {
             </DiagramTooltip>
           ))}
         </div>
-        <p className="text-xs text-gray-500 text-center">
+        <p className="text-xs text-[var(--ink-subtle)] text-center">
           Итого: 4GB + 200MB Python overhead на executor
         </p>
       </div>

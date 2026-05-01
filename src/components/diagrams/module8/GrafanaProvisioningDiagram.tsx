@@ -37,12 +37,12 @@ export function GrafanaProvisioningDiagram() {
 
           return (
             <div key={i} className="flex items-center gap-2 text-xs font-mono">
-              <span className="text-gray-500 whitespace-pre">{prefix}</span>
-              <span className={node.icon === 'dir' ? 'text-blue-300' : 'text-gray-300'}>
+              <span className="text-[var(--ink-subtle)] whitespace-pre">{prefix}</span>
+              <span className={node.icon === 'dir' ? 'text-blue-700' : 'text-[var(--ink-default)]'}>
                 {node.name}
               </span>
               {node.comment && (
-                <span className="text-gray-500 ml-2">
+                <span className="text-[var(--ink-subtle)] ml-2">
                   # {node.comment}
                 </span>
               )}

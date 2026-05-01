@@ -77,10 +77,10 @@ function MemoryBar({ label, sizeMB, totalMB, color, tooltip }: {
   return (
     <DiagramTooltip content={tooltip}>
       <div
-        className={`h-10 ${color} flex items-center justify-center border-r border-white/10 cursor-help transition-all duration-300`}
+        className={`h-10 ${color} flex items-center justify-center border-r border-[var(--line-thin)] cursor-help transition-all duration-300`}
         style={{ width: `${Math.max(widthPercent, 3)}%` }}
       >
-        <span className="text-[10px] font-mono text-white/90 whitespace-nowrap px-1">
+        <span className="text-[10px] font-mono text-[var(--ink-strong)]/90 whitespace-nowrap px-1">
           {label} ({Math.round(sizeMB)} MB)
         </span>
       </div>
@@ -99,10 +99,10 @@ export function SpillToDiskDiagram() {
         {/* Memory slider */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm text-gray-300">
+            <label className="text-sm text-[var(--ink-default)]">
               spark.executor.memory
             </label>
-            <span className="text-sm font-mono text-white font-semibold">
+            <span className="text-sm font-mono text-[var(--ink-strong)] font-semibold">
               {totalMemoryMB >= 1024 ? `${(totalMemoryMB / 1024).toFixed(1)} GB` : `${totalMemoryMB} MB`}
             </span>
           </div>
@@ -115,7 +115,7 @@ export function SpillToDiskDiagram() {
             onChange={(e) => setTotalMemoryMB(Number(e.target.value))}
             className="w-full accent-amber-400 cursor-pointer"
           />
-          <div className="flex justify-between text-[10px] text-gray-500">
+          <div className="flex justify-between text-[10px] text-[var(--ink-subtle)]">
             <span>200 MB</span>
             <span>2 GB</span>
           </div>
@@ -123,13 +123,13 @@ export function SpillToDiskDiagram() {
 
         {/* Memory bar visualization */}
         <div className="flex flex-col gap-1.5">
-          <p className="text-xs text-gray-400">Распределение памяти executor:</p>
-          <div className="flex w-full rounded-lg overflow-hidden border border-white/10">
+          <p className="text-xs text-[var(--ink-muted)]">Распределение памяти executor:</p>
+          <div className="flex w-full rounded-lg overflow-hidden border border-[var(--line-thin)]">
             <MemoryBar
               label="Reserved"
               sizeMB={state.reservedMB}
               totalMB={state.totalMB}
-              color="bg-gray-600"
+              color="bg-[var(--bg-deep)]"
               tooltip="Reserved memory (300 MB) — внутренние нужды Spark. Не настраивается."
             />
             <MemoryBar
@@ -170,11 +170,11 @@ export function SpillToDiskDiagram() {
           {state.spillState !== 'none' && (
             <div className="flex flex-col gap-1 text-xs">
               <div className="flex items-center gap-2">
-                <span className="text-gray-400">Spill to disk:</span>
+                <span className="text-[var(--ink-muted)]">Spill to disk:</span>
                 <span className={`font-mono font-bold ${spillStyle.text}`}>{Math.round(state.spillMB)} MB</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-gray-400">Execution utilization:</span>
+                <span className="text-[var(--ink-muted)]">Execution utilization:</span>
                 <span className={`font-mono ${spillStyle.text}`}>{Math.round(state.executionUtilization)}%</span>
               </div>
             </div>
@@ -183,10 +183,10 @@ export function SpillToDiskDiagram() {
 
         {/* Performance timeline */}
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-gray-400">Время обработки:</p>
+          <p className="text-xs text-[var(--ink-muted)]">Время обработки:</p>
           <div className="flex items-center gap-3">
             <div className="flex-1">
-              <div className="w-full bg-gray-800 rounded-full h-6 overflow-hidden">
+              <div className="w-full bg-[var(--bg-sunken)] rounded-full h-6 overflow-hidden">
                 <div
                   className={`h-full rounded-full flex items-center px-2 transition-all duration-500 ${
                     state.spillState === 'none'
@@ -197,7 +197,7 @@ export function SpillToDiskDiagram() {
                   }`}
                   style={{ width: `${clamp((state.totalTimeMs / 8000) * 100, 10, 100)}%` }}
                 >
-                  <span className="text-[10px] font-mono text-white whitespace-nowrap">
+                  <span className="text-[10px] font-mono text-[var(--ink-strong)] whitespace-nowrap">
                     {(state.totalTimeMs / 1000).toFixed(1)}s
                   </span>
                 </div>
@@ -209,7 +209,7 @@ export function SpillToDiskDiagram() {
               </span>
             )}
           </div>
-          <div className="flex items-center gap-2 text-[10px] text-gray-500">
+          <div className="flex items-center gap-2 text-[10px] text-[var(--ink-subtle)]">
             <span>Базовое время: {(state.baseTimeMs / 1000).toFixed(1)}s</span>
             {state.spillState !== 'none' && (
               <span>+ {((state.totalTimeMs - state.baseTimeMs) / 1000).toFixed(1)}s disk I/O overhead</span>
@@ -236,7 +236,7 @@ export function SpillToDiskDiagram() {
 
         {/* Legend */}
         <DiagramTooltip content="spark.memory.fraction (0.6) определяет долю JVM heap для unified memory (storage + execution). Остальное — user memory для ваших объектов. При нехватке execution memory данные spill на диск, что в 10-100 раз медленнее RAM.">
-          <p className="text-xs text-gray-500 cursor-help border-b border-dashed border-gray-600 inline">
+          <p className="text-xs text-[var(--ink-subtle)] cursor-help border-b border-dashed border-[var(--line-thin)] inline">
             Наведите: как работает spark.memory.fraction
           </p>
         </DiagramTooltip>

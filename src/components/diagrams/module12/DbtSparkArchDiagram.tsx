@@ -20,13 +20,13 @@ export function DbtSparkArchDiagram() {
             </FlowColumn>
           </FlowNode>
           <div className="mt-2 flex flex-wrap gap-2 justify-center">
-            <span className="text-[10px] text-emerald-300 bg-emerald-500/10 rounded px-2 py-0.5">
+            <span className="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
               Models (SELECT SQL)
             </span>
-            <span className="text-[10px] text-emerald-300 bg-emerald-500/10 rounded px-2 py-0.5">
+            <span className="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
               Tests (data assertions)
             </span>
-            <span className="text-[10px] text-emerald-300 bg-emerald-500/10 rounded px-2 py-0.5">
+            <span className="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
               Docs (auto-lineage)
             </span>
           </div>

@@ -64,8 +64,8 @@ export function PartitionSkewDiagram() {
             onClick={() => setAqeEnabled(false)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               !aqeEnabled
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-400/50'
-                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                ? 'bg-amber-500/20 text-amber-700 border border-amber-400/50'
+                : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
             }`}
           >
             AQE OFF
@@ -74,8 +74,8 @@ export function PartitionSkewDiagram() {
             onClick={() => setAqeEnabled(true)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               aqeEnabled
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/50'
-                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-400/50'
+                : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
             }`}
           >
             AQE ON
@@ -95,19 +95,19 @@ export function PartitionSkewDiagram() {
                   content={`${p.city}: ${formatRows(p.rows)} строк, ~${formatTime(p.timeMs)} обработки`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="w-28 text-xs text-right text-gray-400 shrink-0 truncate">
+                    <span className="w-28 text-xs text-right text-[var(--ink-muted)] shrink-0 truncate">
                       {p.city}
                     </span>
-                    <div className="flex-1 bg-slate-800/50 rounded-full overflow-hidden h-7">
+                    <div className="flex-1 bg-[var(--bg-sunken)] rounded-full overflow-hidden h-7">
                       <div
                         className={`h-full rounded-full flex items-center px-2 transition-all duration-500 ${
                           isSkewed
                             ? 'bg-amber-500/60 border border-amber-400/40'
-                            : 'bg-slate-600/60 border border-slate-500/30'
+                            : 'bg-[var(--bg-sunken)] border border-[var(--line-medium)]'
                         }`}
                         style={{ width: `${widthPercent}%` }}
                       >
-                        <span className="text-xs font-mono text-white whitespace-nowrap">
+                        <span className="text-xs font-mono text-[var(--ink-strong)] whitespace-nowrap">
                           {formatRows(p.rows)}
                         </span>
                       </div>
@@ -127,19 +127,19 @@ export function PartitionSkewDiagram() {
                   content={`${p.label}: ${formatRows(p.rows)} строк, ~${formatTime(p.timeMs)} обработки`}
                 >
                   <div className="flex items-center gap-3">
-                    <span className="w-28 text-xs text-right text-gray-400 shrink-0 truncate">
+                    <span className="w-28 text-xs text-right text-[var(--ink-muted)] shrink-0 truncate">
                       {p.label}
                     </span>
-                    <div className="flex-1 bg-slate-800/50 rounded-full overflow-hidden h-7">
+                    <div className="flex-1 bg-[var(--bg-sunken)] rounded-full overflow-hidden h-7">
                       <div
                         className={`h-full rounded-full flex items-center px-2 transition-all duration-500 ${
                           isMoscowSplit
                             ? 'bg-emerald-500/50 border border-emerald-400/40'
-                            : 'bg-slate-600/60 border border-slate-500/30'
+                            : 'bg-[var(--bg-sunken)] border border-[var(--line-medium)]'
                         }`}
                         style={{ width: `${widthPercent}%` }}
                       >
-                        <span className="text-xs font-mono text-white whitespace-nowrap">
+                        <span className="text-xs font-mono text-[var(--ink-strong)] whitespace-nowrap">
                           {formatRows(p.rows)}
                         </span>
                       </div>
@@ -169,7 +169,7 @@ export function PartitionSkewDiagram() {
         </div>
 
         {/* Legend */}
-        <div className="text-xs text-gray-400 text-center mt-1">
+        <div className="text-xs text-[var(--ink-muted)] text-center mt-1">
           {!aqeEnabled ? (
             <span>
               <span className="inline-block w-3 h-3 rounded-full bg-amber-500/60 mr-1 align-middle" />

@@ -35,7 +35,7 @@ export function MetricsArchitectureDiagram() {
       <FlowRow gap={16} wrap={false} justify="center" align="start">
         {/* Sources */}
         <FlowColumn gap={4} align="start">
-          <div className="text-xs font-semibold text-blue-300 mb-1">
+          <div className="text-xs font-semibold text-blue-700 mb-1">
             Sources (генерируют метрики)
           </div>
           {sources.map((s, i) => (
@@ -52,7 +52,7 @@ export function MetricsArchitectureDiagram() {
 
         {/* Sinks */}
         <FlowColumn gap={4} align="start">
-          <div className="text-xs font-semibold text-amber-300 mb-1">
+          <div className="text-xs font-semibold text-amber-700 mb-1">
             Sinks (экспонируют метрики)
           </div>
           {sinks.map((s, i) => (

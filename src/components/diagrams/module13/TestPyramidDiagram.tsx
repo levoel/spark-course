@@ -22,7 +22,7 @@ const layers: PyramidLayer[] = [
     label: 'E2E (rare)',
     detail: 'Полный pipeline на реальном кластере',
     trigger: 'Запуск: вручную / release',
-    color: 'text-red-300',
+    color: 'text-red-700',
     borderColor: 'border-red-400/30',
     bgColor: 'bg-red-500/5',
     width: 'max-w-[200px]',
@@ -31,7 +31,7 @@ const layers: PyramidLayer[] = [
     label: 'Integration (module)',
     detail: 'Spark + DB/Kafka/S3',
     trigger: 'Запуск: merge to main / nightly',
-    color: 'text-amber-300',
+    color: 'text-amber-700',
     borderColor: 'border-amber-400/30',
     bgColor: 'bg-amber-500/5',
     width: 'max-w-[300px]',
@@ -40,7 +40,7 @@ const layers: PyramidLayer[] = [
     label: 'Unit (fast)',
     detail: 'Чистые функции, local SparkSession',
     trigger: 'Запуск: каждый commit / pre-commit',
-    color: 'text-emerald-300',
+    color: 'text-emerald-700',
     borderColor: 'border-emerald-400/30',
     bgColor: 'bg-emerald-500/5',
     width: 'max-w-[400px]',
@@ -63,8 +63,8 @@ export function TestPyramidDiagram() {
             <div className={`text-sm font-medium ${layer.color} text-center`}>
               {layer.label}
             </div>
-            <div className="text-xs text-gray-400 text-center mt-0.5">{layer.detail}</div>
-            <div className="text-[10px] text-gray-500 text-center mt-0.5">{layer.trigger}</div>
+            <div className="text-xs text-[var(--ink-muted)] text-center mt-0.5">{layer.detail}</div>
+            <div className="text-[10px] text-[var(--ink-subtle)] text-center mt-0.5">{layer.trigger}</div>
           </div>
         ))}
       </FlowColumn>

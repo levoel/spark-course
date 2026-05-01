@@ -26,9 +26,9 @@ interface PlanNode {
 }
 
 const VARIANT_COLORS = {
-  original: 'border-blue-500/40 bg-blue-500/10 text-blue-300',
-  stats: 'border-amber-500/40 bg-amber-500/10 text-amber-300',
-  optimized: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300',
+  original: 'border-blue-500/40 bg-blue-500/10 text-blue-700',
+  stats: 'border-amber-500/40 bg-amber-500/10 text-amber-700',
+  optimized: 'border-emerald-500/40 bg-emerald-500/10 text-emerald-700',
 } as const;
 
 const VARIANT_DOT_COLORS = {
@@ -205,7 +205,7 @@ export function AQEOptimizerDiagram() {
               className={`w-3 h-3 rounded-full transition-all ${
                 s.id === currentStep
                   ? 'bg-blue-400 scale-125'
-                  : 'bg-slate-600 hover:bg-slate-500'
+                  : 'bg-[var(--bg-sunken)] hover:bg-[var(--bg-deep)]'
               }`}
               aria-label={`Step ${s.id + 1}: ${s.title}`}
             />
@@ -214,10 +214,10 @@ export function AQEOptimizerDiagram() {
 
         {/* Step title and description */}
         <div className="text-center">
-          <h4 className="text-sm font-semibold text-slate-200 mb-1">
+          <h4 className="text-sm font-semibold text-[var(--ink-default)] mb-1">
             Step {currentStep + 1}/{steps.length}: {step.title}
           </h4>
-          <p className="text-xs text-slate-400 max-w-lg mx-auto">
+          <p className="text-xs text-[var(--ink-muted)] max-w-lg mx-auto">
             {step.description}
           </p>
         </div>
@@ -252,11 +252,11 @@ export function AQEOptimizerDiagram() {
           <button
             onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
             disabled={currentStep === 0}
-            className="px-3 py-1.5 text-xs rounded-md bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs rounded-md bg-[var(--bg-sunken)] text-[var(--ink-default)] hover:bg-[var(--bg-sunken)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             Previous
           </button>
-          <span className="text-xs text-slate-500">
+          <span className="text-xs text-[var(--ink-subtle)]">
             {currentStep + 1} / {steps.length}
           </span>
           <button
@@ -264,14 +264,14 @@ export function AQEOptimizerDiagram() {
               setCurrentStep(Math.min(steps.length - 1, currentStep + 1))
             }
             disabled={currentStep === steps.length - 1}
-            className="px-3 py-1.5 text-xs rounded-md bg-slate-700 text-slate-300 hover:bg-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            className="px-3 py-1.5 text-xs rounded-md bg-[var(--bg-sunken)] text-[var(--ink-default)] hover:bg-[var(--bg-sunken)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>
         </div>
 
         {/* Legend */}
-        <div className="flex items-center justify-center gap-4 text-xs text-slate-500 pt-1">
+        <div className="flex items-center justify-center gap-4 text-xs text-[var(--ink-subtle)] pt-1">
           <span className="flex items-center gap-1">
             <span className="w-2 h-2 rounded-full bg-blue-400" />
             Original Plan

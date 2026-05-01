@@ -23,10 +23,10 @@ export function YarnArchDiagram() {
             </FlowColumn>
           </FlowNode>
           <div className="mt-2 flex gap-2">
-            <span className="text-[10px] text-amber-300 bg-amber-500/10 rounded px-2 py-0.5">
+            <span className="text-[10px] text-amber-700 bg-amber-500/10 rounded px-2 py-0.5">
               Scheduler (Fair/Capacity)
             </span>
-            <span className="text-[10px] text-amber-300 bg-amber-500/10 rounded px-2 py-0.5">
+            <span className="text-[10px] text-amber-700 bg-amber-500/10 rounded px-2 py-0.5">
               AppManager
             </span>
           </div>
@@ -47,7 +47,7 @@ export function YarnArchDiagram() {
                 {[1, 2].map((c) => (
                   <span
                     key={c}
-                    className="text-[10px] text-emerald-300 bg-emerald-500/10 rounded px-2 py-0.5 text-center"
+                    className="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5 text-center"
                   >
                     Container (executor)
                   </span>

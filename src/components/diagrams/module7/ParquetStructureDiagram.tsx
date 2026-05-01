@@ -41,12 +41,12 @@ export function ParquetStructureDiagram() {
             key={i}
             className="w-full border border-purple-400/30 bg-purple-500/10 px-4 py-3 first:rounded-t-xl"
           >
-            <div className="text-sm font-semibold text-purple-200 mb-2">
+            <div className="text-sm font-semibold text-purple-700 mb-2">
               {rg.label}
             </div>
             {rg.columns.map((col, j) => (
-              <div key={j} className="flex items-center gap-2 ml-4 text-xs font-mono text-purple-300/80">
-                <span className="text-gray-500">{j < rg.columns.length - 1 ? '├──' : '└──'}</span>
+              <div key={j} className="flex items-center gap-2 ml-4 text-xs font-mono text-purple-700/80">
+                <span className="text-[var(--ink-subtle)]">{j < rg.columns.length - 1 ? '├──' : '└──'}</span>
                 <span>{col.name}</span>
                 {col.stat && (
                   <span className="text-amber-400/70 ml-1">← {col.stat}</span>
@@ -57,7 +57,7 @@ export function ParquetStructureDiagram() {
         ))}
         <div className="w-full border border-purple-400/30 bg-purple-500/20 px-4 py-2 rounded-b-xl">
           <DiagramTooltip content="Footer содержит schema всех колонок и агрегированную статистику. Spark читает footer первым для планирования запроса.">
-            <span className="text-sm font-semibold text-purple-200 cursor-help">
+            <span className="text-sm font-semibold text-purple-700 cursor-help">
               Footer: schema + statistics
             </span>
           </DiagramTooltip>

@@ -17,7 +17,7 @@ export function BuiltinVsUdfDiagram() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Built-in side */}
         <div className="flex flex-col gap-3">
-          <div className="text-center text-sm font-semibold text-emerald-300 mb-1">
+          <div className="text-center text-sm font-semibold text-emerald-700 mb-1">
             Встроенная функция upper()
           </div>
           <FlowColumn gap={6}>
@@ -25,7 +25,7 @@ export function BuiltinVsUdfDiagram() {
               JVM Executor
             </FlowNode>
             <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
-              <pre className="text-[11px] text-emerald-300 font-mono leading-relaxed">
+              <pre className="text-[11px] text-emerald-700 font-mono leading-relaxed">
 {`Tungsten CodeGen:
 for (row in partition) {
   result = row.getString(0)
@@ -44,7 +44,7 @@ for (row in partition) {
 
         {/* UDF side */}
         <div className="flex flex-col gap-3">
-          <div className="text-center text-sm font-semibold text-rose-300 mb-1">
+          <div className="text-center text-sm font-semibold text-rose-700 mb-1">
             Python UDF upper()
           </div>
           <FlowColumn gap={4}>
@@ -67,11 +67,11 @@ for (row in partition) {
                 { label: '← socket transfer ←', time: '', side: '' },
                 { label: 'deserialize(bytes)', time: '~1μs', side: 'JVM' },
               ].map((step, i) => (
-                <div key={i} className="flex items-center gap-2 text-[11px] font-mono text-rose-300/80">
+                <div key={i} className="flex items-center gap-2 text-[11px] font-mono text-rose-700/80">
                   {step.side && (
                     <span className="text-[9px] opacity-50 w-6">{step.side}</span>
                   )}
-                  <span className={step.side ? '' : 'text-gray-500 text-center w-full'}>{step.label}</span>
+                  <span className={step.side ? '' : 'text-[var(--ink-subtle)] text-center w-full'}>{step.label}</span>
                   {step.time && <span className="ml-auto opacity-60">{step.time}</span>}
                 </div>
               ))}

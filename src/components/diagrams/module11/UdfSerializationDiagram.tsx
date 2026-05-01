@@ -20,7 +20,7 @@ export function UdfSerializationDiagram() {
       <FlowRow gap={24} wrap align="start">
         {/* Legacy UDF */}
         <FlowColumn gap={8} align="center" className="flex-1 min-w-[200px]">
-          <div className="text-xs font-semibold text-rose-300">Python UDF (pickle, per-row)</div>
+          <div className="text-xs font-semibold text-rose-700">Python UDF (pickle, per-row)</div>
           <FlowRow gap={8} wrap={false} align="center">
             <FlowNode variant="compute" size="sm">
               <FlowColumn gap={1} align="center">
@@ -39,14 +39,14 @@ export function UdfSerializationDiagram() {
               </FlowColumn>
             </FlowNode>
           </FlowRow>
-          <div className="text-[10px] text-rose-300/70">
+          <div className="text-[10px] text-rose-700/70">
             1M socket-вызовов, 1M pickle сериализаций
           </div>
         </FlowColumn>
 
         {/* Pandas UDF */}
         <FlowColumn gap={8} align="center" className="flex-1 min-w-[200px]">
-          <div className="text-xs font-semibold text-emerald-300">Pandas UDF (Arrow, per-batch)</div>
+          <div className="text-xs font-semibold text-emerald-700">Pandas UDF (Arrow, per-batch)</div>
           <FlowRow gap={8} wrap={false} align="center">
             <FlowNode variant="compute" size="sm">
               <FlowColumn gap={1} align="center">
@@ -67,7 +67,7 @@ export function UdfSerializationDiagram() {
               </FlowColumn>
             </FlowNode>
           </FlowRow>
-          <div className="text-[10px] text-emerald-300/70">
+          <div className="text-[10px] text-emerald-700/70">
             100 Arrow transfers (вместо 1M pickle transfers)
           </div>
         </FlowColumn>

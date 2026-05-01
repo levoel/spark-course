@@ -26,7 +26,7 @@ export function DataDocsReportDiagram() {
   return (
     <DiagramContainer title="Data Docs Report" color="rose">
       <div className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-4">
-        <div className="text-sm font-medium text-rose-300 mb-1">
+        <div className="text-sm font-medium text-rose-700 mb-1">
           Expectation Suite: orders_quality
         </div>
         <div className="text-xs text-red-400 mb-3">
@@ -43,7 +43,7 @@ export function DataDocsReportDiagram() {
                 <span className={exp.passed ? 'text-emerald-400' : 'text-red-400'}>
                   {exp.passed ? '✓' : '✗'}
                 </span>
-                <span className="text-gray-300">{exp.name}</span>
+                <span className="text-[var(--ink-default)]">{exp.name}</span>
               </div>
               <span className={`font-mono ${exp.passed ? 'text-emerald-400' : 'text-red-400'}`}>
                 {exp.percent} pass

@@ -21,21 +21,21 @@ const tree: TreeEntry[] = [
   {
     label: 'Executor JVM Heap (spark.executor.memory, например 4g)',
     indent: 0,
-    color: 'text-white',
+    color: 'text-[var(--ink-strong)]',
     tooltip: 'Общий размер JVM heap, задаётся spark.executor.memory.',
     connector: '',
   },
   {
     label: 'Reserved Memory: 300 MB (hardcoded Spark)',
     indent: 1,
-    color: 'text-gray-400',
+    color: 'text-[var(--ink-muted)]',
     tooltip: 'Фиксированный резерв 300MB для внутренних нужд Spark. Не настраивается.',
     connector: '├──',
   },
   {
     label: 'User Memory: (1 - spark.memory.fraction) × (heap - 300MB)',
     indent: 1,
-    color: 'text-purple-300',
+    color: 'text-purple-700',
     tooltip: 'Память для пользовательских структур данных, UDF-объектов и RDD metadata.',
     connector: '├──',
   },
@@ -49,7 +49,7 @@ const tree: TreeEntry[] = [
   {
     label: 'Spark Memory: spark.memory.fraction × (heap - 300MB)',
     indent: 1,
-    color: 'text-blue-300',
+    color: 'text-blue-700',
     tooltip: 'Unified memory pool для Storage и Execution с мягкой границей.',
     connector: '└──',
   },
@@ -94,7 +94,7 @@ export function UnifiedMemoryManagerDiagram() {
               style={{ paddingLeft: `${entry.indent * 20}px` }}
             >
               {entry.connector && (
-                <span className="text-gray-600 w-8 shrink-0">{entry.connector}</span>
+                <span className="text-[var(--ink-subtle)] w-8 shrink-0">{entry.connector}</span>
               )}
               <span>{entry.label}</span>
             </div>

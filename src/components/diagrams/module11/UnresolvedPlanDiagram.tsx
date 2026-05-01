@@ -31,16 +31,16 @@ export function UnresolvedPlanDiagram() {
       color="amber"
     >
       <FlowColumn gap={0} align="start">
-        <div className="font-mono text-xs text-gray-300 bg-black/30 rounded-lg p-3 w-full">
+        <div className="font-mono text-xs text-[var(--ink-default)] bg-[var(--bg-sunken)] rounded-lg p-3 w-full">
           {planLines.map((line, i) => (
             <div key={i} style={{ paddingLeft: `${line.indent * 16}px` }}>
-              <span className={line.text.includes(':') ? 'text-amber-300' : 'text-gray-400'}>
+              <span className={line.text.includes(':') ? 'text-amber-700' : 'text-[var(--ink-muted)]'}>
                 {line.text}
               </span>
             </div>
           ))}
         </div>
-        <div className="text-[10px] text-gray-500 mt-2 text-center w-full">
+        <div className="text-[10px] text-[var(--ink-subtle)] mt-2 text-center w-full">
           ~500 байт protobuf (не данные!)
         </div>
       </FlowColumn>

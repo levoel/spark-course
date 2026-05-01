@@ -46,10 +46,10 @@ const LAYERS: LayerConfig[] = [
   {
     key: 'silver',
     label: 'Silver',
-    color: 'bg-gray-400/10',
-    borderColor: 'border-gray-400/30',
-    activeColor: 'bg-gray-400/20',
-    activeBorder: 'border-gray-400/50',
+    color: 'bg-[var(--bg-deep)]',
+    borderColor: 'border-[var(--line-medium)]',
+    activeColor: 'bg-[var(--bg-deep)]',
+    activeBorder: 'border-[var(--line-medium)]',
     icon: '\u26AA',
     summary: ['Validated schema', 'Deduplicated', 'Type-safe columns', '~800K records/day'],
     details: [
@@ -82,10 +82,10 @@ const LAYERS: LayerConfig[] = [
 const FORMATS = ['Delta', 'Iceberg', 'Hudi', 'Paimon'] as const;
 
 const FORMAT_COLORS: Record<string, string> = {
-  Delta: 'bg-blue-500/20 text-blue-300 border-blue-400/40',
-  Iceberg: 'bg-cyan-500/20 text-cyan-300 border-cyan-400/40',
-  Hudi: 'bg-orange-500/20 text-orange-300 border-orange-400/40',
-  Paimon: 'bg-green-500/20 text-green-300 border-green-400/40',
+  Delta: 'bg-blue-500/20 text-blue-700 border-blue-400/40',
+  Iceberg: 'bg-cyan-500/20 text-cyan-700 border-cyan-400/40',
+  Hudi: 'bg-orange-500/20 text-orange-700 border-orange-400/40',
+  Paimon: 'bg-green-500/20 text-green-700 border-green-400/40',
 };
 
 function FlowArrow() {
@@ -93,7 +93,7 @@ function FlowArrow() {
     <div className="flex justify-center py-1">
       <div className="flex flex-col items-center">
         <div className="w-0.5 h-4 bg-gradient-to-b from-white/30 to-white/10 animate-pulse" />
-        <svg width="12" height="8" viewBox="0 0 12 8" className="text-white/30">
+        <svg width="12" height="8" viewBox="0 0 12 8" className="text-[var(--ink-strong)]/30">
           <path d="M6 8L0 0h12z" fill="currentColor" />
         </svg>
       </div>
@@ -108,7 +108,7 @@ export function LakehouseLayersDiagram() {
     <DiagramContainer title="Lakehouse Medallion Architecture" color="amber">
       <div className="flex flex-col gap-1">
         {/* ETL pipeline label */}
-        <div className="text-xs text-gray-500 text-center mb-2">
+        <div className="text-xs text-[var(--ink-subtle)] text-center mb-2">
           Raw JSON &rarr; Validated Parquet (Bronze) &rarr; Cleansed + Deduped (Silver) &rarr; Aggregated Metrics (Gold)
         </div>
 
@@ -131,11 +131,11 @@ export function LakehouseLayersDiagram() {
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2">
                       <span className="text-lg">{layer.icon}</span>
-                      <span className="text-sm font-semibold text-white">
+                      <span className="text-sm font-semibold text-[var(--ink-strong)]">
                         {layer.label}
                       </span>
                     </div>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-xs text-[var(--ink-muted)]">
                       {isActive ? 'click to collapse' : 'click to expand'}
                     </span>
                   </div>
@@ -145,7 +145,7 @@ export function LakehouseLayersDiagram() {
                     {layer.summary.map((item) => (
                       <span
                         key={item}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-white/5 text-gray-300 border border-white/10"
+                        className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-surface)] text-[var(--ink-default)] border border-[var(--line-thin)]"
                       >
                         {item}
                       </span>
@@ -166,8 +166,8 @@ export function LakehouseLayersDiagram() {
 
                   {/* Expanded details */}
                   {isActive && (
-                    <div className="mt-3 pt-3 border-t border-white/10 space-y-1.5">
-                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider">
+                    <div className="mt-3 pt-3 border-t border-[var(--line-thin)] space-y-1.5">
+                      <p className="text-[10px] text-[var(--ink-muted)] font-semibold uppercase tracking-wider">
                         Transformations:
                       </p>
                       {layer.details.map((detail) => (
@@ -175,7 +175,7 @@ export function LakehouseLayersDiagram() {
                           <span className="text-emerald-400 text-xs mt-0.5 shrink-0">
                             &rarr;
                           </span>
-                          <span className="text-xs text-gray-300">{detail}</span>
+                          <span className="text-xs text-[var(--ink-default)]">{detail}</span>
                         </div>
                       ))}
                     </div>
@@ -199,7 +199,7 @@ export function LakehouseLayersDiagram() {
         </div>
 
         {/* Legend */}
-        <p className="text-xs text-gray-500 text-center mt-2">
+        <p className="text-xs text-[var(--ink-subtle)] text-center mt-2">
           Click each layer to see transformations. Hover for data quality guarantees.
         </p>
       </div>

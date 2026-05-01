@@ -37,10 +37,10 @@ export function CapstonePipelineDiagram() {
         <Arrow direction="down" />
 
         {/* Silver */}
-        <div className="w-full max-w-md rounded-xl border border-gray-400/30 bg-gray-500/5 p-3">
+        <div className="w-full max-w-md rounded-xl border border-[var(--line-medium)] bg-[var(--bg-deep)] p-3">
           <FlowNode variant="storage" size="md" className="w-full">
             <FlowColumn gap={1} align="center">
-              <span className="text-gray-300">Silver Layer</span>
+              <span className="text-[var(--ink-default)]">Silver Layer</span>
               <span className="text-[10px] opacity-70">enriched: join orders + customers</span>
               <span className="text-[10px] opacity-70">dedup, SCD Type 1 merge</span>
             </FlowColumn>
@@ -54,7 +54,7 @@ export function CapstonePipelineDiagram() {
         <div className="w-full max-w-md rounded-xl border border-yellow-400/30 bg-yellow-500/5 p-3">
           <FlowNode variant="storage" size="md" className="w-full">
             <FlowColumn gap={1} align="center">
-              <span className="text-yellow-300">Gold Layer</span>
+              <span className="text-yellow-700">Gold Layer</span>
               <span className="text-[10px] opacity-70">daily_revenue · city_revenue · product_rankings</span>
             </FlowColumn>
           </FlowNode>

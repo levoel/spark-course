@@ -93,10 +93,10 @@ export function StreamingWatermarksDiagram() {
         {/* Watermark delay slider */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between">
-            <label className="text-sm text-gray-300">
+            <label className="text-sm text-[var(--ink-default)]">
               Watermark delay
             </label>
-            <span className="text-sm font-mono text-white font-semibold">
+            <span className="text-sm font-mono text-[var(--ink-strong)] font-semibold">
               {formatDelay(watermarkDelay)}
             </span>
           </div>
@@ -109,7 +109,7 @@ export function StreamingWatermarksDiagram() {
             onChange={(e) => setWatermarkDelay(Number(e.target.value))}
             className="w-full accent-cyan-400 cursor-pointer"
           />
-          <div className="flex justify-between text-[10px] text-gray-500">
+          <div className="flex justify-between text-[10px] text-[var(--ink-subtle)]">
             <span>0s (drop all late)</span>
             <span>30s</span>
             <span>60s (accept all)</span>
@@ -118,13 +118,13 @@ export function StreamingWatermarksDiagram() {
 
         {/* Timeline visualization */}
         <div className="flex flex-col gap-2">
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-[var(--ink-muted)]">
             Event time timeline (x-axis) -- зелёные = принятые, красные = отброшенные:
           </p>
 
-          <div className="relative bg-slate-800/50 rounded-lg border border-white/10 p-4 overflow-hidden">
+          <div className="relative bg-[var(--bg-sunken)] rounded-lg border border-[var(--line-thin)] p-4 overflow-hidden">
             {/* X-axis time markers */}
-            <div className="flex justify-between text-[9px] text-gray-500 mb-2 px-1">
+            <div className="flex justify-between text-[9px] text-[var(--ink-subtle)] mb-2 px-1">
               <span>10:00</span>
               <span>10:00:20</span>
               <span>10:00:40</span>
@@ -155,7 +155,7 @@ export function StreamingWatermarksDiagram() {
                         transform: 'translate(-50%, -50%)',
                       }}
                     >
-                      <span className="text-[8px] font-mono text-white">
+                      <span className="text-[8px] font-mono text-[var(--ink-strong)]">
                         {event.id}
                       </span>
                     </div>
@@ -177,7 +177,7 @@ export function StreamingWatermarksDiagram() {
             </div>
 
             {/* Y-axis label */}
-            <div className="text-[9px] text-gray-500 mt-1">
+            <div className="text-[9px] text-[var(--ink-subtle)] mt-1">
               y-axis: lateness (processing_time - event_time)
             </div>
           </div>
@@ -206,18 +206,18 @@ export function StreamingWatermarksDiagram() {
         </div>
 
         {/* Watermark formula */}
-        <div className="bg-slate-800/30 rounded-lg p-3 border border-white/5">
-          <p className="text-xs text-gray-400 text-center font-mono">
+        <div className="bg-[var(--bg-sunken)] rounded-lg p-3 border border-[var(--line-thin)]">
+          <p className="text-xs text-[var(--ink-muted)] text-center font-mono">
             watermark = max(event_time) - delay = {maxEventTime}s - {watermarkDelay}s ={' '}
             <span className="text-cyan-400 font-semibold">{watermarkLine}s</span>
           </p>
-          <p className="text-[10px] text-gray-500 text-center mt-1">
+          <p className="text-[10px] text-[var(--ink-subtle)] text-center mt-1">
             События с event_time {'<'} {watermarkLine}s отбрасываются как опоздавшие
           </p>
         </div>
 
         {/* Legend */}
-        <div className="flex items-center justify-center gap-4 text-xs text-gray-400">
+        <div className="flex items-center justify-center gap-4 text-xs text-[var(--ink-muted)]">
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded-full bg-emerald-500/40 border border-emerald-400/70" />
             Accepted

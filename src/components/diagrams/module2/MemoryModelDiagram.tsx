@@ -101,7 +101,7 @@ export function MemoryModelDiagram() {
 
         {/* Danger zone / spill warning */}
         {isDangerZone && (
-          <div className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <div className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-4 py-3 text-sm text-rose-700">
             <strong>Danger Zone!</strong>{' '}
             {regions.executionMemory < 200 && (
               <span>
@@ -120,7 +120,7 @@ export function MemoryModelDiagram() {
         )}
 
         {regions.executionMemory < 150 && (
-          <div className="rounded-lg border border-red-500/40 bg-red-500/15 px-4 py-3 text-sm text-red-200">
+          <div className="rounded-lg border border-red-500/40 bg-red-500/15 px-4 py-3 text-sm text-red-700">
             <strong>Spill-to-disk warning:</strong> При execution memory ниже
             150 MB практически все shuffle и join операции будут записываться на
             диск, замедляя выполнение в 10-100x.

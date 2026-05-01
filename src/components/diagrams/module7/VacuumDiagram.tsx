@@ -29,30 +29,30 @@ const statusStyles = {
   current: {
     bg: 'bg-emerald-500/10',
     border: 'border-emerald-500/25',
-    text: 'text-emerald-300',
+    text: 'text-emerald-700',
     badge: 'Сохранён (текущий)',
-    badgeColor: 'bg-emerald-500/20 text-emerald-300',
+    badgeColor: 'bg-emerald-500/20 text-emerald-700',
   },
   recent: {
     bg: 'bg-blue-500/10',
     border: 'border-blue-500/25',
-    text: 'text-blue-300',
+    text: 'text-blue-700',
     badge: 'Сохранён (< 7 дней)',
-    badgeColor: 'bg-blue-500/20 text-blue-300',
+    badgeColor: 'bg-blue-500/20 text-blue-700',
   },
   old: {
     bg: 'bg-red-500/10',
     border: 'border-red-500/25',
-    text: 'text-red-300',
+    text: 'text-red-700',
     badge: 'Удалён',
-    badgeColor: 'bg-red-500/20 text-red-300',
+    badgeColor: 'bg-red-500/20 text-red-700',
   },
   metadata: {
-    bg: 'bg-gray-500/10',
-    border: 'border-gray-500/25',
-    text: 'text-gray-300',
+    bg: 'bg-[var(--bg-deep)]',
+    border: 'border-[var(--line-medium)]',
+    text: 'text-[var(--ink-default)]',
     badge: 'Сохранён (metadata)',
-    badgeColor: 'bg-gray-500/20 text-gray-300',
+    badgeColor: 'bg-[var(--bg-deep)] text-[var(--ink-default)]',
   },
 };
 
@@ -70,12 +70,12 @@ export function VacuumDiagram() {
                 ${st.bg} ${st.border} ${st.text}
               `}
             >
-              <span className="text-gray-500">
+              <span className="text-[var(--ink-subtle)]">
                 {i < files.length - 1 ? '├──' : '└──'}
               </span>
               <span className="flex-1">{f.name}</span>
-              {f.size && <span className="text-gray-500">{f.size}</span>}
-              {f.age && <span className="text-gray-500">({f.age})</span>}
+              {f.size && <span className="text-[var(--ink-subtle)]">{f.size}</span>}
+              {f.age && <span className="text-[var(--ink-subtle)]">({f.age})</span>}
               <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${st.badgeColor}`}>
                 {st.badge}
               </span>
@@ -83,7 +83,7 @@ export function VacuumDiagram() {
           );
         })}
       </FlowColumn>
-      <p className="text-xs text-gray-500 mt-3 text-center">
+      <p className="text-xs text-[var(--ink-subtle)] mt-3 text-center">
         3 файла удалены — старше 7 дней retention period
       </p>
     </DiagramContainer>

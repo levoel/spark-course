@@ -41,9 +41,9 @@ const layers: QualityLayer[] = [
       'Uniqueness constraints',
       'Completeness > threshold (99.5%)',
     ],
-    color: 'text-gray-300',
-    borderColor: 'border-gray-400/30',
-    bgColor: 'bg-gray-500/5',
+    color: 'text-[var(--ink-default)]',
+    borderColor: 'border-[var(--line-medium)]',
+    bgColor: 'bg-[var(--bg-deep)]',
   },
   {
     name: 'GOLD',
@@ -55,7 +55,7 @@ const layers: QualityLayer[] = [
       'Statistical anomaly detection',
       'Row count vs expected (±20%)',
     ],
-    color: 'text-yellow-300',
+    color: 'text-yellow-700',
     borderColor: 'border-yellow-400/30',
     bgColor: 'bg-yellow-500/5',
   },
@@ -74,7 +74,7 @@ export function DataQualityLayersDiagram() {
               </div>
               <div className="space-y-1">
                 {layer.checks.map((check, ci) => (
-                  <div key={ci} className="flex items-start gap-2 text-xs text-gray-300">
+                  <div key={ci} className="flex items-start gap-2 text-xs text-[var(--ink-default)]">
                     <span className="text-emerald-400 shrink-0">✓</span>
                     <span>{check}</span>
                   </div>

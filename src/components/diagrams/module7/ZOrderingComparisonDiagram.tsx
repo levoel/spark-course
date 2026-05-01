@@ -65,7 +65,7 @@ export function ZOrderingComparisonDiagram() {
                     w-full px-3 py-2 rounded-lg text-xs font-mono border
                     ${f.highlighted
                       ? `bg-${side.color}-500/20 border-${side.color}-400/40 text-${side.color}-200`
-                      : 'bg-gray-500/10 border-gray-500/20 text-gray-400'
+                      : 'bg-[var(--bg-deep)] border-[var(--line-medium)] text-[var(--ink-muted)]'
                     }
                   `}
                 >
@@ -74,7 +74,7 @@ export function ZOrderingComparisonDiagram() {
               ))}
             </FlowColumn>
             <div className="space-y-1 text-center">
-              <div className="text-[11px] font-mono text-gray-400">
+              <div className="text-[11px] font-mono text-[var(--ink-muted)]">
                 Запрос: {side.query}
               </div>
               <div className={`text-xs font-semibold text-${side.color}-300`}>

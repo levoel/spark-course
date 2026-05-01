@@ -24,16 +24,16 @@ const policies: Policy[] = [
   {
     name: 'data-scientists',
     rules: [
-      { resource: 'Database: analytics', access: 'SELECT', color: 'text-emerald-300' },
+      { resource: 'Database: analytics', access: 'SELECT', color: 'text-emerald-700' },
       { resource: 'Database: raw_data', access: 'DENIED', color: 'text-red-400' },
-      { resource: 'Table: users', access: 'MASKED', color: 'text-amber-300' },
+      { resource: 'Table: users', access: 'MASKED', color: 'text-amber-700' },
     ],
   },
   {
     name: 'data-engineers',
     rules: [
-      { resource: 'Database: *', access: 'ALL', color: 'text-emerald-300' },
-      { resource: 'Table: audit_log', access: 'SELECT', color: 'text-blue-300' },
+      { resource: 'Database: *', access: 'ALL', color: 'text-emerald-700' },
+      { resource: 'Table: audit_log', access: 'SELECT', color: 'text-blue-700' },
     ],
   },
 ];
@@ -47,7 +47,7 @@ export function RangerPolicyDiagram() {
             key={policy.name}
             className="rounded-xl border border-purple-400/20 bg-purple-500/5 p-4"
           >
-            <div className="text-sm font-medium text-purple-300 mb-3">
+            <div className="text-sm font-medium text-purple-700 mb-3">
               Policy: "{policy.name}"
             </div>
             <FlowColumn gap={4} align="stretch">

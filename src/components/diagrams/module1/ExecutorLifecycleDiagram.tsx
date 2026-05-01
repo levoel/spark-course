@@ -105,16 +105,16 @@ export function ExecutorLifecycleDiagram() {
 
         {/* Detail panel */}
         {activeDetail && (
-          <div className="p-4 rounded-lg bg-white/5 border border-white/10">
-            <h4 className="text-sm font-semibold text-white mb-2">
+          <div className="p-4 rounded-lg bg-[var(--bg-surface)] border border-[var(--line-thin)]">
+            <h4 className="text-sm font-semibold text-[var(--ink-strong)] mb-2">
               {activeDetail.label}
             </h4>
-            <p className="text-xs text-gray-300 mb-2">
+            <p className="text-xs text-[var(--ink-default)] mb-2">
               {activeDetail.detail}
             </p>
             {activeDetail.config && (
               <div className="mt-2 px-3 py-1.5 rounded bg-emerald-500/10 border border-emerald-400/20">
-                <code className="text-xs text-emerald-300 font-mono">
+                <code className="text-xs text-emerald-700 font-mono">
                   {activeDetail.config}
                 </code>
               </div>
@@ -123,7 +123,7 @@ export function ExecutorLifecycleDiagram() {
         )}
 
         {/* Legend */}
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-[var(--ink-muted)]">
           Нажмите на фазу для подробной информации
         </p>
       </div>

@@ -16,7 +16,7 @@ export function RapidsGpuDiagram() {
       <FlowColumn gap={10} align="stretch">
         {/* Without RAPIDS */}
         <div>
-          <div className="text-xs text-gray-400 mb-2">Без RAPIDS (стандартный Spark):</div>
+          <div className="text-xs text-[var(--ink-muted)] mb-2">Без RAPIDS (стандартный Spark):</div>
           <FlowRow gap={4} wrap align="center">
             <FlowNode variant="compute" size="sm">
               <FlowColumn gap={0} align="center">
@@ -43,7 +43,7 @@ export function RapidsGpuDiagram() {
 
         {/* With RAPIDS */}
         <div>
-          <div className="text-xs text-emerald-300 mb-2">С RAPIDS:</div>
+          <div className="text-xs text-emerald-700 mb-2">С RAPIDS:</div>
           <FlowRow gap={4} wrap align="center">
             <FlowNode variant="compute" size="sm">
               <FlowColumn gap={0} align="center">
@@ -59,7 +59,7 @@ export function RapidsGpuDiagram() {
                   <span className="text-[9px] opacity-70">(GPU ops)</span>
                 </FlowColumn>
               </FlowNode>
-              <div className="mt-1 text-[9px] text-emerald-300 text-center">
+              <div className="mt-1 text-[9px] text-emerald-700 text-center">
                 GPU Plugin replaces CPU ops
               </div>
             </div>

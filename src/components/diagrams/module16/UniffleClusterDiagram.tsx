@@ -30,14 +30,14 @@ export function UniffleClusterDiagram() {
                   <span className="opacity-60">Coordinator (standby)</span>
                 </FlowColumn>
               </FlowNode>
-              <span className="text-[10px] text-purple-300">HA cluster</span>
+              <span className="text-[10px] text-purple-700">HA cluster</span>
             </FlowRow>
 
             <Arrow direction="down" label="heartbeat + assignment" />
 
             {/* Shuffle Servers */}
             <div className="w-full rounded-lg border border-purple-400/15 bg-purple-500/5 p-3">
-              <div className="text-xs text-purple-300/70 mb-2">Shuffle Servers</div>
+              <div className="text-xs text-purple-700/70 mb-2">Shuffle Servers</div>
               <FlowRow gap={4} wrap align="center">
                 {[1, 2].map((i) => (
                   <FlowNode key={i} variant="storage" size="sm">

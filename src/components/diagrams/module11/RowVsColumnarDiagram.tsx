@@ -33,28 +33,28 @@ export function RowVsColumnarDiagram() {
       <FlowRow gap={24} wrap align="start">
         {/* Row-oriented */}
         <FlowColumn gap={4} align="start" className="flex-1 min-w-[220px]">
-          <div className="text-xs font-semibold text-rose-300">
+          <div className="text-xs font-semibold text-rose-700">
             Row-oriented (строчное хранение)
           </div>
           <div className="rounded-lg border border-rose-400/20 bg-rose-500/5 p-2 w-full">
             {rows.map((row, i) => (
-              <div key={i} className="text-xs font-mono text-gray-300 py-0.5 flex gap-1 flex-wrap">
-                <span className="text-rose-300/40">id={row.id}</span>
-                <span className="text-rose-300/40">name="{row.name}"</span>
-                <span className="text-rose-300/40">age={row.age}</span>
-                <span className="text-rose-300/40">dept="{row.dept}"</span>
-                <span className="text-emerald-300">salary={row.salary}</span>
+              <div key={i} className="text-xs font-mono text-[var(--ink-default)] py-0.5 flex gap-1 flex-wrap">
+                <span className="text-rose-700/40">id={row.id}</span>
+                <span className="text-rose-700/40">name="{row.name}"</span>
+                <span className="text-rose-700/40">age={row.age}</span>
+                <span className="text-rose-700/40">dept="{row.dept}"</span>
+                <span className="text-emerald-700">salary={row.salary}</span>
               </div>
             ))}
           </div>
-          <div className="text-[10px] text-rose-300/70">
+          <div className="text-[10px] text-rose-700/70">
             ← читаем ВСЁ, 83% данных выбрасываются
           </div>
         </FlowColumn>
 
         {/* Columnar */}
         <FlowColumn gap={4} align="start" className="flex-1 min-w-[200px]">
-          <div className="text-xs font-semibold text-emerald-300">
+          <div className="text-xs font-semibold text-emerald-700">
             Columnar (колоночное хранение)
           </div>
           <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 p-2 w-full">
@@ -62,7 +62,7 @@ export function RowVsColumnarDiagram() {
               <div
                 key={i}
                 className={`text-xs font-mono py-0.5 flex items-center gap-2 ${
-                  col.skip ? 'text-gray-500' : 'text-emerald-300'
+                  col.skip ? 'text-[var(--ink-subtle)]' : 'text-emerald-700'
                 }`}
               >
                 <span className="w-14 shrink-0">{col.name}:</span>
@@ -73,7 +73,7 @@ export function RowVsColumnarDiagram() {
               </div>
             ))}
           </div>
-          <div className="text-[10px] text-emerald-300/70">
+          <div className="text-[10px] text-emerald-700/70">
             ← читаем только salary
           </div>
         </FlowColumn>

@@ -16,7 +16,7 @@ export function ClientModeDiagram() {
       <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
         {/* Ваша машина */}
         <FlowColumn gap={4}>
-          <p className="text-xs text-gray-400 font-semibold text-center">
+          <p className="text-xs text-[var(--ink-muted)] font-semibold text-center">
             Ваша машина
           </p>
           <FlowNode variant="app" size="lg">
@@ -36,7 +36,7 @@ export function ClientModeDiagram() {
 
         {/* Кластер */}
         <FlowColumn gap={4}>
-          <p className="text-xs text-gray-400 font-semibold text-center">
+          <p className="text-xs text-[var(--ink-muted)] font-semibold text-center">
             Кластер
           </p>
           <div className="flex flex-col gap-1.5">

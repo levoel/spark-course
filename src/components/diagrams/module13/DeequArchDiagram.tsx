@@ -15,7 +15,7 @@ export function DeequArchDiagram() {
   return (
     <DiagramContainer title="Deequ Architecture" color="blue">
       <div className="rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
-        <div className="text-xs text-blue-300/70 mb-3">Deequ</div>
+        <div className="text-xs text-blue-700/70 mb-3">Deequ</div>
 
         <FlowColumn gap={10} align="center">
           {/* Top row: 3 components */}

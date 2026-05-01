@@ -56,10 +56,10 @@ export function ServingReviewDiagram() {
           <Arrow direction="down" />
 
           {/* Silver */}
-          <div className="w-full rounded-xl border border-gray-400/30 bg-gray-500/5 p-3">
+          <div className="w-full rounded-xl border border-[var(--line-medium)] bg-[var(--bg-deep)] p-3">
             <FlowNode variant="storage" size="sm" className="w-full">
               <FlowColumn gap={1} align="center">
-                <span className="text-gray-300 font-medium">SILVER LAYER</span>
+                <span className="text-[var(--ink-default)] font-medium">SILVER LAYER</span>
                 <span className="text-[9px] opacity-70">enriched_orders (join + dedup)</span>
                 <span className="text-[9px] opacity-70">customers_dim (SCD Type 1)</span>
               </FlowColumn>
@@ -80,7 +80,7 @@ export function ServingReviewDiagram() {
           <div className="w-full rounded-xl border border-yellow-400/30 bg-yellow-500/5 p-3">
             <FlowNode variant="storage" size="sm" className="w-full">
               <FlowColumn gap={1} align="center">
-                <span className="text-yellow-300 font-medium">GOLD LAYER</span>
+                <span className="text-yellow-700 font-medium">GOLD LAYER</span>
                 <span className="text-[9px] opacity-70">daily_revenue · city_revenue (+ running total)</span>
                 <span className="text-[9px] opacity-70">product_rankings (+ dense_rank)</span>
               </FlowColumn>
@@ -101,7 +101,7 @@ export function ServingReviewDiagram() {
         {/* Side channel */}
         <div className="shrink-0 mt-auto">
           <div className="rounded-xl border border-red-400/20 bg-red-500/5 p-3">
-            <div className="text-xs text-red-300/70 mb-2">Side channel</div>
+            <div className="text-xs text-red-700/70 mb-2">Side channel</div>
             <FlowColumn gap={2} align="center">
               <FlowNode variant="monitoring" size="sm">
                 <FlowColumn gap={0} align="center">

@@ -39,10 +39,10 @@ export function TraditionalCopyDiagram() {
           {steps.map((s, i) => (
             <div key={i} className="flex items-center gap-2">
               <Arrow direction="right" />
-              <div className="text-xs text-gray-300">
+              <div className="text-xs text-[var(--ink-default)]">
                 <div className="font-semibold">{s.label}</div>
                 <div className="opacity-60">{s.detail}</div>
-                <div className="text-amber-300/80">{s.time}</div>
+                <div className="text-amber-700/80">{s.time}</div>
               </div>
             </div>
           ))}
@@ -58,7 +58,7 @@ export function TraditionalCopyDiagram() {
         </FlowNode>
       </FlowRow>
 
-      <div className="text-center text-xs text-gray-400 mt-3">
+      <div className="text-center text-xs text-[var(--ink-muted)] mt-3">
         Итого: ~5.5 сек для 1 GB, 2× memory usage
       </div>
     </DiagramContainer>

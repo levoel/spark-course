@@ -34,7 +34,7 @@ export function StreamingMicroBatchDiagram() {
               {batches.map((b, i) => (
                 <span
                   key={i}
-                  className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-400/20 text-xs text-amber-200"
+                  className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-400/20 text-xs text-amber-700"
                 >
                   {b.label}
                   <br />

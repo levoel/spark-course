@@ -55,8 +55,8 @@ export function CompactionBeforeAfterDiagram() {
             onClick={() => setShowAfter(false)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               !showAfter
-                ? 'bg-rose-500/20 border border-rose-400/40 text-rose-200'
-                : 'bg-gray-500/10 border border-gray-500/20 text-gray-400 hover:bg-gray-500/15'
+                ? 'bg-rose-500/20 border border-rose-400/40 text-rose-700'
+                : 'bg-[var(--bg-deep)] border border-[var(--line-medium)] text-[var(--ink-muted)] hover:bg-[var(--bg-deep)]'
             }`}
           >
             До OPTIMIZE
@@ -65,8 +65,8 @@ export function CompactionBeforeAfterDiagram() {
             onClick={() => setShowAfter(true)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               showAfter
-                ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-200'
-                : 'bg-gray-500/10 border border-gray-500/20 text-gray-400 hover:bg-gray-500/15'
+                ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-700'
+                : 'bg-[var(--bg-deep)] border border-[var(--line-medium)] text-[var(--ink-muted)] hover:bg-[var(--bg-deep)]'
             }`}
           >
             После OPTIMIZE
@@ -81,19 +81,19 @@ export function CompactionBeforeAfterDiagram() {
           <div className="p-3 space-y-1">
             {state.files.map((f, i) => (
               <div key={i} className="flex items-center gap-2 text-xs font-mono">
-                <span className="text-gray-500">
+                <span className="text-[var(--ink-subtle)]">
                   {i < state.files.length - 1 ? '├──' : '└──'}
                 </span>
                 <span className={`text-${color}-300/80`}>{f.name}</span>
                 {f.size && (
-                  <span className="text-gray-500 ml-auto">({f.size})</span>
+                  <span className="text-[var(--ink-subtle)] ml-auto">({f.size})</span>
                 )}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="text-center text-xs text-gray-400 font-mono">
+        <div className="text-center text-xs text-[var(--ink-muted)] font-mono">
           {state.summary}
         </div>
       </div>

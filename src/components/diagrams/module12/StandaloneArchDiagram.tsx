@@ -19,7 +19,7 @@ export function StandaloneArchDiagram() {
           <FlowColumn gap={1} align="center">
             <span>Spark Master</span>
             <span className="text-xs opacity-70">(scheduler)</span>
-            <span className="text-[10px] text-blue-300">:8080 (UI) · :7077 (RPC)</span>
+            <span className="text-[10px] text-blue-700">:8080 (UI) · :7077 (RPC)</span>
           </FlowColumn>
         </FlowNode>
 

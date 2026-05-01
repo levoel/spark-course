@@ -58,16 +58,16 @@ const wideResult: Partition[] = [
   { id: 2, rows: [{ city: 'Kazan', color: cityColors.Kazan }, { city: 'Kazan', color: cityColors.Kazan }, { city: 'Kazan', color: cityColors.Kazan }, { city: 'Kazan', color: cityColors.Kazan }] },
 ];
 
-const partitionGlassStyle = 'rounded-lg border border-white/15 bg-white/5 backdrop-blur-sm p-2 min-h-[80px]';
+const partitionGlassStyle = 'rounded-lg border border-[var(--line-thin)] bg-[var(--bg-surface)] backdrop-blur-sm p-2 min-h-[80px]';
 
 function PartitionView({ partition, label }: { partition: Partition; label: string }) {
   return (
     <DiagramTooltip content={`Партиция ${partition.id}: ${partition.rows.length} строк. ${label}`}>
       <div className={partitionGlassStyle}>
-        <p className="text-[10px] text-gray-400 mb-1.5 font-mono">P{partition.id}</p>
+        <p className="text-[10px] text-[var(--ink-muted)] mb-1.5 font-mono">P{partition.id}</p>
         <div className="flex flex-col gap-1">
           {partition.rows.length === 0 ? (
-            <span className="text-[10px] text-gray-500 italic">пусто</span>
+            <span className="text-[10px] text-[var(--ink-subtle)] italic">пусто</span>
           ) : (
             partition.rows.map((row, i) => (
               <DiagramTooltip key={i} content={`Строка: city = "${row.city}"`}>
@@ -136,8 +136,8 @@ export function ShuffleVisualizationDiagram() {
               tabIndex={0}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${
                 mode === 'narrow'
-                  ? 'bg-green-500/30 text-green-300 border border-green-400/50'
-                  : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                  ? 'bg-green-500/30 text-green-700 border border-green-400/50'
+                  : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
               }`}
             >
               Narrow: filter()
@@ -151,8 +151,8 @@ export function ShuffleVisualizationDiagram() {
               tabIndex={0}
               className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-300 ${
                 mode === 'wide'
-                  ? 'bg-red-500/30 text-red-300 border border-red-400/50'
-                  : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                  ? 'bg-red-500/30 text-red-700 border border-red-400/50'
+                  : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
               }`}
             >
               Wide: groupBy()
@@ -163,8 +163,8 @@ export function ShuffleVisualizationDiagram() {
         {/* Operation label */}
         <div className={`text-center text-xs font-mono px-3 py-1.5 rounded-md transition-all duration-300 ${
           mode === 'narrow'
-            ? 'bg-green-500/10 text-green-300 border border-green-400/20'
-            : 'bg-red-500/10 text-red-300 border border-red-400/20'
+            ? 'bg-green-500/10 text-green-700 border border-green-400/20'
+            : 'bg-red-500/10 text-red-700 border border-red-400/20'
         }`}>
           {mode === 'narrow'
             ? 'df.filter(col("city") == "Moscow") → Narrow: данные остаются в своих партициях'
@@ -173,7 +173,7 @@ export function ShuffleVisualizationDiagram() {
 
         {/* Source partitions */}
         <div>
-          <p className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-wider">Исходные партиции</p>
+          <p className="text-[10px] text-[var(--ink-subtle)] mb-1.5 uppercase tracking-wider">Исходные партиции</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {sourcePartitions.map((p) => (
               <PartitionView key={p.id} partition={p} label="Исходные данные -- смешанные города" />
@@ -186,7 +186,7 @@ export function ShuffleVisualizationDiagram() {
 
         {/* Result partitions */}
         <div>
-          <p className="text-[10px] text-gray-500 mb-1.5 uppercase tracking-wider">
+          <p className="text-[10px] text-[var(--ink-subtle)] mb-1.5 uppercase tracking-wider">
             {mode === 'narrow' ? 'Результат (в тех же партициях)' : 'Результат после shuffle'}
           </p>
           <div className={`grid gap-2 ${mode === 'narrow' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
@@ -226,7 +226,7 @@ export function ShuffleVisualizationDiagram() {
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-3 justify-center text-[10px] text-gray-400 mt-1">
+        <div className="flex flex-wrap gap-3 justify-center text-[10px] text-[var(--ink-muted)] mt-1">
           {Object.entries(cityColors).map(([city, color]) => (
             <span key={city} className="flex items-center gap-1">
               <span className={`inline-block w-2.5 h-2.5 rounded-sm ${color}`} />

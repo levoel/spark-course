@@ -35,10 +35,10 @@ export function JdbcPipelineDiagram() {
           {problems.map((p, i) => (
             <div key={i} className="flex items-center gap-1">
               <Arrow direction="right" />
-              <span className="text-xs text-gray-400 whitespace-nowrap">{p}</span>
+              <span className="text-xs text-[var(--ink-muted)] whitespace-nowrap">{p}</span>
             </div>
           ))}
-          <span className="text-[10px] text-rose-300/70 mt-1">text/binary encoding</span>
+          <span className="text-[10px] text-rose-700/70 mt-1">text/binary encoding</span>
         </FlowColumn>
 
         <FlowNode variant="app" size="md">

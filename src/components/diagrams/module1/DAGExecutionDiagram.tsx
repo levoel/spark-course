@@ -55,7 +55,7 @@ export function DAGExecutionDiagram() {
       <div className="flex flex-col gap-2">
         {/* SQL query reference */}
         <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-400/30 mb-2">
-          <p className="text-xs text-blue-200 font-mono">
+          <p className="text-xs text-blue-700 font-mono">
             SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.amount &gt; 100
           </p>
         </div>
@@ -114,11 +114,11 @@ export function DAGExecutionDiagram() {
 
         {/* Stage detail panel */}
         {activeStage !== null && (
-          <div className="mt-4 p-4 rounded-lg bg-white/5 border border-white/10">
-            <h4 className="text-sm font-semibold text-white mb-2">
+          <div className="mt-4 p-4 rounded-lg bg-[var(--bg-surface)] border border-[var(--line-thin)]">
+            <h4 className="text-sm font-semibold text-[var(--ink-strong)] mb-2">
               {stages[activeStage].name}
             </h4>
-            <p className="text-xs text-gray-300 mb-3">
+            <p className="text-xs text-[var(--ink-default)] mb-3">
               {stages[activeStage].description}
             </p>
 
@@ -134,11 +134,11 @@ export function DAGExecutionDiagram() {
               />
             </div>
 
-            <div className="text-xs text-gray-400">
+            <div className="text-xs text-[var(--ink-muted)]">
               <p className="font-semibold mb-1">Operations:</p>
               <ul className="list-disc list-inside space-y-0.5">
                 {stages[activeStage].operations.map((op, i) => (
-                  <li key={i} className="font-mono text-gray-300">{op}</li>
+                  <li key={i} className="font-mono text-[var(--ink-default)]">{op}</li>
                 ))}
               </ul>
             </div>
@@ -146,8 +146,8 @@ export function DAGExecutionDiagram() {
         )}
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-4 mt-2 text-xs text-gray-400">
-          <span>Stages 0 и 1 выполняются <strong className="text-white">параллельно</strong></span>
+        <div className="flex flex-wrap gap-4 mt-2 text-xs text-[var(--ink-muted)]">
+          <span>Stages 0 и 1 выполняются <strong className="text-[var(--ink-strong)]">параллельно</strong></span>
           <span>Stage 2 ждёт завершения обеих</span>
           <span>Нажмите на stage для деталей</span>
         </div>

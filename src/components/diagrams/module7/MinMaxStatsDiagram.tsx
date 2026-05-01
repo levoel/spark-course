@@ -59,15 +59,15 @@ export function MinMaxStatsDiagram() {
             `}
           >
             <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-amber-200">
+              <span className="text-sm font-semibold text-amber-700">
                 {rg.label}
               </span>
-              <span className="text-[10px] text-gray-400 font-mono">{rg.rowCount}</span>
+              <span className="text-[10px] text-[var(--ink-muted)] font-mono">{rg.rowCount}</span>
             </div>
             <div className="space-y-0.5 ml-2">
               {rg.stats.map((s, j) => (
                 <div key={j} className="flex items-center gap-2 text-xs font-mono">
-                  <span className="text-amber-300/70 w-24">{s.col}:</span>
+                  <span className="text-amber-700/70 w-24">{s.col}:</span>
                   <span className="text-emerald-400/70">min={s.min}</span>
                   <span className="text-rose-400/70">max={s.max}</span>
                 </div>

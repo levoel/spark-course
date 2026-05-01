@@ -16,7 +16,7 @@ export function PushShuffleDiagram() {
       <FlowColumn gap={10} align="stretch">
         {/* Traditional - pull-based */}
         <div>
-          <div className="text-xs text-gray-400 mb-2">Traditional shuffle (pull-based):</div>
+          <div className="text-xs text-[var(--ink-muted)] mb-2">Traditional shuffle (pull-based):</div>
           <FlowRow gap={6} wrap align="center">
             <FlowColumn gap={2} align="center">
               {[1, 2, 3].map((i) => (
@@ -38,7 +38,7 @@ export function PushShuffleDiagram() {
 
         {/* Push-based */}
         <div>
-          <div className="text-xs text-emerald-300 mb-2">Push-based shuffle:</div>
+          <div className="text-xs text-emerald-700 mb-2">Push-based shuffle:</div>
           <FlowRow gap={6} wrap align="center">
             <FlowColumn gap={2} align="center">
               {[1, 2, 3].map((i) => (

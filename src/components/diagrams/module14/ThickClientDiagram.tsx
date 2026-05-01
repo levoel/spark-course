@@ -21,13 +21,13 @@ export function ThickClientDiagram() {
       <FlowRow gap={12} wrap align="center">
         {/* Client Machine */}
         <div className="rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
-          <div className="text-xs text-blue-300/70 mb-2">Client Machine</div>
+          <div className="text-xs text-blue-700/70 mb-2">Client Machine</div>
           <FlowNode variant="app" size="md">
             <FlowColumn gap={1} align="center">
               <span>Python Process</span>
               <span className="text-[10px] opacity-70">+ JVM Driver</span>
               <span className="text-[10px] opacity-70">+ SparkContext</span>
-              <span className="text-[10px] text-amber-300">(~300MB pyspark)</span>
+              <span className="text-[10px] text-amber-700">(~300MB pyspark)</span>
             </FlowColumn>
           </FlowNode>
         </div>
@@ -36,7 +36,7 @@ export function ThickClientDiagram() {
 
         {/* Cluster */}
         <div className="rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4">
-          <div className="text-xs text-emerald-300/70 mb-2">Cluster</div>
+          <div className="text-xs text-emerald-700/70 mb-2">Cluster</div>
           <FlowColumn gap={3} align="center">
             {[1, 2, 3].map((i) => (
               <FlowNode key={i} variant="compute" size="sm">

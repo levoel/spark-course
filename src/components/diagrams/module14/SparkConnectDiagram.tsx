@@ -18,14 +18,14 @@ function Arrow({ label, dashed }: { label?: string; dashed?: boolean }) {
   return (
     <div className="flex flex-col items-center justify-center min-w-[60px] md:min-w-[80px] shrink-0">
       {label && (
-        <span className="text-[9px] md:text-[10px] text-gray-400 text-center mb-1 leading-tight">
+        <span className="text-[9px] md:text-[10px] text-[var(--ink-muted)] text-center mb-1 leading-tight">
           {label}
         </span>
       )}
       <div className="relative w-full h-6 flex items-center">
         <div
           className={`flex-1 h-0.5 ${
-            dashed ? 'border-t border-dashed border-gray-500' : 'bg-gray-500'
+            dashed ? 'border-t border-dashed border-[var(--line-medium)]' : 'bg-[var(--bg-deep)]'
           }`}
         />
         <div className="w-0 h-0 border-t-[5px] border-t-transparent border-b-[5px] border-b-transparent border-l-[8px] border-l-gray-500 shrink-0" />
@@ -46,7 +46,7 @@ function GrpcChannel() {
         <div className="w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[10px] border-l-cyan-400/80 shrink-0" />
       </div>
       <DiagramTooltip content="Communication uses Protocol Buffers for plan serialization and Apache Arrow for data transfer.">
-        <span className="text-[8px] text-cyan-300/60 cursor-help mt-0.5">
+        <span className="text-[8px] text-cyan-700/60 cursor-help mt-0.5">
           Protocol Buffers + Arrow
         </span>
       </DiagramTooltip>
@@ -68,8 +68,8 @@ export default function SparkConnectDiagram() {
             onClick={() => setMode('traditional')}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               !isConnect
-                ? 'bg-blue-500/20 text-blue-300 border border-blue-400/50'
-                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                ? 'bg-blue-500/20 text-blue-700 border border-blue-400/50'
+                : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
             }`}
           >
             Traditional Mode
@@ -78,8 +78,8 @@ export default function SparkConnectDiagram() {
             onClick={() => setMode('connect')}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               isConnect
-                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-400/50'
-                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                ? 'bg-cyan-500/20 text-cyan-700 border border-cyan-400/50'
+                : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
             }`}
           >
             Connect Mode
@@ -93,13 +93,13 @@ export default function SparkConnectDiagram() {
             <div className="flex flex-col md:flex-row items-center justify-center gap-3 md:gap-0">
               <DiagramTooltip content="In traditional mode, the client application IS the Spark driver. If the client crashes, the entire Spark application fails.">
                 <div className="bg-blue-500/10 border border-blue-400/30 rounded-xl p-4 backdrop-blur-sm cursor-help w-full md:w-auto md:min-w-[180px] transition-all duration-500">
-                  <h4 className="text-sm font-semibold text-blue-300 mb-2">
+                  <h4 className="text-sm font-semibold text-blue-700 mb-2">
                     Client Application
                   </h4>
                   <div className="space-y-1">
-                    <p className="text-xs text-gray-300 font-mono">PySpark Driver (~300MB)</p>
-                    <p className="text-xs text-gray-400">SparkSession runs here</p>
-                    <p className="text-xs text-gray-500">Direct JVM process</p>
+                    <p className="text-xs text-[var(--ink-default)] font-mono">PySpark Driver (~300MB)</p>
+                    <p className="text-xs text-[var(--ink-muted)]">SparkSession runs here</p>
+                    <p className="text-xs text-[var(--ink-subtle)]">Direct JVM process</p>
                   </div>
                 </div>
               </DiagramTooltip>
@@ -108,12 +108,12 @@ export default function SparkConnectDiagram() {
 
               <DiagramTooltip content="Executors receive tasks from the driver running inside the client process.">
                 <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-4 backdrop-blur-sm cursor-help w-full md:w-auto md:min-w-[180px]">
-                  <h4 className="text-sm font-semibold text-amber-300 mb-2">
+                  <h4 className="text-sm font-semibold text-amber-700 mb-2">
                     Spark Cluster
                   </h4>
                   <div className="space-y-1">
-                    <p className="text-xs text-gray-300">Executors</p>
-                    <p className="text-xs text-gray-400">Tasks execute here</p>
+                    <p className="text-xs text-[var(--ink-default)]">Executors</p>
+                    <p className="text-xs text-[var(--ink-muted)]">Tasks execute here</p>
                   </div>
                 </div>
               </DiagramTooltip>
@@ -123,13 +123,13 @@ export default function SparkConnectDiagram() {
             <div className="flex flex-col md:flex-row items-center justify-center gap-3 md:gap-0">
               <DiagramTooltip content="Lightweight client sends unresolved logical plans via gRPC. Client crash does NOT affect the running Spark session.">
                 <div className="bg-blue-400/5 border border-blue-300/20 rounded-xl p-3 backdrop-blur-sm cursor-help w-full md:w-auto md:min-w-[140px] transition-all duration-500">
-                  <h4 className="text-sm font-semibold text-blue-200 mb-2">
+                  <h4 className="text-sm font-semibold text-blue-700 mb-2">
                     Thin Client
                   </h4>
                   <div className="space-y-1">
-                    <p className="text-xs text-gray-300 font-mono">pyspark-client (~5MB)</p>
-                    <p className="text-xs text-gray-400">Sends plans via gRPC</p>
-                    <p className="text-xs text-gray-500">Language-independent</p>
+                    <p className="text-xs text-[var(--ink-default)] font-mono">pyspark-client (~5MB)</p>
+                    <p className="text-xs text-[var(--ink-muted)]">Sends plans via gRPC</p>
+                    <p className="text-xs text-[var(--ink-subtle)]">Language-independent</p>
                   </div>
                 </div>
               </DiagramTooltip>
@@ -138,13 +138,13 @@ export default function SparkConnectDiagram() {
 
               <DiagramTooltip content="Spark Connect server manages the SparkSession lifecycle independently of the client. Multiple clients can share a single server.">
                 <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-4 backdrop-blur-sm cursor-help w-full md:w-auto md:min-w-[180px]">
-                  <h4 className="text-sm font-semibold text-amber-300 mb-2">
+                  <h4 className="text-sm font-semibold text-amber-700 mb-2">
                     Spark Connect Server
                   </h4>
                   <div className="space-y-1">
-                    <p className="text-xs text-gray-300">Manages SparkSession</p>
-                    <p className="text-xs text-gray-400">Runs on cluster gateway</p>
-                    <p className="text-xs text-gray-500 font-mono">Port 15002</p>
+                    <p className="text-xs text-[var(--ink-default)]">Manages SparkSession</p>
+                    <p className="text-xs text-[var(--ink-muted)]">Runs on cluster gateway</p>
+                    <p className="text-xs text-[var(--ink-subtle)] font-mono">Port 15002</p>
                   </div>
                 </div>
               </DiagramTooltip>
@@ -152,12 +152,12 @@ export default function SparkConnectDiagram() {
               <Arrow label="Task dispatch" />
 
               <div className="bg-amber-500/10 border border-amber-400/30 rounded-xl p-4 backdrop-blur-sm w-full md:w-auto md:min-w-[140px]">
-                <h4 className="text-sm font-semibold text-amber-300 mb-2">
+                <h4 className="text-sm font-semibold text-amber-700 mb-2">
                   Spark Cluster
                 </h4>
                 <div className="space-y-1">
-                  <p className="text-xs text-gray-300">Executors</p>
-                  <p className="text-xs text-gray-400">Tasks execute here</p>
+                  <p className="text-xs text-[var(--ink-default)]">Executors</p>
+                  <p className="text-xs text-[var(--ink-muted)]">Tasks execute here</p>
                 </div>
               </div>
             </div>
@@ -169,8 +169,8 @@ export default function SparkConnectDiagram() {
           <span
             className={`inline-block px-3 py-1 rounded-full text-xs font-medium transition-all duration-500 ${
               isConnect
-                ? 'bg-cyan-500/10 text-cyan-300 border border-cyan-400/30'
-                : 'bg-blue-500/10 text-blue-300 border border-blue-400/30'
+                ? 'bg-cyan-500/10 text-cyan-700 border border-cyan-400/30'
+                : 'bg-blue-500/10 text-blue-700 border border-blue-400/30'
             }`}
           >
             {isConnect ? 'Client decoupled from Driver' : 'Client = Driver (coupled)'}
@@ -197,7 +197,7 @@ export default function SparkConnectDiagram() {
         </div>
 
         {/* Legend */}
-        <div className="flex items-center justify-center gap-4 text-xs text-gray-400">
+        <div className="flex items-center justify-center gap-4 text-xs text-[var(--ink-muted)]">
           <span className="flex items-center gap-1.5">
             <span className="inline-block w-3 h-3 rounded bg-blue-500/20 border border-blue-400/30" />
             Client

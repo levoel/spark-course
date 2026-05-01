@@ -35,7 +35,7 @@ export function MllibPipelineDiagram() {
       <FlowColumn gap={8} align="center">
         {/* Top row: Stages (Estimators/Transformers) */}
         <div>
-          <div className="text-xs text-gray-400 mb-2 text-center">Stages (fit)</div>
+          <div className="text-xs text-[var(--ink-muted)] mb-2 text-center">Stages (fit)</div>
           <FlowRow gap={4} wrap align="center">
             {stages.map((stage, i) => (
               <div key={i} className="flex items-center gap-2">
@@ -57,13 +57,13 @@ export function MllibPipelineDiagram() {
         </div>
 
         {/* Arrow down: fit() -> Model */}
-        <div className="text-xs text-gray-400 text-center">
+        <div className="text-xs text-[var(--ink-muted)] text-center">
           fit() → Model / pass-through
         </div>
 
         {/* Bottom row: Models (all Transformers) */}
         <div>
-          <div className="text-xs text-gray-400 mb-2 text-center">PipelineModel (transform)</div>
+          <div className="text-xs text-[var(--ink-muted)] mb-2 text-center">PipelineModel (transform)</div>
           <FlowRow gap={4} wrap align="center">
             {stages.map((stage, i) => (
               <div key={i} className="flex items-center gap-2">

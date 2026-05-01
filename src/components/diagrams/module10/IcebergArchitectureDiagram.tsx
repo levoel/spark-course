@@ -11,27 +11,27 @@ const layers = [
   {
     label: 'Catalog',
     detail: 'Указатель на текущий snapshot\n(Hive Metastore, REST, Glue, Nessie)',
-    color: 'bg-blue-500/15 border-blue-400/30 text-blue-200',
+    color: 'bg-blue-500/15 border-blue-400/30 text-blue-700',
   },
   {
     label: 'Metadata File (.json)',
     detail: 'Текущая схема, partition spec,\nsnapshot history',
-    color: 'bg-emerald-500/15 border-emerald-400/30 text-emerald-200',
+    color: 'bg-emerald-500/15 border-emerald-400/30 text-emerald-700',
   },
   {
     label: 'Manifest List (.avro)',
     detail: 'Список manifest-файлов\nдля текущего snapshot',
-    color: 'bg-amber-500/15 border-amber-400/30 text-amber-200',
+    color: 'bg-amber-500/15 border-amber-400/30 text-amber-700',
   },
   {
     label: 'Manifest Files (.avro)',
     detail: 'Список data-файлов с column\nstatistics (min/max/count)',
-    color: 'bg-purple-500/15 border-purple-400/30 text-purple-200',
+    color: 'bg-purple-500/15 border-purple-400/30 text-purple-700',
   },
   {
     label: 'Data Files (.parquet)',
     detail: 'Сами данные',
-    color: 'bg-rose-500/15 border-rose-400/30 text-rose-200',
+    color: 'bg-rose-500/15 border-rose-400/30 text-rose-700',
   },
 ];
 

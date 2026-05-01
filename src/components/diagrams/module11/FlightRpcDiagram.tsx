@@ -28,10 +28,10 @@ const methods: RpcMethod[] = [
 ];
 
 const directionColor: Record<string, string> = {
-  request: 'text-blue-300',
-  response: 'text-emerald-300',
-  'stream-in': 'text-amber-300',
-  'stream-out': 'text-purple-300',
+  request: 'text-blue-700',
+  response: 'text-emerald-700',
+  'stream-in': 'text-amber-700',
+  'stream-out': 'text-purple-700',
 };
 
 export function FlightRpcDiagram() {
@@ -54,7 +54,7 @@ export function FlightRpcDiagram() {
               <span className={`text-xs font-mono ${directionColor[m.direction]}`}>
                 {m.name}
               </span>
-              <span className="text-[10px] text-gray-500">{m.detail}</span>
+              <span className="text-[10px] text-[var(--ink-subtle)]">{m.detail}</span>
             </div>
           ))}
         </FlowColumn>

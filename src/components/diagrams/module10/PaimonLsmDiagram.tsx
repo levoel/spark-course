@@ -11,22 +11,22 @@ const levels = [
   {
     label: 'Write buffer (MemTable)',
     detail: '← Записи в памяти',
-    color: 'bg-emerald-500/15 border-emerald-400/30 text-emerald-200',
+    color: 'bg-emerald-500/15 border-emerald-400/30 text-emerald-700',
   },
   {
     label: 'Level 0 (unsorted SST files)',
     detail: '← Flush из memory',
-    color: 'bg-blue-500/15 border-blue-400/30 text-blue-200',
+    color: 'bg-blue-500/15 border-blue-400/30 text-blue-700',
   },
   {
     label: 'Level 1 (sorted, merged SST files)',
     detail: '← Compaction L0 → L1',
-    color: 'bg-amber-500/15 border-amber-400/30 text-amber-200',
+    color: 'bg-amber-500/15 border-amber-400/30 text-amber-700',
   },
   {
     label: 'Level 2+ (sorted, larger files)',
     detail: '← Compaction L1 → L2',
-    color: 'bg-purple-500/15 border-purple-400/30 text-purple-200',
+    color: 'bg-purple-500/15 border-purple-400/30 text-purple-700',
   },
 ];
 
@@ -54,10 +54,10 @@ export function PaimonLsmDiagram() {
           </div>
         ))}
 
-        <div className="mt-3 pt-3 border-t border-gray-700/50">
+        <div className="mt-3 pt-3 border-t border-[var(--line-thin)]">
           {traits.map((t, i) => (
-            <div key={i} className="flex gap-2 text-xs text-gray-300 py-0.5">
-              <span className="font-semibold text-gray-200 shrink-0 w-24">{t.label}:</span>
+            <div key={i} className="flex gap-2 text-xs text-[var(--ink-default)] py-0.5">
+              <span className="font-semibold text-[var(--ink-default)] shrink-0 w-24">{t.label}:</span>
               <span className="opacity-80">{t.value}</span>
             </div>
           ))}

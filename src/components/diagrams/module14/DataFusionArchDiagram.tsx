@@ -14,7 +14,7 @@ export function DataFusionArchDiagram() {
   return (
     <DiagramContainer title="DataFusion Architecture" color="cyan">
       <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-4">
-        <div className="text-xs text-cyan-300/70 mb-3">DataFusion</div>
+        <div className="text-xs text-cyan-700/70 mb-3">DataFusion</div>
 
         <FlowColumn gap={10} align="center">
           <FlowRow gap={4} wrap align="center">

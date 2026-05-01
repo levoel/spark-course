@@ -39,7 +39,7 @@ const COLUMNS: ColumnMeta[] = [
   {
     key: 'id',
     label: 'id (int)',
-    color: 'text-blue-300',
+    color: 'text-blue-700',
     bgColor: 'bg-blue-500/20',
     borderColor: 'border-blue-400/40',
     bytesPerValue: 4,
@@ -47,7 +47,7 @@ const COLUMNS: ColumnMeta[] = [
   {
     key: 'name',
     label: 'name (string)',
-    color: 'text-emerald-300',
+    color: 'text-emerald-700',
     bgColor: 'bg-emerald-500/20',
     borderColor: 'border-emerald-400/40',
     bytesPerValue: 12,
@@ -55,7 +55,7 @@ const COLUMNS: ColumnMeta[] = [
   {
     key: 'age',
     label: 'age (int)',
-    color: 'text-amber-300',
+    color: 'text-amber-700',
     bgColor: 'bg-amber-500/20',
     borderColor: 'border-amber-400/40',
     bytesPerValue: 4,
@@ -63,7 +63,7 @@ const COLUMNS: ColumnMeta[] = [
   {
     key: 'salary',
     label: 'salary (double)',
-    color: 'text-purple-300',
+    color: 'text-purple-700',
     bgColor: 'bg-purple-500/20',
     borderColor: 'border-purple-400/40',
     bytesPerValue: 8,
@@ -94,8 +94,8 @@ export function ArrowColumnarDiagram() {
             onClick={() => setPruningEnabled(!pruningEnabled)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               pruningEnabled
-                ? 'bg-amber-500/20 text-amber-300 border border-amber-400/50'
-                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                ? 'bg-amber-500/20 text-amber-700 border border-amber-400/50'
+                : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
             }`}
           >
             Column Pruning {pruningEnabled ? 'ON' : 'OFF'}
@@ -104,8 +104,8 @@ export function ArrowColumnarDiagram() {
             onClick={() => setShowTransfer(!showTransfer)}
             className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
               showTransfer
-                ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/50'
-                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-white/10'
+                ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-400/50'
+                : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
             }`}
           >
             Zero-Copy Transfer {showTransfer ? 'ON' : 'OFF'}
@@ -115,8 +115,8 @@ export function ArrowColumnarDiagram() {
         {/* Side-by-side layout */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Row-oriented panel */}
-          <div className="rounded-xl border border-white/10 bg-slate-800/40 p-3">
-            <h4 className="text-sm font-semibold text-gray-300 mb-3 text-center">
+          <div className="rounded-xl border border-[var(--line-thin)] bg-[var(--bg-sunken)] p-3">
+            <h4 className="text-sm font-semibold text-[var(--ink-default)] mb-3 text-center">
               Row-Oriented Storage
             </h4>
             <div className="space-y-1.5">
@@ -134,12 +134,12 @@ export function ArrowColumnarDiagram() {
                           key={col.key}
                           className={`flex-1 px-1 py-1 rounded text-xs font-mono text-center transition-all duration-300 border ${
                             dimmed
-                              ? 'bg-slate-700/30 border-slate-600/20 text-gray-500'
+                              ? 'bg-[var(--bg-sunken)] border-[var(--line-thin)] text-[var(--ink-subtle)]'
                               : `${col.bgColor} ${col.borderColor} ${col.color}`
                           }`}
                         >
                           {dimmed ? (
-                            <span className="text-gray-600 text-[10px]">--</span>
+                            <span className="text-[var(--ink-subtle)] text-[10px]">--</span>
                           ) : (
                             String(emp[col.key])
                           )}
@@ -151,15 +151,15 @@ export function ArrowColumnarDiagram() {
               ))}
             </div>
             {pruningEnabled && (
-              <p className="text-[10px] text-gray-500 text-center mt-2">
+              <p className="text-[10px] text-[var(--ink-subtle)] text-center mt-2">
                 Все данные читаются, ненужные колонки отбрасываются после чтения
               </p>
             )}
           </div>
 
           {/* Columnar panel */}
-          <div className="rounded-xl border border-white/10 bg-slate-800/40 p-3">
-            <h4 className="text-sm font-semibold text-gray-300 mb-3 text-center">
+          <div className="rounded-xl border border-[var(--line-thin)] bg-[var(--bg-sunken)] p-3">
+            <h4 className="text-sm font-semibold text-[var(--ink-default)] mb-3 text-center">
               Columnar Storage (Arrow)
             </h4>
             <div className="space-y-1.5">
@@ -178,19 +178,19 @@ export function ArrowColumnarDiagram() {
                     <div
                       className={`flex items-center gap-2 rounded-lg px-2 py-1.5 border transition-all duration-300 ${
                         skipped
-                          ? 'bg-slate-700/20 border-slate-600/20'
+                          ? 'bg-[var(--bg-sunken)] border-[var(--line-thin)]'
                           : `${col.bgColor} ${col.borderColor}`
                       }`}
                     >
                       <span
                         className={`text-xs font-medium w-24 shrink-0 ${
-                          skipped ? 'text-gray-600 line-through' : col.color
+                          skipped ? 'text-[var(--ink-subtle)] line-through' : col.color
                         }`}
                       >
                         {col.label}
                       </span>
                       {skipped ? (
-                        <span className="text-xs text-gray-600 italic">Skipped</span>
+                        <span className="text-xs text-[var(--ink-subtle)] italic">Skipped</span>
                       ) : (
                         <div className="flex gap-0.5 flex-1 overflow-hidden">
                           {EMPLOYEES.map((emp, i) => (
@@ -221,16 +221,16 @@ export function ArrowColumnarDiagram() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
             {/* Row-oriented transfer */}
             <div className="rounded-xl border border-red-400/20 bg-red-950/20 p-3">
-              <h4 className="text-xs font-semibold text-red-300 mb-2 text-center">
+              <h4 className="text-xs font-semibold text-red-700 mb-2 text-center">
                 Row Transfer (Serialize-Copy-Deserialize)
               </h4>
               <div className="flex flex-col items-center gap-1">
                 <div className="flex items-center gap-2 w-full">
-                  <span className="text-[10px] text-gray-400 w-16 text-right shrink-0">
+                  <span className="text-[10px] text-[var(--ink-muted)] w-16 text-right shrink-0">
                     Process A
                   </span>
-                  <div className="flex-1 bg-slate-700/40 rounded px-2 py-1">
-                    <span className="text-[10px] text-gray-300">Row data (RAM)</span>
+                  <div className="flex-1 bg-[var(--bg-sunken)] rounded px-2 py-1">
+                    <span className="text-[10px] text-[var(--ink-default)]">Row data (RAM)</span>
                   </div>
                 </div>
                 <div className="flex flex-col items-center">
@@ -243,11 +243,11 @@ export function ArrowColumnarDiagram() {
                   </span>
                 </div>
                 <div className="flex items-center gap-2 w-full">
-                  <span className="text-[10px] text-gray-400 w-16 text-right shrink-0">
+                  <span className="text-[10px] text-[var(--ink-muted)] w-16 text-right shrink-0">
                     Process B
                   </span>
-                  <div className="flex-1 bg-slate-700/40 rounded px-2 py-1">
-                    <span className="text-[10px] text-gray-300">Row data (copy)</span>
+                  <div className="flex-1 bg-[var(--bg-sunken)] rounded px-2 py-1">
+                    <span className="text-[10px] text-[var(--ink-default)]">Row data (copy)</span>
                   </div>
                 </div>
                 <DataBox label="Время" value="~5.5 сек / 1 GB" variant="highlight" />
@@ -256,16 +256,16 @@ export function ArrowColumnarDiagram() {
 
             {/* Columnar zero-copy transfer */}
             <div className="rounded-xl border border-emerald-400/20 bg-emerald-950/20 p-3">
-              <h4 className="text-xs font-semibold text-emerald-300 mb-2 text-center">
+              <h4 className="text-xs font-semibold text-emerald-700 mb-2 text-center">
                 Arrow Zero-Copy (Shared Memory)
               </h4>
               <div className="flex flex-col items-center gap-1">
                 <div className="flex items-center gap-2 w-full">
-                  <span className="text-[10px] text-gray-400 w-16 text-right shrink-0">
+                  <span className="text-[10px] text-[var(--ink-muted)] w-16 text-right shrink-0">
                     Process A
                   </span>
                   <div className="flex-1 bg-emerald-800/20 rounded px-2 py-1 border border-emerald-500/30">
-                    <span className="text-[10px] text-emerald-300">Pointer &rarr;</span>
+                    <span className="text-[10px] text-emerald-700">Pointer &rarr;</span>
                   </div>
                 </div>
                 <div className="flex flex-col items-center">
@@ -273,7 +273,7 @@ export function ArrowColumnarDiagram() {
                 </div>
                 <div className="flex items-center gap-2 w-full justify-center">
                   <div className="bg-emerald-500/20 border border-emerald-400/40 rounded-lg px-3 py-2">
-                    <span className="text-xs text-emerald-300 font-medium">
+                    <span className="text-xs text-emerald-700 font-medium">
                       Arrow Buffer (shared memory)
                     </span>
                     <br />
@@ -286,11 +286,11 @@ export function ArrowColumnarDiagram() {
                   <span className="text-emerald-400 text-lg">&#8593;</span>
                 </div>
                 <div className="flex items-center gap-2 w-full">
-                  <span className="text-[10px] text-gray-400 w-16 text-right shrink-0">
+                  <span className="text-[10px] text-[var(--ink-muted)] w-16 text-right shrink-0">
                     Process B
                   </span>
                   <div className="flex-1 bg-emerald-800/20 rounded px-2 py-1 border border-emerald-500/30">
-                    <span className="text-[10px] text-emerald-300">&larr; Pointer</span>
+                    <span className="text-[10px] text-emerald-700">&larr; Pointer</span>
                   </div>
                 </div>
                 <DataBox label="Время" value="~0 сек (pointer)" variant="highlight" />
@@ -321,7 +321,7 @@ export function ArrowColumnarDiagram() {
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-3 justify-center text-[10px] text-gray-400">
+        <div className="flex flex-wrap gap-3 justify-center text-[10px] text-[var(--ink-muted)]">
           {COLUMNS.map((col) => (
             <span key={col.key} className="flex items-center gap-1">
               <span className={`inline-block w-2.5 h-2.5 rounded ${col.bgColor} border ${col.borderColor}`} />

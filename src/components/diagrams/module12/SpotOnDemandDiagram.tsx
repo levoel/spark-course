@@ -19,21 +19,21 @@ const layers: LayerConfig[] = [
   {
     label: 'Driver: ВСЕГДА On-Demand',
     detail: 'потеря driver = потеря всего job',
-    color: 'text-red-300',
+    color: 'text-red-700',
     borderColor: 'border-red-400/30',
     bgColor: 'bg-red-500/5',
   },
   {
     label: 'Core Executors: On-Demand (30%)',
     detail: 'гарантированный минимум для shuffle',
-    color: 'text-amber-300',
+    color: 'text-amber-700',
     borderColor: 'border-amber-400/30',
     bgColor: 'bg-amber-500/5',
   },
   {
     label: 'Task Executors: Spot (70%)',
     detail: 'масштабирование, потеря допустима',
-    color: 'text-emerald-300',
+    color: 'text-emerald-700',
     borderColor: 'border-emerald-400/30',
     bgColor: 'bg-emerald-500/5',
   },
@@ -53,7 +53,7 @@ export function SpotOnDemandDiagram() {
             }`}
           >
             <div className={`text-sm font-medium ${layer.color}`}>{layer.label}</div>
-            <div className="text-xs text-gray-400 mt-0.5">({layer.detail})</div>
+            <div className="text-xs text-[var(--ink-muted)] mt-0.5">({layer.detail})</div>
           </div>
         ))}
       </FlowColumn>

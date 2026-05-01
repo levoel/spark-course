@@ -46,7 +46,7 @@ export function ZeroCopyDiagram() {
           </FlowNode>
         </div>
 
-        <div className="text-center text-xs text-gray-400">
+        <div className="text-center text-xs text-[var(--ink-muted)]">
           Итого: ~0 сек, 1× memory usage
         </div>
       </FlowColumn>

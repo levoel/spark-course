@@ -45,7 +45,7 @@ export function PythonUdfOverheadDiagram() {
               >
                 {s.side === 'jvm' && (
                   <div className="absolute right-2 -translate-y-1/2 whitespace-nowrap">
-                    <span className="text-xs text-emerald-300/80 font-mono">
+                    <span className="text-xs text-emerald-700/80 font-mono">
                       {s.num}. {s.label}
                     </span>
                   </div>
@@ -57,7 +57,7 @@ export function PythonUdfOverheadDiagram() {
 
         {/* Arrow column */}
         <div className="flex flex-col items-center justify-center gap-1 px-2">
-          <span className="text-[10px] text-gray-500 font-mono">socket</span>
+          <span className="text-[10px] text-[var(--ink-subtle)] font-mono">socket</span>
         </div>
 
         {/* Python Column */}
@@ -76,8 +76,8 @@ export function PythonUdfOverheadDiagram() {
             key={s.num}
             className={`flex items-center gap-3 px-3 py-1.5 rounded-lg text-xs ${
               s.side === 'jvm'
-                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-300'
-                : 'bg-rose-500/10 border border-rose-500/20 text-rose-300'
+                ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-700'
+                : 'bg-rose-500/10 border border-rose-500/20 text-rose-700'
             }`}
           >
             <span className="font-mono font-bold opacity-60 w-4">{s.num}.</span>
@@ -89,7 +89,7 @@ export function PythonUdfOverheadDiagram() {
         ))}
       </div>
 
-      <p className="text-xs text-gray-500 mt-3 text-center">
+      <p className="text-xs text-[var(--ink-subtle)] mt-3 text-center">
         9 шагов на каждую строку. При 1 миллиарде строк — 9 миллиардов операций.
       </p>
     </DiagramContainer>

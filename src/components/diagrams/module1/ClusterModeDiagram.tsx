@@ -13,7 +13,7 @@ export function ClusterModeDiagram() {
   return (
     <DiagramContainer title="Cluster Mode" color="green">
       <FlowColumn gap={4}>
-        <p className="text-xs text-gray-400 font-semibold text-center">
+        <p className="text-xs text-[var(--ink-muted)] font-semibold text-center">
           Кластер
         </p>
         <div className="flex flex-col gap-1.5">

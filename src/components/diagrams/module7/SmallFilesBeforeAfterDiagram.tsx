@@ -52,8 +52,8 @@ export function SmallFilesBeforeAfterDiagram() {
             onClick={() => setShowAfter(false)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               !showAfter
-                ? 'bg-rose-500/20 border border-rose-400/40 text-rose-200'
-                : 'bg-gray-500/10 border border-gray-500/20 text-gray-400 hover:bg-gray-500/15'
+                ? 'bg-rose-500/20 border border-rose-400/40 text-rose-700'
+                : 'bg-[var(--bg-deep)] border border-[var(--line-medium)] text-[var(--ink-muted)] hover:bg-[var(--bg-deep)]'
             }`}
           >
             Before
@@ -62,8 +62,8 @@ export function SmallFilesBeforeAfterDiagram() {
             onClick={() => setShowAfter(true)}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
               showAfter
-                ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-200'
-                : 'bg-gray-500/10 border border-gray-500/20 text-gray-400 hover:bg-gray-500/15'
+                ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-700'
+                : 'bg-[var(--bg-deep)] border border-[var(--line-medium)] text-[var(--ink-muted)] hover:bg-[var(--bg-deep)]'
             }`}
           >
             After
@@ -78,12 +78,12 @@ export function SmallFilesBeforeAfterDiagram() {
             <div className={`text-${color}-300/70`}>/data/events/</div>
             {['01', '02', '...', '30'].map((day, i) => (
               <div key={i} className={`ml-4 flex items-center gap-2 text-${color}-300/60`}>
-                <span className="text-gray-500">{day === '30' ? '└──' : '├──'}</span>
+                <span className="text-[var(--ink-subtle)]">{day === '30' ? '└──' : '├──'}</span>
                 <span>
                   event_date=2024-01-{day === '...' ? '...' : day}/
                 </span>
                 {day !== '...' && (
-                  <span className="text-gray-500">({state.filesPerPartition})</span>
+                  <span className="text-[var(--ink-subtle)]">({state.filesPerPartition})</span>
                 )}
               </div>
             ))}
@@ -91,16 +91,16 @@ export function SmallFilesBeforeAfterDiagram() {
         </div>
 
         <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="bg-gray-500/10 rounded-lg p-2">
-            <div className="text-[10px] text-gray-500 uppercase">Файлов</div>
+          <div className="bg-[var(--bg-deep)] rounded-lg p-2">
+            <div className="text-[10px] text-[var(--ink-subtle)] uppercase">Файлов</div>
             <div className={`text-sm font-mono font-semibold text-${color}-300`}>{state.totalFiles}</div>
           </div>
-          <div className="bg-gray-500/10 rounded-lg p-2">
-            <div className="text-[10px] text-gray-500 uppercase">Размер</div>
-            <div className="text-sm font-mono font-semibold text-gray-300">{state.totalSize}</div>
+          <div className="bg-[var(--bg-deep)] rounded-lg p-2">
+            <div className="text-[10px] text-[var(--ink-subtle)] uppercase">Размер</div>
+            <div className="text-sm font-mono font-semibold text-[var(--ink-default)]">{state.totalSize}</div>
           </div>
-          <div className="bg-gray-500/10 rounded-lg p-2">
-            <div className="text-[10px] text-gray-500 uppercase">Запрос 1 день</div>
+          <div className="bg-[var(--bg-deep)] rounded-lg p-2">
+            <div className="text-[10px] text-[var(--ink-subtle)] uppercase">Запрос 1 день</div>
             <div className={`text-sm font-mono font-semibold text-${color}-300`}>{state.queryTime}</div>
           </div>
         </div>

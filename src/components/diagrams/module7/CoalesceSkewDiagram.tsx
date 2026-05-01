@@ -42,7 +42,7 @@ export function CoalesceSkewDiagram() {
   return (
     <DiagramContainer title="coalesce(2): неравномерные файлы" color="amber">
       <div className="flex flex-col gap-4">
-        <div className="text-center text-xs text-gray-400 font-mono mb-1">
+        <div className="text-center text-xs text-[var(--ink-muted)] font-mono mb-1">
           coalesce(2) из 4 партиций:
         </div>
         {pairs.map((pair, pi) => (

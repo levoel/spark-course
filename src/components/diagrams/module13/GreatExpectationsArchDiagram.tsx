@@ -15,7 +15,7 @@ export function GreatExpectationsArchDiagram() {
   return (
     <DiagramContainer title="Great Expectations Architecture" color="purple">
       <div className="rounded-xl border border-purple-400/20 bg-purple-500/5 p-4">
-        <div className="text-xs text-purple-300/70 mb-3">Data Context (центральная конфигурация проекта)</div>
+        <div className="text-xs text-purple-700/70 mb-3">Data Context (центральная конфигурация проекта)</div>
 
         <FlowColumn gap={10} align="center">
           {/* Top row: 3 components */}

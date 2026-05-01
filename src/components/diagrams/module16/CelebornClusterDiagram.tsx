@@ -35,14 +35,14 @@ export function CelebornClusterDiagram() {
                   <span className="opacity-60">Master (standby)</span>
                 </FlowColumn>
               </FlowNode>
-              <span className="text-[10px] text-blue-300">Raft HA</span>
+              <span className="text-[10px] text-blue-700">Raft HA</span>
             </FlowRow>
 
             <Arrow direction="down" label="slot allocation" />
 
             {/* Workers */}
             <div className="w-full rounded-lg border border-blue-400/15 bg-blue-500/5 p-3">
-              <div className="text-xs text-blue-300/70 mb-2">Workers</div>
+              <div className="text-xs text-blue-700/70 mb-2">Workers</div>
               <FlowRow gap={4} wrap align="center">
                 {[1, 2].map((i) => (
                   <FlowNode key={i} variant="storage" size="sm">
@@ -52,7 +52,7 @@ export function CelebornClusterDiagram() {
                     </FlowColumn>
                   </FlowNode>
                 ))}
-                <span className="text-xs text-gray-500">...</span>
+                <span className="text-xs text-[var(--ink-subtle)]">...</span>
               </FlowRow>
             </div>
           </FlowColumn>

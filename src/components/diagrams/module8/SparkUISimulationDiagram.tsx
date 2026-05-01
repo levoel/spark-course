@@ -231,16 +231,16 @@ function JobsTab() {
   return (
     <div className="space-y-2">
       <div className="grid grid-cols-[auto_1fr_auto_auto_auto] gap-x-3 gap-y-2 text-xs">
-        <span className="text-gray-500 font-semibold">ID</span>
-        <span className="text-gray-500 font-semibold">Description</span>
-        <span className="text-gray-500 font-semibold">Duration</span>
-        <span className="text-gray-500 font-semibold">Stages</span>
-        <span className="text-gray-500 font-semibold">Status</span>
+        <span className="text-[var(--ink-subtle)] font-semibold">ID</span>
+        <span className="text-[var(--ink-subtle)] font-semibold">Description</span>
+        <span className="text-[var(--ink-subtle)] font-semibold">Duration</span>
+        <span className="text-[var(--ink-subtle)] font-semibold">Stages</span>
+        <span className="text-[var(--ink-subtle)] font-semibold">Status</span>
 
         {jobs.map((job) => (
           <Fragment key={job.id}>
-            <span className="text-gray-300 font-mono">{job.id}</span>
-            <span className="text-gray-300 font-mono truncate">
+            <span className="text-[var(--ink-default)] font-mono">{job.id}</span>
+            <span className="text-[var(--ink-default)] font-mono truncate">
               {job.redFlag ? (
                 <DiagramTooltip content={job.redFlag}>
                   <span className="flex items-center gap-1.5 cursor-help">
@@ -252,8 +252,8 @@ function JobsTab() {
                 job.description
               )}
             </span>
-            <span className="text-gray-300 font-mono text-right">{job.duration}</span>
-            <span className="text-gray-300 font-mono text-center">{job.stages}</span>
+            <span className="text-[var(--ink-default)] font-mono text-right">{job.duration}</span>
+            <span className="text-[var(--ink-default)] font-mono text-center">{job.stages}</span>
             <span><StatusBadge status={job.status} /></span>
           </Fragment>
         ))}
@@ -267,12 +267,12 @@ function StagesTab() {
     <div className="space-y-2 overflow-x-auto">
       <div className="min-w-[500px]">
         <div className="grid grid-cols-[auto_1fr_auto_auto_auto_auto] gap-x-3 gap-y-2 text-xs">
-          <span className="text-gray-500 font-semibold">ID</span>
-          <span className="text-gray-500 font-semibold">Stage</span>
-          <span className="text-gray-500 font-semibold">Duration</span>
-          <span className="text-gray-500 font-semibold">Shuffle R/W</span>
-          <span className="text-gray-500 font-semibold">GC Time</span>
-          <span className="text-gray-500 font-semibold">Flags</span>
+          <span className="text-[var(--ink-subtle)] font-semibold">ID</span>
+          <span className="text-[var(--ink-subtle)] font-semibold">Stage</span>
+          <span className="text-[var(--ink-subtle)] font-semibold">Duration</span>
+          <span className="text-[var(--ink-subtle)] font-semibold">Shuffle R/W</span>
+          <span className="text-[var(--ink-subtle)] font-semibold">GC Time</span>
+          <span className="text-[var(--ink-subtle)] font-semibold">Flags</span>
 
           {stages.map((stage) => {
             const gcDanger = stage.gcPercent > 10;
@@ -280,10 +280,10 @@ function StagesTab() {
 
             return (
               <Fragment key={stage.id}>
-                <span className="text-gray-300 font-mono">{stage.id}</span>
-                <span className="text-gray-300 font-mono truncate">{stage.name}</span>
-                <span className="text-gray-300 font-mono text-right">{stage.duration}</span>
-                <span className="text-gray-400 font-mono text-right text-[11px]">
+                <span className="text-[var(--ink-default)] font-mono">{stage.id}</span>
+                <span className="text-[var(--ink-default)] font-mono truncate">{stage.name}</span>
+                <span className="text-[var(--ink-default)] font-mono text-right">{stage.duration}</span>
+                <span className="text-[var(--ink-muted)] font-mono text-right text-[11px]">
                   {stage.shuffleRead} / {stage.shuffleWrite}
                 </span>
                 <span
@@ -292,7 +292,7 @@ function StagesTab() {
                       ? 'text-red-400 font-bold'
                       : gcWarning
                         ? 'text-amber-400'
-                        : 'text-gray-400'
+                        : 'text-[var(--ink-muted)]'
                   }`}
                 >
                   {stage.gcTime} ({stage.gcPercent}%)
@@ -325,20 +325,20 @@ function SQLTab() {
             className="flex items-start gap-2 py-0.5"
             style={{ paddingLeft: `${node.indent * 16}px` }}
           >
-            <span className="text-gray-500 select-none">{node.indent > 0 ? '+- ' : ''}</span>
+            <span className="text-[var(--ink-subtle)] select-none">{node.indent > 0 ? '+- ' : ''}</span>
             <div className="flex-1 flex items-center gap-2 min-w-0">
               {node.redFlag ? (
                 <DiagramTooltip content={node.redFlag}>
-                  <span className="flex items-center gap-1.5 cursor-help text-gray-200">
+                  <span className="flex items-center gap-1.5 cursor-help text-[var(--ink-default)]">
                     <RedFlagIcon />
                     <span className="truncate">{node.operator}</span>
                   </span>
                 </DiagramTooltip>
               ) : (
-                <span className="text-gray-300 truncate">{node.operator}</span>
+                <span className="text-[var(--ink-default)] truncate">{node.operator}</span>
               )}
             </div>
-            <span className="text-gray-500 whitespace-nowrap ml-2">
+            <span className="text-[var(--ink-subtle)] whitespace-nowrap ml-2">
               {node.rows} | {node.bytes}
             </span>
           </div>
@@ -355,15 +355,15 @@ export function SparkUISimulationDiagram() {
     <DiagramContainer title="Spark UI: Что искать" color="blue">
       <div className="flex flex-col gap-4">
         {/* Tab bar */}
-        <div className="flex gap-1 border-b border-white/10 pb-0">
+        <div className="flex gap-1 border-b border-[var(--line-thin)] pb-0">
           {(Object.keys(tabConfig) as TabId[]).map((tab) => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
                 activeTab === tab
-                  ? 'bg-white/10 text-white border-b-2 border-blue-400'
-                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+                  ? 'bg-[var(--bg-surface)] text-[var(--ink-strong)] border-b-2 border-blue-400'
+                  : 'text-[var(--ink-muted)] hover:text-[var(--ink-default)] hover:bg-[var(--bg-surface)]'
               }`}
             >
               {tabConfig[tab].label}
@@ -379,7 +379,7 @@ export function SparkUISimulationDiagram() {
         </div>
 
         {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-white/10 text-xs text-gray-400">
+        <div className="flex flex-wrap items-center gap-4 pt-2 border-t border-[var(--line-thin)] text-xs text-[var(--ink-muted)]">
           <span className="flex items-center gap-1.5">
             <RedFlagIcon /> Красный флаг — требует внимания
           </span>

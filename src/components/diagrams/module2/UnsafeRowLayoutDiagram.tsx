@@ -21,7 +21,7 @@ const sections: Section[] = [
   {
     label: 'Null Bitmap',
     sublabel: '(8 байт на 64 колонки)',
-    color: 'bg-purple-500/25 border-purple-400/40 text-purple-200',
+    color: 'bg-purple-500/25 border-purple-400/40 text-purple-700',
     tooltip:
       'Один бит на колонку. Для 3 колонок нужен 1 байт, но выравнивается до 8 байт (64-bit alignment).',
     flex: 1,
@@ -29,7 +29,7 @@ const sections: Section[] = [
   {
     label: 'Fixed-Length Values',
     sublabel: '(8 байт на колонку)',
-    color: 'bg-blue-500/25 border-blue-400/40 text-blue-200',
+    color: 'bg-blue-500/25 border-blue-400/40 text-blue-700',
     tooltip:
       'Примитивные типы (Int, Long, Double) хранятся inline по 8 байт. Для variable-length типов записывается пара (offset, length).',
     flex: 2,
@@ -37,7 +37,7 @@ const sections: Section[] = [
   {
     label: 'Variable-Length Data',
     sublabel: '(строки, массивы)',
-    color: 'bg-emerald-500/25 border-emerald-400/40 text-emerald-200',
+    color: 'bg-emerald-500/25 border-emerald-400/40 text-emerald-700',
     tooltip:
       'Строки и массивы хранятся в конце UnsafeRow. Доступ через offset/length из fixed-length region.',
     flex: 2,
