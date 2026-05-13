@@ -1,6 +1,6 @@
 {
   "id": "spark-course",
-  "title": "Apache Spark Deep-Dive",
+  "title": "Apache Spark",
   "description": "Полный курс по Apache Spark — от внутренней архитектуры и Catalyst до lakehouse-форматов, Structured Streaming и production-операций для data-инженеров",
   "author": "Lev Neganov",
   "difficulty": "advanced",
