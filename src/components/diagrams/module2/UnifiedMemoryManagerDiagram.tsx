@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * UnifiedMemoryManagerDiagram
  *
@@ -88,13 +89,13 @@ export function UnifiedMemoryManagerDiagram() {
     <DiagramContainer title="Unified Memory Manager" color="blue">
       <FlowColumn gap={1} align="start" className="w-full">
         {tree.map((entry, i) => (
-          <DiagramTooltip key={i} content={entry.tooltip}>
+          <DiagramTooltip content={entry.tooltip}>
             <div
-              className={`flex items-center gap-1 text-xs font-mono cursor-help ${entry.color}`}
-              style={{ paddingLeft: `${entry.indent * 20}px` }}
+              class={`flex items-center gap-1 text-xs font-mono cursor-help ${entry.color}`}
+              style={{ 'padding-left': `${entry.indent * 20}px` }}
             >
               {entry.connector && (
-                <span className="text-[var(--ink-subtle)] w-8 shrink-0">{entry.connector}</span>
+                <span class="text-[var(--ink-subtle)] w-8 shrink-0">{entry.connector}</span>
               )}
               <span>{entry.label}</span>
             </div>

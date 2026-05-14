@@ -1,10 +1,11 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * TaskSchedulingDiagram (DIAG-11)
  *
  * Two-panel comparison of FIFO vs FAIR schedulers with data locality levels.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { DiagramTooltip } from '@primitives/Tooltip';
 import { FlowNode } from '@primitives/FlowNode';
@@ -47,17 +48,17 @@ const localityLevels = [
 ];
 
 export function TaskSchedulingDiagram() {
-  const [mode, setMode] = useState<SchedulerMode>('fifo');
+  const [mode, setMode] = createSignal<SchedulerMode>('fifo');
 
   return (
     <DiagramContainer title="Task Scheduling: FIFO vs FAIR" color="purple">
-      <div className="flex flex-col gap-6">
+      <div class="flex flex-col gap-6">
         {/* Mode toggle */}
-        <div className="flex justify-center gap-2">
+        <div class="flex justify-center gap-2">
           <button
             onClick={() => setMode('fifo')}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              mode === 'fifo'
+            class={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              mode() === 'fifo'
                 ? 'bg-purple-500/30 border border-purple-400/50 text-purple-700'
                 : 'bg-[var(--bg-surface)] border border-[var(--line-thin)] text-[var(--ink-muted)] hover:text-[var(--ink-default)]'
             }`}
@@ -66,8 +67,8 @@ export function TaskSchedulingDiagram() {
           </button>
           <button
             onClick={() => setMode('fair')}
-            className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-              mode === 'fair'
+            class={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              mode() === 'fair'
                 ? 'bg-purple-500/30 border border-purple-400/50 text-purple-700'
                 : 'bg-[var(--bg-surface)] border border-[var(--line-thin)] text-[var(--ink-muted)] hover:text-[var(--ink-default)]'
             }`}
@@ -79,47 +80,47 @@ export function TaskSchedulingDiagram() {
         {/* Scheduler comparison */}
         <Grid columns={2}>
           {/* FIFO Panel */}
-          <div className={`p-4 rounded-lg border transition-opacity ${
-            mode === 'fifo' ? 'bg-[var(--bg-surface)] border-purple-400/30 opacity-100' : 'bg-[var(--bg-surface)] border-[var(--line-thin)] opacity-50'
+          <div class={`p-4 rounded-lg border transition-opacity ${
+            mode() === 'fifo' ? 'bg-[var(--bg-surface)] border-purple-400/30 opacity-100' : 'bg-[var(--bg-surface)] border-[var(--line-thin)] opacity-50'
           }`}>
-            <h4 className="text-sm font-semibold text-[var(--ink-strong)] mb-3">FIFO Scheduler</h4>
-            <div className="flex flex-col gap-2">
+            <h4 class="text-sm font-semibold text-[var(--ink-strong)] mb-3">FIFO Scheduler</h4>
+            <div class="flex flex-col gap-2">
               <DiagramTooltip content="Job 1 получает ВСЕ ресурсы кластера. Jobs 2 и 3 ждут полного завершения Job 1.">
                 <FlowNode variant="connector" tabIndex={0} size="sm">
-                  Job 1 <span className="text-xs opacity-75">(running -- all cores)</span>
+                  Job 1 <span class="text-xs opacity-75">(running -- all cores)</span>
                 </FlowNode>
               </DiagramTooltip>
               <DiagramTooltip content="Job 2 стоит в очереди. Даже если это маленький запрос, он ждёт завершения Job 1.">
                 <FlowNode variant="queue" tabIndex={0} size="sm">
-                  Job 2 <span className="text-xs opacity-75">(waiting)</span>
+                  Job 2 <span class="text-xs opacity-75">(waiting)</span>
                 </FlowNode>
               </DiagramTooltip>
               <DiagramTooltip content="Job 3 стоит в очереди за Job 2. Строго последовательное выполнение.">
                 <FlowNode variant="queue" tabIndex={0} size="sm">
-                  Job 3 <span className="text-xs opacity-75">(waiting)</span>
+                  Job 3 <span class="text-xs opacity-75">(waiting)</span>
                 </FlowNode>
               </DiagramTooltip>
             </div>
           </div>
 
           {/* FAIR Panel */}
-          <div className={`p-4 rounded-lg border transition-opacity ${
-            mode === 'fair' ? 'bg-[var(--bg-surface)] border-purple-400/30 opacity-100' : 'bg-[var(--bg-surface)] border-[var(--line-thin)] opacity-50'
+          <div class={`p-4 rounded-lg border transition-opacity ${
+            mode() === 'fair' ? 'bg-[var(--bg-surface)] border-purple-400/30 opacity-100' : 'bg-[var(--bg-surface)] border-[var(--line-thin)] opacity-50'
           }`}>
-            <h4 className="text-sm font-semibold text-[var(--ink-strong)] mb-3">FAIR Scheduler</h4>
-            <div className="flex flex-col gap-2">
+            <h4 class="text-sm font-semibold text-[var(--ink-strong)] mb-3">FAIR Scheduler</h4>
+            <div class="flex flex-col gap-2">
               <DiagramTooltip content="Pool 'production' (weight=2): Job 1 получает 2/3 ресурсов. Высокий приоритет для production workloads.">
                 <FlowNode variant="connector" tabIndex={0} size="sm">
-                  <span className="text-xs">Pool: production (w=2)</span>
+                  <span class="text-xs">Pool: production (w=2)</span>
                   <br />
-                  Job 1 <span className="text-xs opacity-75">(67% cores)</span>
+                  Job 1 <span class="text-xs opacity-75">(67% cores)</span>
                 </FlowNode>
               </DiagramTooltip>
               <DiagramTooltip content="Pool 'analytics' (weight=1): Jobs 2 и 3 делят 1/3 ресурсов. Аналитические запросы выполняются сразу, не ждут batch jobs.">
                 <FlowNode variant="service" tabIndex={0} size="sm">
-                  <span className="text-xs">Pool: analytics (w=1)</span>
+                  <span class="text-xs">Pool: analytics (w=1)</span>
                   <br />
-                  Job 2, Job 3 <span className="text-xs opacity-75">(33% cores)</span>
+                  Job 2, Job 3 <span class="text-xs opacity-75">(33% cores)</span>
                 </FlowNode>
               </DiagramTooltip>
             </div>
@@ -127,23 +128,23 @@ export function TaskSchedulingDiagram() {
         </Grid>
 
         {/* Data Locality section */}
-        <div className="mt-2">
-          <h4 className="text-sm font-semibold text-[var(--ink-strong)] mb-3">Data Locality Levels</h4>
-          <div className="flex flex-col gap-2">
+        <div class="mt-2">
+          <h4 class="text-sm font-semibold text-[var(--ink-strong)] mb-3">Data Locality Levels</h4>
+          <div class="flex flex-col gap-2">
             {localityLevels.map((level) => (
-              <DiagramTooltip key={level.level} content={level.description}>
+              <DiagramTooltip content={level.description}>
                 <div
-                  className={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-default ${level.color}`}
-                  tabIndex={0}
+                  class={`flex items-center justify-between px-3 py-2 rounded-lg border cursor-default ${level.color}`}
+                  tabindex={0}
                 >
-                  <span className="text-xs font-mono font-semibold">{level.level}</span>
-                  <span className="text-xs opacity-75">{level.speed}</span>
+                  <span class="text-xs font-mono font-semibold">{level.level}</span>
+                  <span class="text-xs opacity-75">{level.speed}</span>
                 </div>
               </DiagramTooltip>
             ))}
           </div>
 
-          <div className="mt-3">
+          <div class="mt-3">
             <DataBox label="spark.locality.wait" value="3s (default)" />
           </div>
         </div>

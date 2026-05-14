@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * UdfDecisionTreeDiagram
  *
@@ -5,7 +7,6 @@
  * Pandas UDF, Scala UDF, or Python UDF.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { FlowNode } from '@primitives/FlowNode';
 import { Arrow } from '@primitives/Arrow';
@@ -60,7 +61,7 @@ const outcomes: Record<string, { label: string; variant: 'compute' | 'service' |
 };
 
 export function UdfDecisionTreeDiagram() {
-  const [activeStep, setActiveStep] = useState<string | null>(null);
+  const [activeStep, setActiveStep] = createSignal<string | null>(null);
 
   return (
     <DiagramContainer title="Дерево решений: какой подход выбрать" color="blue">
@@ -69,7 +70,7 @@ export function UdfDecisionTreeDiagram() {
         <FlowNode
           variant="app"
           size="md"
-          onClick={() => setActiveStep(activeStep === 'start' ? null : 'start')}
+          onClick={() => setActiveStep(activeStep() === 'start' ? null : 'start')}
           className="cursor-pointer"
         >
           Нужна трансформация данных?
@@ -81,15 +82,15 @@ export function UdfDecisionTreeDiagram() {
         <FlowNode variant="connector" size="md">
           Есть встроенная функция?
         </FlowNode>
-        <div className="flex items-start gap-8 w-full justify-center flex-wrap">
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-xs text-emerald-400 font-semibold">ДА</span>
+        <div class="flex items-start gap-8 w-full justify-center flex-wrap">
+          <div class="flex flex-col items-center gap-2">
+            <span class="text-xs text-emerald-400 font-semibold">ДА</span>
             <FlowNode variant="compute" size="sm">
               Используйте её! ✓
             </FlowNode>
           </div>
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-xs text-rose-400 font-semibold">НЕТ</span>
+          <div class="flex flex-col items-center gap-2">
+            <span class="text-xs text-rose-400 font-semibold">НЕТ</span>
             <Arrow direction="down" />
           </div>
         </div>
@@ -98,15 +99,15 @@ export function UdfDecisionTreeDiagram() {
         <FlowNode variant="connector" size="md">
           Можно выразить через when/otherwise + комбинацию встроенных?
         </FlowNode>
-        <div className="flex items-start gap-8 w-full justify-center flex-wrap">
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-xs text-emerald-400 font-semibold">ДА</span>
+        <div class="flex items-start gap-8 w-full justify-center flex-wrap">
+          <div class="flex flex-col items-center gap-2">
+            <span class="text-xs text-emerald-400 font-semibold">ДА</span>
             <FlowNode variant="compute" size="sm">
               Комбинируйте! ✓
             </FlowNode>
           </div>
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-xs text-rose-400 font-semibold">НЕТ</span>
+          <div class="flex flex-col items-center gap-2">
+            <span class="text-xs text-rose-400 font-semibold">НЕТ</span>
             <Arrow direction="down" />
           </div>
         </div>
@@ -115,15 +116,15 @@ export function UdfDecisionTreeDiagram() {
         <FlowNode variant="connector" size="md">
           Нужна Python-библиотека?
         </FlowNode>
-        <div className="flex items-start gap-8 w-full justify-center flex-wrap">
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-xs text-blue-400 font-semibold">ДА</span>
+        <div class="flex items-start gap-8 w-full justify-center flex-wrap">
+          <div class="flex flex-col items-center gap-2">
+            <span class="text-xs text-blue-400 font-semibold">ДА</span>
             <FlowNode variant="service" size="sm">
               Pandas UDF (Arrow)
             </FlowNode>
           </div>
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-xs text-amber-400 font-semibold">НЕТ</span>
+          <div class="flex flex-col items-center gap-2">
+            <span class="text-xs text-amber-400 font-semibold">НЕТ</span>
             <FlowNode variant="service" size="sm">
               Scala UDF
             </FlowNode>

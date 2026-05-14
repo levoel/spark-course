@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * PaimonLsmDiagram
  *
@@ -43,22 +44,22 @@ export function PaimonLsmDiagram() {
       description="Write-optimized хранение через Log-Structured Merge-tree"
       color="emerald"
     >
-      <div className="flex flex-col gap-1 w-full">
+      <div class="flex flex-col gap-1 w-full">
         {levels.map((lvl, i) => (
           <div
-            key={i}
-            className={`rounded-lg border p-2.5 flex items-center justify-between gap-3 ${lvl.color}`}
+
+            class={`rounded-lg border p-2.5 flex items-center justify-between gap-3 ${lvl.color}`}
           >
-            <span className="text-sm font-medium">{lvl.label}</span>
-            <span className="text-xs opacity-70 shrink-0">{lvl.detail}</span>
+            <span class="text-sm font-medium">{lvl.label}</span>
+            <span class="text-xs opacity-70 shrink-0">{lvl.detail}</span>
           </div>
         ))}
 
-        <div className="mt-3 pt-3 border-t border-[var(--line-thin)]">
+        <div class="mt-3 pt-3 border-t border-[var(--line-thin)]">
           {traits.map((t, i) => (
-            <div key={i} className="flex gap-2 text-xs text-[var(--ink-default)] py-0.5">
-              <span className="font-semibold text-[var(--ink-default)] shrink-0 w-24">{t.label}:</span>
-              <span className="opacity-80">{t.value}</span>
+            <div class="flex gap-2 text-xs text-[var(--ink-default)] py-0.5">
+              <span class="font-semibold text-[var(--ink-default)] shrink-0 w-24">{t.label}:</span>
+              <span class="opacity-80">{t.value}</span>
             </div>
           ))}
         </div>

@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * FlightPipelineDiagram
  *
@@ -21,27 +22,27 @@ export function FlightPipelineDiagram() {
         <FlowNode variant="database" size="md">
           <FlowColumn gap={2} align="center">
             <span>Сервер</span>
-            <span className="text-xs opacity-70">Columnar Storage</span>
+            <span class="text-xs opacity-70">Columnar Storage</span>
           </FlowColumn>
         </FlowNode>
 
         <FlowColumn gap={4} align="center">
           {[1, 2, 3].map((n) => (
-            <div key={n} className="flex items-center gap-1">
+            <div class="flex items-center gap-1">
               <Arrow direction="right" />
-              <span className="text-xs text-emerald-700/80 whitespace-nowrap font-mono">
+              <span class="text-xs text-emerald-700/80 whitespace-nowrap font-mono">
                 RecordBatch #{n}
               </span>
             </div>
           ))}
-          <span className="text-[10px] text-[var(--ink-muted)] mt-1">…parallel streams…</span>
+          <span class="text-[10px] text-[var(--ink-muted)] mt-1">…parallel streams…</span>
         </FlowColumn>
 
         <FlowNode variant="app" size="md">
           <FlowColumn gap={2} align="center">
             <span>Клиент</span>
-            <span className="text-xs opacity-70">Arrow RecordBatch</span>
-            <span className="text-xs opacity-70">ready to process (no deser.)</span>
+            <span class="text-xs opacity-70">Arrow RecordBatch</span>
+            <span class="text-xs opacity-70">ready to process (no deser.)</span>
           </FlowColumn>
         </FlowNode>
       </FlowRow>

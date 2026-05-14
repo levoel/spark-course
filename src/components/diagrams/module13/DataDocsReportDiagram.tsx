@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * DataDocsReportDiagram
  *
@@ -25,27 +26,27 @@ const expectations: Expectation[] = [
 export function DataDocsReportDiagram() {
   return (
     <DiagramContainer title="Data Docs Report" color="rose">
-      <div className="rounded-xl border border-rose-400/20 bg-rose-500/5 p-4">
-        <div className="text-sm font-medium text-rose-700 mb-1">
+      <div class="rounded-xl border border-rose-400/20 bg-rose-500/5 p-4">
+        <div class="text-sm font-medium text-rose-700 mb-1">
           Expectation Suite: orders_quality
         </div>
-        <div className="text-xs text-red-400 mb-3">
+        <div class="text-xs text-red-400 mb-3">
           Status: FAILED (4 of 6 expectations failed)
         </div>
 
         <FlowColumn gap={3} align="stretch">
           {expectations.map((exp, i) => (
             <div
-              key={i}
-              className="flex items-center justify-between text-xs"
+
+              class="flex items-center justify-between text-xs"
             >
-              <div className="flex items-center gap-2">
-                <span className={exp.passed ? 'text-emerald-400' : 'text-red-400'}>
+              <div class="flex items-center gap-2">
+                <span class={exp.passed ? 'text-emerald-400' : 'text-red-400'}>
                   {exp.passed ? '✓' : '✗'}
                 </span>
-                <span className="text-[var(--ink-default)]">{exp.name}</span>
+                <span class="text-[var(--ink-default)]">{exp.name}</span>
               </div>
-              <span className={`font-mono ${exp.passed ? 'text-emerald-400' : 'text-red-400'}`}>
+              <span class={`font-mono ${exp.passed ? 'text-emerald-400' : 'text-red-400'}`}>
                 {exp.percent} pass
               </span>
             </div>

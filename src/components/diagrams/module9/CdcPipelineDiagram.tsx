@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * CdcPipelineDiagram
  *
@@ -26,13 +27,13 @@ export function CdcPipelineDiagram() {
     >
       <FlowRow gap={8} wrap align="center">
         {stages.map((s, i) => (
-          <FlowRow key={i} gap={8} wrap={false} align="center">
+          <FlowRow gap={8} wrap={false} align="center">
             <FlowNode variant={s.variant} size="sm">
-              <div className="flex flex-col items-center gap-0.5">
+              <div class="flex flex-col items-center gap-0.5">
                 {s.label.split('\n').map((line, j) => (
-                  <span key={j}>{line}</span>
+                  <span>{line}</span>
                 ))}
-                <span className="text-[10px] opacity-60 mt-0.5">{s.sub}</span>
+                <span class="text-[10px] opacity-60 mt-0.5">{s.sub}</span>
               </div>
             </FlowNode>
             {i < stages.length - 1 && <Arrow direction="right" />}

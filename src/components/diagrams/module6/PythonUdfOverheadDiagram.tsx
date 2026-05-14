@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * PythonUdfOverheadDiagram
  *
@@ -30,22 +31,22 @@ const steps: Step[] = [
 export function PythonUdfOverheadDiagram() {
   return (
     <DiagramContainer title="Анатомия вызова Python UDF (per row)" color="rose">
-      <div className="flex gap-4 w-full">
+      <div class="flex gap-4 w-full">
         {/* JVM Column */}
-        <div className="flex-1 flex flex-col items-center">
+        <div class="flex-1 flex flex-col items-center">
           <FlowNode variant="compute" size="sm" className="mb-3 w-full text-center">
             JVM (Executor)
           </FlowNode>
-          <div className="w-px bg-emerald-400/30 flex-1 relative">
+          <div class="w-px bg-emerald-400/30 flex-1 relative">
             {steps.map((s) => (
               <div
-                key={s.num}
-                className="absolute w-full"
+
+                class="absolute w-full"
                 style={{ top: `${((s.num - 1) / 8) * 100}%` }}
               >
                 {s.side === 'jvm' && (
-                  <div className="absolute right-2 -translate-y-1/2 whitespace-nowrap">
-                    <span className="text-xs text-emerald-700/80 font-mono">
+                  <div class="absolute right-2 -translate-y-1/2 whitespace-nowrap">
+                    <span class="text-xs text-emerald-700/80 font-mono">
                       {s.num}. {s.label}
                     </span>
                   </div>
@@ -56,32 +57,32 @@ export function PythonUdfOverheadDiagram() {
         </div>
 
         {/* Arrow column */}
-        <div className="flex flex-col items-center justify-center gap-1 px-2">
-          <span className="text-[10px] text-[var(--ink-subtle)] font-mono">socket</span>
+        <div class="flex flex-col items-center justify-center gap-1 px-2">
+          <span class="text-[10px] text-[var(--ink-subtle)] font-mono">socket</span>
         </div>
 
         {/* Python Column */}
-        <div className="flex-1 flex flex-col items-center">
+        <div class="flex-1 flex flex-col items-center">
           <FlowNode variant="app" size="sm" className="mb-3 w-full text-center">
             Python Worker
           </FlowNode>
-          <div className="w-px bg-rose-400/30 flex-1" />
+          <div class="w-px bg-rose-400/30 flex-1" />
         </div>
       </div>
 
       {/* Simplified step list for clarity */}
-      <div className="mt-4 grid grid-cols-1 gap-1.5">
+      <div class="mt-4 grid grid-cols-1 gap-1.5">
         {steps.map((s) => (
           <div
-            key={s.num}
-            className={`flex items-center gap-3 px-3 py-1.5 rounded-lg text-xs ${
+
+            class={`flex items-center gap-3 px-3 py-1.5 rounded-lg text-xs ${
               s.side === 'jvm'
                 ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-700'
                 : 'bg-rose-500/10 border border-rose-500/20 text-rose-700'
             }`}
           >
-            <span className="font-mono font-bold opacity-60 w-4">{s.num}.</span>
-            <span className="font-mono text-[10px] uppercase opacity-50 w-14">
+            <span class="font-mono font-bold opacity-60 w-4">{s.num}.</span>
+            <span class="font-mono text-[10px] uppercase opacity-50 w-14">
               {s.side === 'jvm' ? 'JVM' : 'Python'}
             </span>
             <span>{s.label}</span>
@@ -89,7 +90,7 @@ export function PythonUdfOverheadDiagram() {
         ))}
       </div>
 
-      <p className="text-xs text-[var(--ink-subtle)] mt-3 text-center">
+      <p class="text-xs text-[var(--ink-subtle)] mt-3 text-center">
         9 шагов на каждую строку. При 1 миллиарде строк — 9 миллиардов операций.
       </p>
     </DiagramContainer>

@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * CoalesceSkewDiagram
  *
@@ -41,15 +42,15 @@ const pairs: PartitionPair[] = [
 export function CoalesceSkewDiagram() {
   return (
     <DiagramContainer title="coalesce(2): неравномерные файлы" color="amber">
-      <div className="flex flex-col gap-4">
-        <div className="text-center text-xs text-[var(--ink-muted)] font-mono mb-1">
+      <div class="flex flex-col gap-4">
+        <div class="text-center text-xs text-[var(--ink-muted)] font-mono mb-1">
           coalesce(2) из 4 партиций:
         </div>
         {pairs.map((pair, pi) => (
-          <FlowRow key={pi} gap={8} wrap={false} justify="center">
-            <div className="flex flex-col gap-1 items-end">
+          <FlowRow gap={8} wrap={false} justify="center">
+            <div class="flex flex-col gap-1 items-end">
               {pair.sources.map((s, si) => (
-                <FlowNode key={si} variant="connector" size="sm">
+                <FlowNode variant="connector" size="sm">
                   {s.label} ({s.size})
                 </FlowNode>
               ))}
@@ -61,7 +62,7 @@ export function CoalesceSkewDiagram() {
             >
               {pair.targetLabel} ({pair.targetSize})
               {pair.skewed && (
-                <span className="text-amber-400 ml-1">← неравномерно!</span>
+                <span class="text-amber-400 ml-1">← неравномерно!</span>
               )}
             </FlowNode>
           </FlowRow>

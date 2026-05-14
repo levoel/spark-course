@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * DeequArchDiagram
  *
@@ -14,8 +15,8 @@ import { Arrow } from '@primitives/Arrow';
 export function DeequArchDiagram() {
   return (
     <DiagramContainer title="Deequ Architecture" color="blue">
-      <div className="rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
-        <div className="text-xs text-blue-700/70 mb-3">Deequ</div>
+      <div class="rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
+        <div class="text-xs text-blue-700/70 mb-3">Deequ</div>
 
         <FlowColumn gap={10} align="center">
           {/* Top row: 3 components */}
@@ -23,19 +24,19 @@ export function DeequArchDiagram() {
             <FlowNode variant="monitoring" size="sm">
               <FlowColumn gap={1} align="center">
                 <span>Analyzers</span>
-                <span className="text-[10px] opacity-70">Метрики данных</span>
+                <span class="text-[10px] opacity-70">Метрики данных</span>
               </FlowColumn>
             </FlowNode>
             <FlowNode variant="security" size="sm">
               <FlowColumn gap={1} align="center">
                 <span>Checks</span>
-                <span className="text-[10px] opacity-70">Правила валидации</span>
+                <span class="text-[10px] opacity-70">Правила валидации</span>
               </FlowColumn>
             </FlowNode>
             <FlowNode variant="service" size="sm">
               <FlowColumn gap={1} align="center">
                 <span>Constraint Suggestions</span>
-                <span className="text-[10px] opacity-70">Авто-генерация</span>
+                <span class="text-[10px] opacity-70">Авто-генерация</span>
               </FlowColumn>
             </FlowNode>
           </FlowRow>
@@ -53,7 +54,7 @@ export function DeequArchDiagram() {
           <FlowNode variant="database" size="md">
             <FlowColumn gap={1} align="center">
               <span>Metrics Repository</span>
-              <span className="text-xs opacity-70">(time-series)</span>
+              <span class="text-xs opacity-70">(time-series)</span>
             </FlowColumn>
           </FlowNode>
         </FlowColumn>

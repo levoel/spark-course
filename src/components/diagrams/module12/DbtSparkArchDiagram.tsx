@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * DbtSparkArchDiagram
  *
@@ -13,20 +14,20 @@ export function DbtSparkArchDiagram() {
   return (
     <DiagramContainer title="dbt Architecture с Spark" color="emerald">
       <FlowColumn gap={12} align="center">
-        <div className="w-full max-w-sm rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4">
+        <div class="w-full max-w-sm rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4">
           <FlowNode variant="app" size="md" className="w-full">
             <FlowColumn gap={1} align="center">
               <span>dbt CLI / Cloud</span>
             </FlowColumn>
           </FlowNode>
-          <div className="mt-2 flex flex-wrap gap-2 justify-center">
-            <span className="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
+          <div class="mt-2 flex flex-wrap gap-2 justify-center">
+            <span class="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
               Models (SELECT SQL)
             </span>
-            <span className="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
+            <span class="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
               Tests (data assertions)
             </span>
-            <span className="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
+            <span class="text-[10px] text-emerald-700 bg-emerald-500/10 rounded px-2 py-0.5">
               Docs (auto-lineage)
             </span>
           </div>
@@ -37,7 +38,7 @@ export function DbtSparkArchDiagram() {
         <FlowNode variant="service" size="md">
           <FlowColumn gap={1} align="center">
             <span>Spark Thrift Server</span>
-            <span className="text-xs opacity-70">(или Databricks SQL)</span>
+            <span class="text-xs opacity-70">(или Databricks SQL)</span>
           </FlowColumn>
         </FlowNode>
 
@@ -46,7 +47,7 @@ export function DbtSparkArchDiagram() {
         <FlowNode variant="compute" size="md">
           <FlowColumn gap={1} align="center">
             <span>Spark Engine</span>
-            <span className="text-xs opacity-70">(execution)</span>
+            <span class="text-xs opacity-70">(execution)</span>
           </FlowColumn>
         </FlowNode>
       </FlowColumn>

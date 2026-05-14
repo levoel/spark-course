@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * FlightRpcDiagram
  *
@@ -50,11 +51,11 @@ export function FlightRpcDiagram() {
         {/* Methods */}
         <FlowColumn gap={3} align="start">
           {methods.map((m, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className={`text-xs font-mono ${directionColor[m.direction]}`}>
+            <div class="flex items-center gap-2">
+              <span class={`text-xs font-mono ${directionColor[m.direction]}`}>
                 {m.name}
               </span>
-              <span className="text-[10px] text-[var(--ink-subtle)]">{m.detail}</span>
+              <span class="text-[10px] text-[var(--ink-subtle)]">{m.detail}</span>
             </div>
           ))}
         </FlowColumn>

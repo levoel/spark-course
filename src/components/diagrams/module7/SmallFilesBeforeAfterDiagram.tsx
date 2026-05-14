@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * SmallFilesBeforeAfterDiagram
  *
@@ -5,7 +7,6 @@
  * vs 90 compacted files after OPTIMIZE. Toggleable before/after.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 
 interface State {
@@ -36,22 +37,22 @@ const after: State = {
 };
 
 export function SmallFilesBeforeAfterDiagram() {
-  const [showAfter, setShowAfter] = useState(false);
-  const state = showAfter ? after : before;
-  const color = showAfter ? 'emerald' : 'rose';
+  const [showAfter, setShowAfter] = createSignal(false);
+  const state = () => (showAfter() ? after : before);
+  const color = () => (showAfter() ? 'emerald' : 'rose');
 
   return (
     <DiagramContainer
       title="Small Files: Before / After Compaction"
-      color={showAfter ? 'emerald' : 'rose'}
+      color={showAfter() ? 'emerald' : 'rose'}
     >
-      <div className="flex flex-col gap-4">
+      <div class="flex flex-col gap-4">
         {/* Toggle */}
-        <div className="flex items-center justify-center gap-2">
+        <div class="flex items-center justify-center gap-2">
           <button
             onClick={() => setShowAfter(false)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              !showAfter
+            class={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              !showAfter()
                 ? 'bg-rose-500/20 border border-rose-400/40 text-rose-700'
                 : 'bg-[var(--bg-deep)] border border-[var(--line-medium)] text-[var(--ink-muted)] hover:bg-[var(--bg-deep)]'
             }`}
@@ -60,8 +61,8 @@ export function SmallFilesBeforeAfterDiagram() {
           </button>
           <button
             onClick={() => setShowAfter(true)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              showAfter
+            class={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              showAfter()
                 ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-700'
                 : 'bg-[var(--bg-deep)] border border-[var(--line-medium)] text-[var(--ink-muted)] hover:bg-[var(--bg-deep)]'
             }`}
@@ -70,38 +71,38 @@ export function SmallFilesBeforeAfterDiagram() {
           </button>
         </div>
 
-        <div className={`border border-${color}-400/20 rounded-xl overflow-hidden`}>
-          <div className={`px-4 py-2 bg-${color}-500/15 text-sm font-semibold text-${color}-200`}>
-            {state.label}
+        <div class={`border border-${color()}-400/20 rounded-xl overflow-hidden`}>
+          <div class={`px-4 py-2 bg-${color()}-500/15 text-sm font-semibold text-${color()}-200`}>
+            {state().label}
           </div>
-          <div className="p-3 space-y-1 text-xs font-mono">
-            <div className={`text-${color}-300/70`}>/data/events/</div>
+          <div class="p-3 space-y-1 text-xs font-mono">
+            <div class={`text-${color()}-300/70`}>/data/events/</div>
             {['01', '02', '...', '30'].map((day, i) => (
-              <div key={i} className={`ml-4 flex items-center gap-2 text-${color}-300/60`}>
-                <span className="text-[var(--ink-subtle)]">{day === '30' ? '└──' : '├──'}</span>
+              <div class={`ml-4 flex items-center gap-2 text-${color()}-300/60`}>
+                <span class="text-[var(--ink-subtle)]">{day === '30' ? '└──' : '├──'}</span>
                 <span>
                   event_date=2024-01-{day === '...' ? '...' : day}/
                 </span>
                 {day !== '...' && (
-                  <span className="text-[var(--ink-subtle)]">({state.filesPerPartition})</span>
+                  <span class="text-[var(--ink-subtle)]">({state().filesPerPartition})</span>
                 )}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="bg-[var(--bg-deep)] rounded-lg p-2">
-            <div className="text-[10px] text-[var(--ink-subtle)] uppercase">Файлов</div>
-            <div className={`text-sm font-mono font-semibold text-${color}-300`}>{state.totalFiles}</div>
+        <div class="grid grid-cols-3 gap-3 text-center">
+          <div class="bg-[var(--bg-deep)] rounded-lg p-2">
+            <div class="text-[10px] text-[var(--ink-subtle)] uppercase">Файлов</div>
+            <div class={`text-sm font-mono font-semibold text-${color()}-300`}>{state().totalFiles}</div>
           </div>
-          <div className="bg-[var(--bg-deep)] rounded-lg p-2">
-            <div className="text-[10px] text-[var(--ink-subtle)] uppercase">Размер</div>
-            <div className="text-sm font-mono font-semibold text-[var(--ink-default)]">{state.totalSize}</div>
+          <div class="bg-[var(--bg-deep)] rounded-lg p-2">
+            <div class="text-[10px] text-[var(--ink-subtle)] uppercase">Размер</div>
+            <div class="text-sm font-mono font-semibold text-[var(--ink-default)]">{state().totalSize}</div>
           </div>
-          <div className="bg-[var(--bg-deep)] rounded-lg p-2">
-            <div className="text-[10px] text-[var(--ink-subtle)] uppercase">Запрос 1 день</div>
-            <div className={`text-sm font-mono font-semibold text-${color}-300`}>{state.queryTime}</div>
+          <div class="bg-[var(--bg-deep)] rounded-lg p-2">
+            <div class="text-[10px] text-[var(--ink-subtle)] uppercase">Запрос 1 день</div>
+            <div class={`text-sm font-mono font-semibold text-${color()}-300`}>{state().queryTime}</div>
           </div>
         </div>
       </div>

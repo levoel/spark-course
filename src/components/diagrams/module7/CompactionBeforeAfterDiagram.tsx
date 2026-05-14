@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * CompactionBeforeAfterDiagram
  *
@@ -5,7 +7,6 @@
  * (100 large files). Clickable toggle for before/after.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { FlowColumn } from '@primitives/FlowColumn';
 
@@ -39,22 +40,22 @@ const afterState: FileSet = {
 };
 
 export function CompactionBeforeAfterDiagram() {
-  const [showAfter, setShowAfter] = useState(false);
-  const state = showAfter ? afterState : beforeState;
-  const color = showAfter ? 'emerald' : 'rose';
+  const [showAfter, setShowAfter] = createSignal(false);
+  const state = () => (showAfter() ? afterState : beforeState);
+  const color = () => (showAfter() ? 'emerald' : 'rose');
 
   return (
     <DiagramContainer
       title="OPTIMIZE: Compaction"
-      color={showAfter ? 'emerald' : 'amber'}
+      color={showAfter() ? 'emerald' : 'amber'}
     >
-      <div className="flex flex-col gap-4">
+      <div class="flex flex-col gap-4">
         {/* Toggle */}
-        <div className="flex items-center justify-center gap-2">
+        <div class="flex items-center justify-center gap-2">
           <button
             onClick={() => setShowAfter(false)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              !showAfter
+            class={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              !showAfter()
                 ? 'bg-rose-500/20 border border-rose-400/40 text-rose-700'
                 : 'bg-[var(--bg-deep)] border border-[var(--line-medium)] text-[var(--ink-muted)] hover:bg-[var(--bg-deep)]'
             }`}
@@ -63,8 +64,8 @@ export function CompactionBeforeAfterDiagram() {
           </button>
           <button
             onClick={() => setShowAfter(true)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-              showAfter
+            class={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+              showAfter()
                 ? 'bg-emerald-500/20 border border-emerald-400/40 text-emerald-700'
                 : 'bg-[var(--bg-deep)] border border-[var(--line-medium)] text-[var(--ink-muted)] hover:bg-[var(--bg-deep)]'
             }`}
@@ -74,27 +75,27 @@ export function CompactionBeforeAfterDiagram() {
         </div>
 
         {/* File list */}
-        <div className={`border border-${color}-400/20 rounded-xl overflow-hidden transition-all`}>
-          <div className={`px-4 py-2 bg-${color}-500/15 text-sm font-semibold text-${color}-200`}>
-            {state.label}
+        <div class={`border border-${color()}-400/20 rounded-xl overflow-hidden transition-all`}>
+          <div class={`px-4 py-2 bg-${color()}-500/15 text-sm font-semibold text-${color()}-200`}>
+            {state().label}
           </div>
-          <div className="p-3 space-y-1">
-            {state.files.map((f, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs font-mono">
-                <span className="text-[var(--ink-subtle)]">
-                  {i < state.files.length - 1 ? '├──' : '└──'}
+          <div class="p-3 space-y-1">
+            {state().files.map((f, i) => (
+              <div class="flex items-center gap-2 text-xs font-mono">
+                <span class="text-[var(--ink-subtle)]">
+                  {i < state().files.length - 1 ? '├──' : '└──'}
                 </span>
-                <span className={`text-${color}-300/80`}>{f.name}</span>
+                <span class={`text-${color()}-300/80`}>{f.name}</span>
                 {f.size && (
-                  <span className="text-[var(--ink-subtle)] ml-auto">({f.size})</span>
+                  <span class="text-[var(--ink-subtle)] ml-auto">({f.size})</span>
                 )}
               </div>
             ))}
           </div>
         </div>
 
-        <div className="text-center text-xs text-[var(--ink-muted)] font-mono">
-          {state.summary}
+        <div class="text-center text-xs text-[var(--ink-muted)] font-mono">
+          {state().summary}
         </div>
       </div>
     </DiagramContainer>

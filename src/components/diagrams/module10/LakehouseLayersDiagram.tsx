@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * LakehouseLayersDiagram (DIAG-09)
  *
@@ -5,7 +7,6 @@
  * layers with format logos, clickable expansion, and ETL pipeline flow.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { DiagramTooltip } from '@primitives/Tooltip';
 import { DataBox } from '@primitives/DataBox';
@@ -90,10 +91,10 @@ const FORMAT_COLORS: Record<string, string> = {
 
 function FlowArrow() {
   return (
-    <div className="flex justify-center py-1">
-      <div className="flex flex-col items-center">
-        <div className="w-0.5 h-4 bg-gradient-to-b from-white/30 to-white/10 animate-pulse" />
-        <svg width="12" height="8" viewBox="0 0 12 8" className="text-[var(--ink-strong)]/30">
+    <div class="flex justify-center py-1">
+      <div class="flex flex-col items-center">
+        <div class="w-0.5 h-4 bg-gradient-to-b from-white/30 to-white/10 animate-pulse" />
+        <svg width="12" height="8" viewBox="0 0 12 8" class="text-[var(--ink-strong)]/30">
           <path d="M6 8L0 0h12z" fill="currentColor" />
         </svg>
       </div>
@@ -102,50 +103,50 @@ function FlowArrow() {
 }
 
 export function LakehouseLayersDiagram() {
-  const [activeLayer, setActiveLayer] = useState<LayerKey | null>(null);
+  const [activeLayer, setActiveLayer] = createSignal<LayerKey | null>(null);
 
   return (
     <DiagramContainer title="Lakehouse Medallion Architecture" color="amber">
-      <div className="flex flex-col gap-1">
+      <div class="flex flex-col gap-1">
         {/* ETL pipeline label */}
-        <div className="text-xs text-[var(--ink-subtle)] text-center mb-2">
+        <div class="text-xs text-[var(--ink-subtle)] text-center mb-2">
           Raw JSON &rarr; Validated Parquet (Bronze) &rarr; Cleansed + Deduped (Silver) &rarr; Aggregated Metrics (Gold)
         </div>
 
         {/* Layers (Gold on top, Bronze on bottom) */}
         {LAYERS.map((layer, idx) => {
-          const isActive = activeLayer === layer.key;
+          const isActive = activeLayer() === layer.key;
           return (
-            <div key={layer.key}>
+            <div>
               {idx > 0 && <FlowArrow />}
               <DiagramTooltip content={layer.qualityGuarantee}>
                 <button
                   onClick={() => setActiveLayer(isActive ? null : layer.key)}
-                  className={`w-full text-left rounded-xl p-4 border backdrop-blur-sm transition-all duration-300 cursor-pointer ${
+                  class={`w-full text-left rounded-xl p-4 border backdrop-blur-sm transition-all duration-300 cursor-pointer ${
                     isActive
                       ? `${layer.activeColor} ${layer.activeBorder}`
                       : `${layer.color} ${layer.borderColor} hover:${layer.activeColor}`
                   }`}
                 >
                   {/* Layer header */}
-                  <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                      <span className="text-lg">{layer.icon}</span>
-                      <span className="text-sm font-semibold text-[var(--ink-strong)]">
+                  <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                      <span class="text-lg">{layer.icon}</span>
+                      <span class="text-sm font-semibold text-[var(--ink-strong)]">
                         {layer.label}
                       </span>
                     </div>
-                    <span className="text-xs text-[var(--ink-muted)]">
+                    <span class="text-xs text-[var(--ink-muted)]">
                       {isActive ? 'click to collapse' : 'click to expand'}
                     </span>
                   </div>
 
                   {/* Summary chips */}
-                  <div className="flex flex-wrap gap-1.5 mb-2">
+                  <div class="flex flex-wrap gap-1.5 mb-2">
                     {layer.summary.map((item) => (
                       <span
-                        key={item}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-surface)] text-[var(--ink-default)] border border-[var(--line-thin)]"
+
+                        class="text-[10px] px-2 py-0.5 rounded-full bg-[var(--bg-surface)] text-[var(--ink-default)] border border-[var(--line-thin)]"
                       >
                         {item}
                       </span>
@@ -153,11 +154,11 @@ export function LakehouseLayersDiagram() {
                   </div>
 
                   {/* Format labels */}
-                  <div className="flex gap-1.5">
+                  <div class="flex gap-1.5">
                     {FORMATS.map((fmt) => (
                       <span
-                        key={fmt}
-                        className={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${FORMAT_COLORS[fmt]}`}
+
+                        class={`text-[9px] px-1.5 py-0.5 rounded border font-mono ${FORMAT_COLORS[fmt]}`}
                       >
                         {fmt}
                       </span>
@@ -166,16 +167,16 @@ export function LakehouseLayersDiagram() {
 
                   {/* Expanded details */}
                   {isActive && (
-                    <div className="mt-3 pt-3 border-t border-[var(--line-thin)] space-y-1.5">
-                      <p className="text-[10px] text-[var(--ink-muted)] font-semibold uppercase tracking-wider">
+                    <div class="mt-3 pt-3 border-t border-[var(--line-thin)] space-y-1.5">
+                      <p class="text-[10px] text-[var(--ink-muted)] font-semibold uppercase tracking-wider">
                         Transformations:
                       </p>
                       {layer.details.map((detail) => (
-                        <div key={detail} className="flex items-start gap-2">
-                          <span className="text-emerald-400 text-xs mt-0.5 shrink-0">
+                        <div class="flex items-start gap-2">
+                          <span class="text-emerald-400 text-xs mt-0.5 shrink-0">
                             &rarr;
                           </span>
-                          <span className="text-xs text-[var(--ink-default)]">{detail}</span>
+                          <span class="text-xs text-[var(--ink-default)]">{detail}</span>
                         </div>
                       ))}
                     </div>
@@ -187,19 +188,19 @@ export function LakehouseLayersDiagram() {
         })}
 
         {/* Data source label at bottom */}
-        <div className="flex justify-center mt-2">
+        <div class="flex justify-center mt-2">
           <DataBox label="Source" value="Kafka / S3 / JDBC" />
         </div>
 
         {/* Summary metrics */}
-        <div className="flex flex-wrap gap-3 justify-center mt-3">
+        <div class="flex flex-wrap gap-3 justify-center mt-3">
           <DataBox label="Layers" value="3 (Bronze/Silver/Gold)" />
           <DataBox label="Formats" value="4 (Delta/Iceberg/Hudi/Paimon)" variant="highlight" />
           <DataBox label="Pattern" value="Medallion Architecture" />
         </div>
 
         {/* Legend */}
-        <p className="text-xs text-[var(--ink-subtle)] text-center mt-2">
+        <p class="text-xs text-[var(--ink-subtle)] text-center mt-2">
           Click each layer to see transformations. Hover for data quality guarantees.
         </p>
       </div>

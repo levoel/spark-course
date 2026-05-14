@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * IcebergArchitectureDiagram
  *
@@ -42,14 +43,14 @@ export function IcebergArchitectureDiagram() {
       description="Catalog-first: 5-уровневая структура metadata"
       color="blue"
     >
-      <div className="flex flex-col gap-1 w-full">
+      <div class="flex flex-col gap-1 w-full">
         {layers.map((layer, i) => (
           <div
-            key={i}
-            className={`rounded-lg border p-3 ${layer.color}`}
+
+            class={`rounded-lg border p-3 ${layer.color}`}
           >
-            <div className="text-sm font-semibold mb-0.5">{layer.label}</div>
-            <div className="text-xs opacity-70 whitespace-pre-line">
+            <div class="text-sm font-semibold mb-0.5">{layer.label}</div>
+            <div class="text-xs opacity-70 whitespace-pre-line">
               {layer.detail}
             </div>
           </div>

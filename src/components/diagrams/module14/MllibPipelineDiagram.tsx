@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * MllibPipelineDiagram
  *
@@ -35,17 +36,17 @@ export function MllibPipelineDiagram() {
       <FlowColumn gap={8} align="center">
         {/* Top row: Stages (Estimators/Transformers) */}
         <div>
-          <div className="text-xs text-[var(--ink-muted)] mb-2 text-center">Stages (fit)</div>
+          <div class="text-xs text-[var(--ink-muted)] mb-2 text-center">Stages (fit)</div>
           <FlowRow gap={4} wrap align="center">
             {stages.map((stage, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div class="flex items-center gap-2">
                 <FlowNode
                   variant={stage.type === 'estimator' ? 'compute' : 'connector'}
                   size="sm"
                 >
                   <FlowColumn gap={0} align="center">
-                    <span className="text-[11px]">{stage.name}</span>
-                    <span className="text-[9px] opacity-70">
+                    <span class="text-[11px]">{stage.name}</span>
+                    <span class="text-[9px] opacity-70">
                       ({stage.type === 'estimator' ? 'Estimator' : 'Transformer'})
                     </span>
                   </FlowColumn>
@@ -57,20 +58,20 @@ export function MllibPipelineDiagram() {
         </div>
 
         {/* Arrow down: fit() -> Model */}
-        <div className="text-xs text-[var(--ink-muted)] text-center">
+        <div class="text-xs text-[var(--ink-muted)] text-center">
           fit() → Model / pass-through
         </div>
 
         {/* Bottom row: Models (all Transformers) */}
         <div>
-          <div className="text-xs text-[var(--ink-muted)] mb-2 text-center">PipelineModel (transform)</div>
+          <div class="text-xs text-[var(--ink-muted)] mb-2 text-center">PipelineModel (transform)</div>
           <FlowRow gap={4} wrap align="center">
             {stages.map((stage, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div class="flex items-center gap-2">
                 <FlowNode variant="connector" size="sm">
                   <FlowColumn gap={0} align="center">
-                    <span className="text-[11px]">{stage.modelName}</span>
-                    <span className="text-[9px] opacity-70">({stage.modelType})</span>
+                    <span class="text-[11px]">{stage.modelName}</span>
+                    <span class="text-[9px] opacity-70">({stage.modelType})</span>
                   </FlowColumn>
                 </FlowNode>
                 {i < stages.length - 1 && <Arrow direction="right" />}

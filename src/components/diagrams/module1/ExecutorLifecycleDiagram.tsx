@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal, createMemo } from 'solid-js';
 /**
  * ExecutorLifecycleDiagram (DIAG-10)
  *
@@ -5,7 +7,6 @@
  * Execution -> Heartbeat -> Speculative Execution -> Decommission.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { DiagramTooltip } from '@primitives/Tooltip';
 import { FlowNode } from '@primitives/FlowNode';
@@ -68,22 +69,22 @@ const phases: Phase[] = [
 ];
 
 export function ExecutorLifecycleDiagram() {
-  const [activePhase, setActivePhase] = useState<string | null>(null);
+  const [activePhase, setActivePhase] = createSignal<string | null>(null);
 
   const handlePhaseClick = (phaseId: string) => {
-    setActivePhase(activePhase === phaseId ? null : phaseId);
+    setActivePhase(activePhase() === phaseId ? null : phaseId);
   };
 
-  const activeDetail = phases.find((p) => p.id === activePhase);
+  const activeDetail = createMemo(() => phases.find((p) => p.id === activePhase()));
 
   return (
     <DiagramContainer title="Жизненный цикл Executor" color="green">
-      <div className="flex flex-col gap-4">
+      <div class="flex flex-col gap-4">
         {/* Timeline - horizontal scroll on mobile */}
-        <div className="overflow-x-auto pb-2">
-          <div className="flex items-center gap-1 min-w-max">
+        <div class="overflow-x-auto pb-2">
+          <div class="flex items-center gap-1 min-w-max">
             {phases.map((phase, index) => (
-              <div key={phase.id} className="flex items-center">
+              <div class="flex items-center">
                 <DiagramTooltip content={phase.tooltip}>
                   <FlowNode
                     variant="connector"
@@ -104,18 +105,18 @@ export function ExecutorLifecycleDiagram() {
         </div>
 
         {/* Detail panel */}
-        {activeDetail && (
-          <div className="p-4 rounded-lg bg-[var(--bg-surface)] border border-[var(--line-thin)]">
-            <h4 className="text-sm font-semibold text-[var(--ink-strong)] mb-2">
-              {activeDetail.label}
+        {activeDetail() && (
+          <div class="p-4 rounded-lg bg-[var(--bg-surface)] border border-[var(--line-thin)]">
+            <h4 class="text-sm font-semibold text-[var(--ink-strong)] mb-2">
+              {activeDetail()!.label}
             </h4>
-            <p className="text-xs text-[var(--ink-default)] mb-2">
-              {activeDetail.detail}
+            <p class="text-xs text-[var(--ink-default)] mb-2">
+              {activeDetail()!.detail}
             </p>
-            {activeDetail.config && (
-              <div className="mt-2 px-3 py-1.5 rounded bg-emerald-500/10 border border-emerald-400/20">
-                <code className="text-xs text-emerald-700 font-mono">
-                  {activeDetail.config}
+            {activeDetail()!.config && (
+              <div class="mt-2 px-3 py-1.5 rounded bg-emerald-500/10 border border-emerald-400/20">
+                <code class="text-xs text-emerald-700 font-mono">
+                  {activeDetail()!.config}
                 </code>
               </div>
             )}
@@ -123,7 +124,7 @@ export function ExecutorLifecycleDiagram() {
         )}
 
         {/* Legend */}
-        <p className="text-xs text-[var(--ink-muted)]">
+        <p class="text-xs text-[var(--ink-muted)]">
           Нажмите на фазу для подробной информации
         </p>
       </div>

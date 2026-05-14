@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * AQEOptimizerDiagram (DIAG-07)
  *
@@ -6,7 +8,6 @@
  * Clickable stages with Previous/Next navigation.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { DiagramTooltip } from '@primitives/Tooltip';
 import { DataBox } from '@primitives/DataBox';
@@ -189,21 +190,21 @@ const steps: AQEStep[] = [
 ];
 
 export function AQEOptimizerDiagram() {
-  const [currentStep, setCurrentStep] = useState(0);
+  const [currentStep, setCurrentStep] = createSignal(0);
 
-  const step = steps[currentStep];
+  const step = () => steps[currentStep()];
 
   return (
     <DiagramContainer title="AQE: Runtime Re-Optimization" color="blue">
-      <div className="flex flex-col gap-4">
+      <div class="flex flex-col gap-4">
         {/* Step indicator dots */}
-        <div className="flex items-center justify-center gap-2">
+        <div class="flex items-center justify-center gap-2">
           {steps.map((s) => (
             <button
-              key={s.id}
+
               onClick={() => setCurrentStep(s.id)}
-              className={`w-3 h-3 rounded-full transition-all ${
-                s.id === currentStep
+              class={`w-3 h-3 rounded-full transition-all ${
+                s.id === currentStep()
                   ? 'bg-blue-400 scale-125'
                   : 'bg-[var(--bg-sunken)] hover:bg-[var(--bg-deep)]'
               }`}
@@ -213,75 +214,75 @@ export function AQEOptimizerDiagram() {
         </div>
 
         {/* Step title and description */}
-        <div className="text-center">
-          <h4 className="text-sm font-semibold text-[var(--ink-default)] mb-1">
-            Step {currentStep + 1}/{steps.length}: {step.title}
+        <div class="text-center">
+          <h4 class="text-sm font-semibold text-[var(--ink-default)] mb-1">
+            Step {currentStep() + 1}/{steps.length}: {step().title}
           </h4>
-          <p className="text-xs text-[var(--ink-muted)] max-w-lg mx-auto">
-            {step.description}
+          <p class="text-xs text-[var(--ink-muted)] max-w-lg mx-auto">
+            {step().description}
           </p>
         </div>
 
         {/* Plan nodes */}
-        <div className="flex flex-col gap-2">
-          {step.nodes.map((node, idx) => (
-            <DiagramTooltip key={idx} content={node.detail}>
+        <div class="flex flex-col gap-2">
+          {step().nodes.map((node, idx) => (
+            <DiagramTooltip content={node.detail}>
               <div
-                className={`flex items-center gap-2 px-3 py-2 rounded-lg border ${VARIANT_COLORS[node.variant]} cursor-default transition-all hover:scale-[1.01]`}
+                class={`flex items-center gap-2 px-3 py-2 rounded-lg border ${VARIANT_COLORS[node.variant]} cursor-default transition-all hover:scale-[1.01]`}
               >
                 <span
-                  className={`w-2 h-2 rounded-full flex-shrink-0 ${VARIANT_DOT_COLORS[node.variant]}`}
+                  class={`w-2 h-2 rounded-full flex-shrink-0 ${VARIANT_DOT_COLORS[node.variant]}`}
                 />
-                <span className="text-sm font-mono">{node.label}</span>
+                <span class="text-sm font-mono">{node.label}</span>
               </div>
             </DiagramTooltip>
           ))}
         </div>
 
         {/* Stats note */}
-        {step.statsNote && (
+        {step().statsNote && (
           <DataBox
             label="Runtime Statistics"
-            value={step.statsNote}
+            value={step().statsNote}
             variant="highlight"
           />
         )}
 
         {/* Navigation */}
-        <div className="flex items-center justify-between pt-2">
+        <div class="flex items-center justify-between pt-2">
           <button
-            onClick={() => setCurrentStep(Math.max(0, currentStep - 1))}
-            disabled={currentStep === 0}
-            className="px-3 py-1.5 text-xs rounded-md bg-[var(--bg-sunken)] text-[var(--ink-default)] hover:bg-[var(--bg-sunken)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            onClick={() => setCurrentStep(Math.max(0, currentStep() - 1))}
+            disabled={currentStep() === 0}
+            class="px-3 py-1.5 text-xs rounded-md bg-[var(--bg-sunken)] text-[var(--ink-default)] hover:bg-[var(--bg-sunken)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             Previous
           </button>
-          <span className="text-xs text-[var(--ink-subtle)]">
-            {currentStep + 1} / {steps.length}
+          <span class="text-xs text-[var(--ink-subtle)]">
+            {currentStep() + 1} / {steps.length}
           </span>
           <button
             onClick={() =>
-              setCurrentStep(Math.min(steps.length - 1, currentStep + 1))
+              setCurrentStep(Math.min(steps.length - 1, currentStep() + 1))
             }
-            disabled={currentStep === steps.length - 1}
-            className="px-3 py-1.5 text-xs rounded-md bg-[var(--bg-sunken)] text-[var(--ink-default)] hover:bg-[var(--bg-sunken)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            disabled={currentStep() === steps.length - 1}
+            class="px-3 py-1.5 text-xs rounded-md bg-[var(--bg-sunken)] text-[var(--ink-default)] hover:bg-[var(--bg-sunken)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
           >
             Next
           </button>
         </div>
 
         {/* Legend */}
-        <div className="flex items-center justify-center gap-4 text-xs text-[var(--ink-subtle)] pt-1">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-blue-400" />
+        <div class="flex items-center justify-center gap-4 text-xs text-[var(--ink-subtle)] pt-1">
+          <span class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-blue-400" />
             Original Plan
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-amber-400" />
+          <span class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-amber-400" />
             Statistics
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
+          <span class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-emerald-400" />
             Optimized
           </span>
         </div>

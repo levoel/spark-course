@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * JdbcPipelineDiagram
  *
@@ -27,24 +28,24 @@ export function JdbcPipelineDiagram() {
         <FlowNode variant="database" size="md">
           <FlowColumn gap={2} align="center">
             <span>Сервер</span>
-            <span className="text-xs opacity-70">Columnar Storage</span>
+            <span class="text-xs opacity-70">Columnar Storage</span>
           </FlowColumn>
         </FlowNode>
 
         <FlowColumn gap={4} align="center">
           {problems.map((p, i) => (
-            <div key={i} className="flex items-center gap-1">
+            <div class="flex items-center gap-1">
               <Arrow direction="right" />
-              <span className="text-xs text-[var(--ink-muted)] whitespace-nowrap">{p}</span>
+              <span class="text-xs text-[var(--ink-muted)] whitespace-nowrap">{p}</span>
             </div>
           ))}
-          <span className="text-[10px] text-rose-700/70 mt-1">text/binary encoding</span>
+          <span class="text-[10px] text-rose-700/70 mt-1">text/binary encoding</span>
         </FlowColumn>
 
         <FlowNode variant="app" size="md">
           <FlowColumn gap={2} align="center">
             <span>Клиент</span>
-            <span className="text-xs opacity-70">Parse rows → rebuild columns</span>
+            <span class="text-xs opacity-70">Parse rows → rebuild columns</span>
           </FlowColumn>
         </FlowNode>
       </FlowRow>

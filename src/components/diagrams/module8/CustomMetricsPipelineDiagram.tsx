@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * CustomMetricsPipelineDiagram
  *
@@ -49,9 +50,9 @@ export function CustomMetricsPipelineDiagram() {
           Application Code
         </FlowNode>
 
-        <div className="flex flex-col gap-4 w-full">
+        <div class="flex flex-col gap-4 w-full">
           {branches.map((branch, i) => (
-            <FlowRow key={i} gap={6} wrap={true} justify="center">
+            <FlowRow gap={6} wrap={true} justify="center">
               <FlowNode variant={branch.sourceVariant} size="sm">
                 {branch.source}
               </FlowNode>
@@ -60,7 +61,7 @@ export function CustomMetricsPipelineDiagram() {
                 {branch.target}
               </FlowNode>
               {branch.chain?.map((step, j) => (
-                <div key={j} className="flex items-center gap-2">
+                <div class="flex items-center gap-2">
                   <Arrow direction="right" />
                   <FlowNode variant="monitoring" size="sm">
                     {step}

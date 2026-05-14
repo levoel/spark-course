@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * PartitionSkewDiagram (DIAG-05)
  *
@@ -5,7 +7,6 @@
  * Shows Moscow-skewed partitions rebalanced by AQE split operation.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { DiagramTooltip } from '@primitives/Tooltip';
 import { DataBox } from '@primitives/DataBox';
@@ -51,19 +52,19 @@ function formatTime(ms: number): string {
 }
 
 export function PartitionSkewDiagram() {
-  const [aqeEnabled, setAqeEnabled] = useState(false);
+  const [aqeEnabled, setAqeEnabled] = createSignal(false);
 
   const maxRows = 800000;
 
   return (
     <DiagramContainer title="Partition Skew: До и после AQE" color="amber">
-      <div className="flex flex-col gap-4">
+      <div class="flex flex-col gap-4">
         {/* Toggle */}
-        <div className="flex items-center justify-center gap-3">
+        <div class="flex items-center justify-center gap-3">
           <button
             onClick={() => setAqeEnabled(false)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              !aqeEnabled
+            class={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              !aqeEnabled()
                 ? 'bg-amber-500/20 text-amber-700 border border-amber-400/50'
                 : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
             }`}
@@ -72,8 +73,8 @@ export function PartitionSkewDiagram() {
           </button>
           <button
             onClick={() => setAqeEnabled(true)}
-            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-              aqeEnabled
+            class={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
+              aqeEnabled()
                 ? 'bg-emerald-500/20 text-emerald-700 border border-emerald-400/50'
                 : 'bg-[var(--bg-surface)] text-[var(--ink-muted)] border border-[var(--line-thin)] hover:bg-[var(--bg-surface)]'
             }`}
@@ -83,31 +84,31 @@ export function PartitionSkewDiagram() {
         </div>
 
         {/* Partition bars */}
-        <div className="space-y-2">
-          {!aqeEnabled ? (
+        <div class="space-y-2">
+          {!aqeEnabled() ? (
             /* Skewed state */
             PARTITIONS_SKEWED.map((p) => {
               const widthPercent = Math.max((p.rows / maxRows) * 100, 4);
               const isSkewed = p.rows > 200000;
               return (
                 <DiagramTooltip
-                  key={p.city}
+
                   content={`${p.city}: ${formatRows(p.rows)} строк, ~${formatTime(p.timeMs)} обработки`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="w-28 text-xs text-right text-[var(--ink-muted)] shrink-0 truncate">
+                  <div class="flex items-center gap-3">
+                    <span class="w-28 text-xs text-right text-[var(--ink-muted)] shrink-0 truncate">
                       {p.city}
                     </span>
-                    <div className="flex-1 bg-[var(--bg-sunken)] rounded-full overflow-hidden h-7">
+                    <div class="flex-1 bg-[var(--bg-sunken)] rounded-full overflow-hidden h-7">
                       <div
-                        className={`h-full rounded-full flex items-center px-2 transition-all duration-500 ${
+                        class={`h-full rounded-full flex items-center px-2 transition-all duration-500 ${
                           isSkewed
                             ? 'bg-amber-500/60 border border-amber-400/40'
                             : 'bg-[var(--bg-sunken)] border border-[var(--line-medium)]'
                         }`}
                         style={{ width: `${widthPercent}%` }}
                       >
-                        <span className="text-xs font-mono text-[var(--ink-strong)] whitespace-nowrap">
+                        <span class="text-xs font-mono text-[var(--ink-strong)] whitespace-nowrap">
                           {formatRows(p.rows)}
                         </span>
                       </div>
@@ -123,23 +124,23 @@ export function PartitionSkewDiagram() {
               const isMoscowSplit = p.label.includes('Москва');
               return (
                 <DiagramTooltip
-                  key={`${p.label}-${i}`}
+
                   content={`${p.label}: ${formatRows(p.rows)} строк, ~${formatTime(p.timeMs)} обработки`}
                 >
-                  <div className="flex items-center gap-3">
-                    <span className="w-28 text-xs text-right text-[var(--ink-muted)] shrink-0 truncate">
+                  <div class="flex items-center gap-3">
+                    <span class="w-28 text-xs text-right text-[var(--ink-muted)] shrink-0 truncate">
                       {p.label}
                     </span>
-                    <div className="flex-1 bg-[var(--bg-sunken)] rounded-full overflow-hidden h-7">
+                    <div class="flex-1 bg-[var(--bg-sunken)] rounded-full overflow-hidden h-7">
                       <div
-                        className={`h-full rounded-full flex items-center px-2 transition-all duration-500 ${
+                        class={`h-full rounded-full flex items-center px-2 transition-all duration-500 ${
                           isMoscowSplit
                             ? 'bg-emerald-500/50 border border-emerald-400/40'
                             : 'bg-[var(--bg-sunken)] border border-[var(--line-medium)]'
                         }`}
                         style={{ width: `${widthPercent}%` }}
                       >
-                        <span className="text-xs font-mono text-[var(--ink-strong)] whitespace-nowrap">
+                        <span class="text-xs font-mono text-[var(--ink-strong)] whitespace-nowrap">
                           {formatRows(p.rows)}
                         </span>
                       </div>
@@ -152,8 +153,8 @@ export function PartitionSkewDiagram() {
         </div>
 
         {/* Summary metrics */}
-        <div className="flex flex-wrap gap-3 justify-center mt-2">
-          {!aqeEnabled ? (
+        <div class="flex flex-wrap gap-3 justify-center mt-2">
+          {!aqeEnabled() ? (
             <>
               <DataBox label="Макс. партиция" value="800K строк" variant="highlight" />
               <DataBox label="Макс. время задачи" value="42 сек" />
@@ -169,15 +170,15 @@ export function PartitionSkewDiagram() {
         </div>
 
         {/* Legend */}
-        <div className="text-xs text-[var(--ink-muted)] text-center mt-1">
-          {!aqeEnabled ? (
+        <div class="text-xs text-[var(--ink-muted)] text-center mt-1">
+          {!aqeEnabled() ? (
             <span>
-              <span className="inline-block w-3 h-3 rounded-full bg-amber-500/60 mr-1 align-middle" />
+              <span class="inline-block w-3 h-3 rounded-full bg-amber-500/60 mr-1 align-middle" />
               Skewed партиция -- обрабатывается в 10x дольше остальных
             </span>
           ) : (
             <span>
-              <span className="inline-block w-3 h-3 rounded-full bg-emerald-500/50 mr-1 align-middle" />
+              <span class="inline-block w-3 h-3 rounded-full bg-emerald-500/50 mr-1 align-middle" />
               AQE split -- Москва разбита на 4 равные sub-partitions
             </span>
           )}

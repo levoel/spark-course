@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * K8sArchDiagram
  *
@@ -23,7 +24,7 @@ export function K8sArchDiagram() {
         <FlowNode variant="app" size="md">
           <FlowColumn gap={1} align="center">
             <span>Spark Driver Pod</span>
-            <span className="text-xs opacity-70">(creates executor pods)</span>
+            <span class="text-xs opacity-70">(creates executor pods)</span>
           </FlowColumn>
         </FlowNode>
 
@@ -31,10 +32,10 @@ export function K8sArchDiagram() {
 
         <FlowRow gap={6} wrap align="center">
           {[1, 2, 3].map((i) => (
-            <FlowNode key={i} variant="compute" size="sm">
+            <FlowNode variant="compute" size="sm">
               <FlowColumn gap={1} align="center">
                 <span>Executor</span>
-                <span className="text-[10px] opacity-70">Pod {i}</span>
+                <span class="text-[10px] opacity-70">Pod {i}</span>
               </FlowColumn>
             </FlowNode>
           ))}

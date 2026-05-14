@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * MinMaxStatsDiagram
  *
@@ -51,25 +52,25 @@ export function MinMaxStatsDiagram() {
       <FlowColumn gap={0} align="start" className="w-full">
         {rowGroups.map((rg, i) => (
           <div
-            key={i}
-            className={`
+
+            class={`
               w-full border border-amber-400/30 bg-amber-500/10 px-4 py-3
               ${i === 0 ? 'rounded-t-xl' : ''}
               ${i === rowGroups.length - 1 ? 'rounded-b-xl' : ''}
             `}
           >
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm font-semibold text-amber-700">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-sm font-semibold text-amber-700">
                 {rg.label}
               </span>
-              <span className="text-[10px] text-[var(--ink-muted)] font-mono">{rg.rowCount}</span>
+              <span class="text-[10px] text-[var(--ink-muted)] font-mono">{rg.rowCount}</span>
             </div>
-            <div className="space-y-0.5 ml-2">
+            <div class="space-y-0.5 ml-2">
               {rg.stats.map((s, j) => (
-                <div key={j} className="flex items-center gap-2 text-xs font-mono">
-                  <span className="text-amber-700/70 w-24">{s.col}:</span>
-                  <span className="text-emerald-400/70">min={s.min}</span>
-                  <span className="text-rose-400/70">max={s.max}</span>
+                <div class="flex items-center gap-2 text-xs font-mono">
+                  <span class="text-amber-700/70 w-24">{s.col}:</span>
+                  <span class="text-emerald-400/70">min={s.min}</span>
+                  <span class="text-rose-400/70">max={s.max}</span>
                 </div>
               ))}
             </div>

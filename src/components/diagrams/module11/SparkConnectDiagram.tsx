@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * SparkConnectDiagram
  *
@@ -19,14 +20,14 @@ export function SparkConnectDiagram() {
     >
       <FlowColumn gap={12} align="center">
         {/* Client */}
-        <div className="w-full max-w-sm rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4">
-          <div className="text-xs text-emerald-700/70 mb-2">Машина разработчика</div>
+        <div class="w-full max-w-sm rounded-xl border border-emerald-400/20 bg-emerald-500/5 p-4">
+          <div class="text-xs text-emerald-700/70 mb-2">Машина разработчика</div>
           <FlowNode variant="connector" size="md" className="w-full">
             <FlowColumn gap={2} align="center">
               <span>Python process ONLY</span>
-              <span className="text-xs opacity-70">pip install pyspark[connect]</span>
-              <span className="text-xs opacity-70">(лёгкий gRPC клиент)</span>
-              <span className="text-[10px] text-emerald-700 mt-1">Без JVM! ~100 MB RAM</span>
+              <span class="text-xs opacity-70">pip install pyspark[connect]</span>
+              <span class="text-xs opacity-70">(лёгкий gRPC клиент)</span>
+              <span class="text-[10px] text-emerald-700 mt-1">Без JVM! ~100 MB RAM</span>
             </FlowColumn>
           </FlowNode>
         </div>
@@ -34,19 +35,19 @@ export function SparkConnectDiagram() {
         <Arrow direction="down" label="gRPC + Arrow Flight" />
 
         {/* Server */}
-        <div className="w-full max-w-md rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
-          <div className="text-xs text-blue-700/70 mb-2">Spark Connect Server</div>
+        <div class="w-full max-w-md rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
+          <div class="text-xs text-blue-700/70 mb-2">Spark Connect Server</div>
           <FlowNode variant="service" size="md" className="w-full">
             <FlowColumn gap={2} align="center">
               <span>gRPC endpoint</span>
-              <span className="text-xs opacity-70">Unresolved Plan → Catalyst → Execute → Arrow RecordBatch</span>
+              <span class="text-xs opacity-70">Unresolved Plan → Catalyst → Execute → Arrow RecordBatch</span>
             </FlowColumn>
           </FlowNode>
-          <div className="mt-2">
+          <div class="mt-2">
             <FlowNode variant="cluster" size="sm" className="w-full">
               <FlowColumn gap={1} align="center">
                 <span>Executors</span>
-                <span className="text-xs opacity-70">(data processing)</span>
+                <span class="text-xs opacity-70">(data processing)</span>
               </FlowColumn>
             </FlowNode>
           </div>

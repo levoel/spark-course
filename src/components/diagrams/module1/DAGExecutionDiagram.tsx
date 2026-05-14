@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * DAGExecutionDiagram (DIAG-04)
  *
@@ -5,7 +7,6 @@
  * Stages 0 and 1 run in parallel, feeding into Stage 2 via shuffle.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { DiagramTooltip } from '@primitives/Tooltip';
 import { FlowNode } from '@primitives/FlowNode';
@@ -44,26 +45,26 @@ const stages: Record<number, StageDetail> = {
 };
 
 export function DAGExecutionDiagram() {
-  const [activeStage, setActiveStage] = useState<number | null>(null);
+  const [activeStage, setActiveStage] = createSignal<number | null>(null);
 
   const handleStageClick = (stageId: number) => {
-    setActiveStage(activeStage === stageId ? null : stageId);
+    setActiveStage(activeStage() === stageId ? null : stageId);
   };
 
   return (
     <DiagramContainer title="DAG Execution Flow" color="blue">
-      <div className="flex flex-col gap-2">
+      <div class="flex flex-col gap-2">
         {/* SQL query reference */}
-        <div className="p-3 rounded-lg bg-blue-500/10 border border-blue-400/30 mb-2">
-          <p className="text-xs text-blue-700 font-mono">
+        <div class="p-3 rounded-lg bg-blue-500/10 border border-blue-400/30 mb-2">
+          <p class="text-xs text-blue-700 font-mono">
             SELECT * FROM orders o JOIN customers c ON o.customer_id = c.id WHERE o.amount &gt; 100
           </p>
         </div>
 
         {/* Parallel stages row */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+        <div class="flex flex-col sm:flex-row gap-4 justify-center">
           {/* Stage 0 */}
-          <div className="flex flex-col items-center gap-2 flex-1">
+          <div class="flex flex-col items-center gap-2 flex-1">
             <DiagramTooltip content="ShuffleMapStage: чтение orders, фильтрация amount > 100. Результат записывается в shuffle files для Stage 2.">
               <FlowNode
                 variant="connector"
@@ -72,7 +73,7 @@ export function DAGExecutionDiagram() {
               >
                 Stage 0
                 <br />
-                <span className="text-xs opacity-75">Scan orders + Filter</span>
+                <span class="text-xs opacity-75">Scan orders + Filter</span>
               </FlowNode>
             </DiagramTooltip>
 
@@ -80,7 +81,7 @@ export function DAGExecutionDiagram() {
           </div>
 
           {/* Stage 1 */}
-          <div className="flex flex-col items-center gap-2 flex-1">
+          <div class="flex flex-col items-center gap-2 flex-1">
             <DiagramTooltip content="ShuffleMapStage: чтение таблицы customers. Выполняется параллельно со Stage 0 -- независимые источники данных.">
               <FlowNode
                 variant="database"
@@ -89,7 +90,7 @@ export function DAGExecutionDiagram() {
               >
                 Stage 1
                 <br />
-                <span className="text-xs opacity-75">Scan customers</span>
+                <span class="text-xs opacity-75">Scan customers</span>
               </FlowNode>
             </DiagramTooltip>
 
@@ -98,7 +99,7 @@ export function DAGExecutionDiagram() {
         </div>
 
         {/* Stage 2: Join */}
-        <div className="flex flex-col items-center gap-2">
+        <div class="flex flex-col items-center gap-2">
           <DiagramTooltip content="ResultStage: shuffle read из обеих стадий, SortMergeJoin по ключу customer_id = id. Результат отправляется driver.">
             <FlowNode
               variant="cluster"
@@ -107,38 +108,38 @@ export function DAGExecutionDiagram() {
             >
               Stage 2
               <br />
-              <span className="text-xs opacity-75">SortMergeJoin + Result</span>
+              <span class="text-xs opacity-75">SortMergeJoin + Result</span>
             </FlowNode>
           </DiagramTooltip>
         </div>
 
         {/* Stage detail panel */}
-        {activeStage !== null && (
-          <div className="mt-4 p-4 rounded-lg bg-[var(--bg-surface)] border border-[var(--line-thin)]">
-            <h4 className="text-sm font-semibold text-[var(--ink-strong)] mb-2">
-              {stages[activeStage].name}
+        {activeStage() !== null && (
+          <div class="mt-4 p-4 rounded-lg bg-[var(--bg-surface)] border border-[var(--line-thin)]">
+            <h4 class="text-sm font-semibold text-[var(--ink-strong)] mb-2">
+              {stages[activeStage()!].name}
             </h4>
-            <p className="text-xs text-[var(--ink-default)] mb-3">
-              {stages[activeStage].description}
+            <p class="text-xs text-[var(--ink-default)] mb-3">
+              {stages[activeStage()!].description}
             </p>
 
-            <div className="flex flex-wrap gap-3 mb-3">
+            <div class="flex flex-wrap gap-3 mb-3">
               <DataBox
                 label="Tasks"
-                value={String(stages[activeStage].tasks)}
+                value={String(stages[activeStage()!].tasks)}
               />
               <DataBox
                 label="Type"
-                value={activeStage === 2 ? 'ResultStage' : 'ShuffleMapStage'}
+                value={activeStage() === 2 ? 'ResultStage' : 'ShuffleMapStage'}
                 variant="highlight"
               />
             </div>
 
-            <div className="text-xs text-[var(--ink-muted)]">
-              <p className="font-semibold mb-1">Operations:</p>
-              <ul className="list-disc list-inside space-y-0.5">
-                {stages[activeStage].operations.map((op, i) => (
-                  <li key={i} className="font-mono text-[var(--ink-default)]">{op}</li>
+            <div class="text-xs text-[var(--ink-muted)]">
+              <p class="font-semibold mb-1">Operations:</p>
+              <ul class="list-disc list-inside space-y-0.5">
+                {stages[activeStage()!].operations.map((op, i) => (
+                  <li class="font-mono text-[var(--ink-default)]">{op}</li>
                 ))}
               </ul>
             </div>
@@ -146,8 +147,8 @@ export function DAGExecutionDiagram() {
         )}
 
         {/* Legend */}
-        <div className="flex flex-wrap gap-4 mt-2 text-xs text-[var(--ink-muted)]">
-          <span>Stages 0 и 1 выполняются <strong className="text-[var(--ink-strong)]">параллельно</strong></span>
+        <div class="flex flex-wrap gap-4 mt-2 text-xs text-[var(--ink-muted)]">
+          <span>Stages 0 и 1 выполняются <strong class="text-[var(--ink-strong)]">параллельно</strong></span>
           <span>Stage 2 ждёт завершения обеих</span>
           <span>Нажмите на stage для деталей</span>
         </div>

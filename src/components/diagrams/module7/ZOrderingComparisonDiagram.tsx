@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * ZOrderingComparisonDiagram
  *
@@ -51,17 +52,17 @@ const sides: Side[] = [
 export function ZOrderingComparisonDiagram() {
   return (
     <DiagramContainer title="Без Z-ordering vs С Z-ordering" color="blue">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         {sides.map((side, si) => (
-          <div key={si} className="flex flex-col gap-3">
-            <div className={`text-center text-sm font-semibold text-${side.color}-300`}>
+          <div class="flex flex-col gap-3">
+            <div class={`text-center text-sm font-semibold text-${side.color}-300`}>
               {side.title}
             </div>
             <FlowColumn gap={2} align="start" className="w-full">
               {side.files.map((f, fi) => (
                 <div
-                  key={fi}
-                  className={`
+
+                  class={`
                     w-full px-3 py-2 rounded-lg text-xs font-mono border
                     ${f.highlighted
                       ? `bg-${side.color}-500/20 border-${side.color}-400/40 text-${side.color}-200`
@@ -73,11 +74,11 @@ export function ZOrderingComparisonDiagram() {
                 </div>
               ))}
             </FlowColumn>
-            <div className="space-y-1 text-center">
-              <div className="text-[11px] font-mono text-[var(--ink-muted)]">
+            <div class="space-y-1 text-center">
+              <div class="text-[11px] font-mono text-[var(--ink-muted)]">
                 Запрос: {side.query}
               </div>
-              <div className={`text-xs font-semibold text-${side.color}-300`}>
+              <div class={`text-xs font-semibold text-${side.color}-300`}>
                 {side.result}
               </div>
             </div>

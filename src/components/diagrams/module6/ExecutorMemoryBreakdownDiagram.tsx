@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * ExecutorMemoryBreakdownDiagram
  *
@@ -50,21 +51,21 @@ const segments: MemorySegment[] = [
 export function ExecutorMemoryBreakdownDiagram() {
   return (
     <DiagramContainer title="Executor JVM (4GB) с Python UDF" color="rose">
-      <div className="flex flex-col gap-3">
-        <div className="flex w-full rounded-xl overflow-hidden border border-[var(--line-thin)]">
+      <div class="flex flex-col gap-3">
+        <div class="flex w-full rounded-xl overflow-hidden border border-[var(--line-thin)]">
           {segments.map((s, i) => (
-            <DiagramTooltip key={i} content={s.tooltip}>
+            <DiagramTooltip content={s.tooltip}>
               <div
-                className={`border-r last:border-r-0 p-2 text-center cursor-help ${s.color}`}
-                style={{ flex: s.flex, minWidth: 0 }}
+                class={`border-r last:border-r-0 p-2 text-center cursor-help ${s.color}`}
+                style={{ flex: s.flex, 'min-width': '0' }}
               >
-                <div className="text-[10px] font-semibold truncate">{s.label}</div>
-                <div className="text-[10px] opacity-70">{s.size}</div>
+                <div class="text-[10px] font-semibold truncate">{s.label}</div>
+                <div class="text-[10px] opacity-70">{s.size}</div>
               </div>
             </DiagramTooltip>
           ))}
         </div>
-        <p className="text-xs text-[var(--ink-subtle)] text-center">
+        <p class="text-xs text-[var(--ink-subtle)] text-center">
           Итого: 4GB + 200MB Python overhead на executor
         </p>
       </div>

@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * DataQualityLayersDiagram
  *
@@ -66,23 +67,23 @@ export function DataQualityLayersDiagram() {
     <DiagramContainer title="Data Quality Layers" color="amber">
       <FlowColumn gap={8} align="stretch">
         {layers.map((layer, i) => (
-          <div key={i}>
-            <div className={`rounded-xl border ${layer.borderColor} ${layer.bgColor} p-4`}>
-              <div className={`text-sm font-semibold ${layer.color} mb-2`}>
+          <div>
+            <div class={`rounded-xl border ${layer.borderColor} ${layer.bgColor} p-4`}>
+              <div class={`text-sm font-semibold ${layer.color} mb-2`}>
                 {layer.name}{' '}
-                <span className="text-xs font-normal opacity-70">({layer.subtitle})</span>
+                <span class="text-xs font-normal opacity-70">({layer.subtitle})</span>
               </div>
-              <div className="space-y-1">
+              <div class="space-y-1">
                 {layer.checks.map((check, ci) => (
-                  <div key={ci} className="flex items-start gap-2 text-xs text-[var(--ink-default)]">
-                    <span className="text-emerald-400 shrink-0">✓</span>
+                  <div class="flex items-start gap-2 text-xs text-[var(--ink-default)]">
+                    <span class="text-emerald-400 shrink-0">✓</span>
                     <span>{check}</span>
                   </div>
                 ))}
               </div>
             </div>
             {i < layers.length - 1 && (
-              <div className="flex justify-center py-1">
+              <div class="flex justify-center py-1">
                 <Arrow direction="down" />
               </div>
             )}

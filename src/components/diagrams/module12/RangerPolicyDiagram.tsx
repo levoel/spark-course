@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * RangerPolicyDiagram
  *
@@ -44,19 +45,19 @@ export function RangerPolicyDiagram() {
       <FlowColumn gap={8} align="stretch">
         {policies.map((policy) => (
           <div
-            key={policy.name}
-            className="rounded-xl border border-purple-400/20 bg-purple-500/5 p-4"
+
+            class="rounded-xl border border-purple-400/20 bg-purple-500/5 p-4"
           >
-            <div className="text-sm font-medium text-purple-700 mb-3">
+            <div class="text-sm font-medium text-purple-700 mb-3">
               Policy: "{policy.name}"
             </div>
             <FlowColumn gap={4} align="stretch">
               {policy.rules.map((rule, i) => (
-                <div key={i} className="flex items-center justify-between">
+                <div class="flex items-center justify-between">
                   <FlowNode variant="database" size="sm" className="flex-1">
                     {rule.resource}
                   </FlowNode>
-                  <span className={`ml-3 text-xs font-mono font-semibold ${rule.color}`}>
+                  <span class={`ml-3 text-xs font-mono font-semibold ${rule.color}`}>
                     [{rule.access}]
                   </span>
                 </div>

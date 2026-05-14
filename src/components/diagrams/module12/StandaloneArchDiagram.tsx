@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * StandaloneArchDiagram
  *
@@ -18,8 +19,8 @@ export function StandaloneArchDiagram() {
         <FlowNode variant="cluster" size="md">
           <FlowColumn gap={1} align="center">
             <span>Spark Master</span>
-            <span className="text-xs opacity-70">(scheduler)</span>
-            <span className="text-[10px] text-blue-700">:8080 (UI) · :7077 (RPC)</span>
+            <span class="text-xs opacity-70">(scheduler)</span>
+            <span class="text-[10px] text-blue-700">:8080 (UI) · :7077 (RPC)</span>
           </FlowColumn>
         </FlowNode>
 
@@ -27,10 +28,10 @@ export function StandaloneArchDiagram() {
 
         <FlowRow gap={6} wrap align="center">
           {[1, 2, 3].map((i) => (
-            <FlowNode key={i} variant="compute" size="sm">
+            <FlowNode variant="compute" size="sm">
               <FlowColumn gap={1} align="center">
                 <span>Worker {i}</span>
-                <span className="text-[10px] opacity-70">:8081</span>
+                <span class="text-[10px] opacity-70">:8081</span>
               </FlowColumn>
             </FlowNode>
           ))}

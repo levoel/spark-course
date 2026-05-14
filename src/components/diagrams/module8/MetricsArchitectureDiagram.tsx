@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * MetricsArchitectureDiagram
  *
@@ -35,28 +36,28 @@ export function MetricsArchitectureDiagram() {
       <FlowRow gap={16} wrap={false} justify="center" align="start">
         {/* Sources */}
         <FlowColumn gap={4} align="start">
-          <div className="text-xs font-semibold text-blue-700 mb-1">
+          <div class="text-xs font-semibold text-blue-700 mb-1">
             Sources (генерируют метрики)
           </div>
           {sources.map((s, i) => (
-            <FlowNode key={i} variant="compute" size="sm">
+            <FlowNode variant="compute" size="sm">
               {s}
             </FlowNode>
           ))}
         </FlowColumn>
 
         {/* Arrows */}
-        <div className="flex items-center self-center">
+        <div class="flex items-center self-center">
           <Arrow direction="right" label="export" />
         </div>
 
         {/* Sinks */}
         <FlowColumn gap={4} align="start">
-          <div className="text-xs font-semibold text-amber-700 mb-1">
+          <div class="text-xs font-semibold text-amber-700 mb-1">
             Sinks (экспонируют метрики)
           </div>
           {sinks.map((s, i) => (
-            <FlowNode key={i} variant="service" size="sm">
+            <FlowNode variant="service" size="sm">
               {s}
             </FlowNode>
           ))}

@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * UnresolvedPlanDiagram
  *
@@ -31,16 +32,16 @@ export function UnresolvedPlanDiagram() {
       color="amber"
     >
       <FlowColumn gap={0} align="start">
-        <div className="font-mono text-xs text-[var(--ink-default)] bg-[var(--bg-sunken)] rounded-lg p-3 w-full">
+        <div class="font-mono text-xs text-[var(--ink-default)] bg-[var(--bg-sunken)] rounded-lg p-3 w-full">
           {planLines.map((line, i) => (
-            <div key={i} style={{ paddingLeft: `${line.indent * 16}px` }}>
-              <span className={line.text.includes(':') ? 'text-amber-700' : 'text-[var(--ink-muted)]'}>
+            <div style={{ 'padding-left': `${line.indent * 16}px` }}>
+              <span class={line.text.includes(':') ? 'text-amber-700' : 'text-[var(--ink-muted)]'}>
                 {line.text}
               </span>
             </div>
           ))}
         </div>
-        <div className="text-[10px] text-[var(--ink-subtle)] mt-2 text-center w-full">
+        <div class="text-[10px] text-[var(--ink-subtle)] mt-2 text-center w-full">
           ~500 байт protobuf (не данные!)
         </div>
       </FlowColumn>

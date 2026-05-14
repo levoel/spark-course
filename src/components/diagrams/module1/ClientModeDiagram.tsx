@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * ClientModeDiagram
  *
@@ -13,33 +14,33 @@ import { FlowColumn } from '@primitives/FlowColumn';
 export function ClientModeDiagram() {
   return (
     <DiagramContainer title="Client Mode" color="blue">
-      <div className="flex flex-col sm:flex-row items-center justify-center gap-6">
+      <div class="flex flex-col sm:flex-row items-center justify-center gap-6">
         {/* Ваша машина */}
         <FlowColumn gap={4}>
-          <p className="text-xs text-[var(--ink-muted)] font-semibold text-center">
+          <p class="text-xs text-[var(--ink-muted)] font-semibold text-center">
             Ваша машина
           </p>
           <FlowNode variant="app" size="lg">
             Driver
             <br />
-            <span className="text-xs opacity-75">(здесь)</span>
+            <span class="text-xs opacity-75">(здесь)</span>
           </FlowNode>
         </FlowColumn>
 
         {/* Arrow: horizontal on desktop, vertical on mobile */}
-        <div className="hidden sm:flex items-center">
+        <div class="hidden sm:flex items-center">
           <Arrow direction="right" />
         </div>
-        <div className="flex sm:hidden items-center">
+        <div class="flex sm:hidden items-center">
           <Arrow direction="down" />
         </div>
 
         {/* Кластер */}
         <FlowColumn gap={4}>
-          <p className="text-xs text-[var(--ink-muted)] font-semibold text-center">
+          <p class="text-xs text-[var(--ink-muted)] font-semibold text-center">
             Кластер
           </p>
-          <div className="flex flex-col gap-1.5">
+          <div class="flex flex-col gap-1.5">
             <FlowNode variant="compute" size="sm">Executor 1</FlowNode>
             <FlowNode variant="compute" size="sm">Executor 2</FlowNode>
             <FlowNode variant="compute" size="sm">Executor 3</FlowNode>

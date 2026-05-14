@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * GrafanaProvisioningDiagram
  *
@@ -36,13 +37,13 @@ export function GrafanaProvisioningDiagram() {
             : '  '.repeat(node.indent - 1) + (isLast ? '└── ' : '├── ');
 
           return (
-            <div key={i} className="flex items-center gap-2 text-xs font-mono">
-              <span className="text-[var(--ink-subtle)] whitespace-pre">{prefix}</span>
-              <span className={node.icon === 'dir' ? 'text-blue-700' : 'text-[var(--ink-default)]'}>
+            <div class="flex items-center gap-2 text-xs font-mono">
+              <span class="text-[var(--ink-subtle)] whitespace-pre">{prefix}</span>
+              <span class={node.icon === 'dir' ? 'text-blue-700' : 'text-[var(--ink-default)]'}>
                 {node.name}
               </span>
               {node.comment && (
-                <span className="text-[var(--ink-subtle)] ml-2">
+                <span class="text-[var(--ink-subtle)] ml-2">
                   # {node.comment}
                 </span>
               )}

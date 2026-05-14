@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createSignal } from 'solid-js';
 /**
  * CatalystPipelineDiagram (DIAG-02)
  *
@@ -5,7 +7,6 @@
  * for a real SQL query. Clickable stages reveal plan text details.
  */
 
-import { useState } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { DiagramTooltip } from '@primitives/Tooltip';
 import { FlowNode } from '@primitives/FlowNode';
@@ -96,23 +97,23 @@ const stages: PipelineStage[] = [
 ];
 
 export function CatalystPipelineDiagram() {
-  const [activeStage, setActiveStage] = useState<number | null>(null);
+  const [activeStage, setActiveStage] = createSignal<number | null>(null);
 
   return (
     <DiagramContainer title="Catalyst Optimizer Pipeline" color="blue">
-      <div className="flex flex-col gap-2">
+      <div class="flex flex-col gap-2">
         <FlowColumn gap={4}>
           {stages.map((stage, index) => (
-            <div key={stage.id} className="flex flex-col items-center">
+            <div class="flex flex-col items-center">
               <DiagramTooltip content={stage.tooltip}>
                 <FlowNode
                   variant={stage.variant}
                   onClick={() =>
-                    setActiveStage(activeStage === stage.id ? null : stage.id)
+                    setActiveStage(activeStage() === stage.id ? null : stage.id)
                   }
                   tabIndex={0}
                   className={
-                    activeStage === stage.id
+                    activeStage() === stage.id
                       ? 'ring-2 ring-blue-400/50 ring-offset-2 ring-offset-transparent'
                       : ''
                   }
@@ -125,11 +126,11 @@ export function CatalystPipelineDiagram() {
           ))}
         </FlowColumn>
 
-        {activeStage !== null && (
-          <div className="mt-4">
+        {activeStage() !== null && (
+          <div class="mt-4">
             <DataBox
-              label={stages[activeStage].title}
-              value={stages[activeStage].planText}
+              label={stages[activeStage()!].title}
+              value={stages[activeStage()!].planText}
               variant="highlight"
             />
           </div>

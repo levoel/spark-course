@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * MemoryLayoutDiagram
  *
@@ -27,7 +28,7 @@ export function MemoryLayoutDiagram() {
           <FlowNode variant="service" size="md">
             User Memory: (1 − fraction) × (total − 300MB)
           </FlowNode>
-          <div className="flex flex-wrap gap-1.5 pl-4">
+          <div class="flex flex-wrap gap-1.5 pl-4">
             <FlowNode variant="service" size="sm">UDF-объекты</FlowNode>
             <FlowNode variant="service" size="sm">RDD internal metadata</FlowNode>
             <FlowNode variant="service" size="sm">
@@ -48,7 +49,7 @@ export function MemoryLayoutDiagram() {
               <FlowNode variant="storage" size="md">
                 Storage Memory
               </FlowNode>
-              <div className="flex flex-col gap-1 pl-2">
+              <div class="flex flex-col gap-1 pl-2">
                 <FlowNode variant="storage" size="sm">
                   Кэшированные RDD / DataFrame
                 </FlowNode>
@@ -66,7 +67,7 @@ export function MemoryLayoutDiagram() {
               <FlowNode variant="connector" size="md">
                 Execution Memory
               </FlowNode>
-              <div className="flex flex-col gap-1 pl-2">
+              <div class="flex flex-col gap-1 pl-2">
                 <FlowNode variant="connector" size="sm">
                   Shuffle buffers
                 </FlowNode>

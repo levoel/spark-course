@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * UnsafeRowLayoutDiagram
  *
@@ -49,20 +50,20 @@ export function UnsafeRowLayoutDiagram() {
     <DiagramContainer title="Структура UnsafeRow" color="purple">
       <FlowRow gap={0} wrap={false} className="w-full">
         {sections.map((s, i) => (
-          <DiagramTooltip key={i} content={s.tooltip}>
+          <DiagramTooltip content={s.tooltip}>
             <div
-              className={`
+              class={`
                 border backdrop-blur-md p-3 text-center cursor-help
                 ${s.color}
                 ${i === 0 ? 'rounded-l-xl' : ''}
                 ${i === sections.length - 1 ? 'rounded-r-xl' : ''}
               `}
-              style={{ flex: s.flex, minWidth: 0 }}
+              style={{ flex: s.flex, 'min-width': '0' }}
             >
-              <div className="text-sm font-semibold whitespace-nowrap truncate">
+              <div class="text-sm font-semibold whitespace-nowrap truncate">
                 {s.label}
               </div>
-              <div className="text-[11px] opacity-70 whitespace-nowrap truncate">
+              <div class="text-[11px] opacity-70 whitespace-nowrap truncate">
                 {s.sublabel}
               </div>
             </div>

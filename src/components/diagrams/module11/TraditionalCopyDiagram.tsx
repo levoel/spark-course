@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * TraditionalCopyDiagram
  *
@@ -29,20 +30,20 @@ export function TraditionalCopyDiagram() {
         <FlowNode variant="compute" size="md">
           <FlowColumn gap={2} align="center">
             <span>Процесс A</span>
-            <span className="text-xs opacity-70">Данные в RAM</span>
-            <span className="text-xs opacity-70">(1 GB)</span>
+            <span class="text-xs opacity-70">Данные в RAM</span>
+            <span class="text-xs opacity-70">(1 GB)</span>
           </FlowColumn>
         </FlowNode>
 
         {/* Steps */}
         <FlowColumn gap={6} align="center">
           {steps.map((s, i) => (
-            <div key={i} className="flex items-center gap-2">
+            <div class="flex items-center gap-2">
               <Arrow direction="right" />
-              <div className="text-xs text-[var(--ink-default)]">
-                <div className="font-semibold">{s.label}</div>
-                <div className="opacity-60">{s.detail}</div>
-                <div className="text-amber-700/80">{s.time}</div>
+              <div class="text-xs text-[var(--ink-default)]">
+                <div class="font-semibold">{s.label}</div>
+                <div class="opacity-60">{s.detail}</div>
+                <div class="text-amber-700/80">{s.time}</div>
               </div>
             </div>
           ))}
@@ -52,13 +53,13 @@ export function TraditionalCopyDiagram() {
         <FlowNode variant="compute" size="md">
           <FlowColumn gap={2} align="center">
             <span>Процесс B</span>
-            <span className="text-xs opacity-70">Данные в RAM</span>
-            <span className="text-xs opacity-70">(1 GB)</span>
+            <span class="text-xs opacity-70">Данные в RAM</span>
+            <span class="text-xs opacity-70">(1 GB)</span>
           </FlowColumn>
         </FlowNode>
       </FlowRow>
 
-      <div className="text-center text-xs text-[var(--ink-muted)] mt-3">
+      <div class="text-center text-xs text-[var(--ink-muted)] mt-3">
         Итого: ~5.5 сек для 1 GB, 2× memory usage
       </div>
     </DiagramContainer>

@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * StreamingMicroBatchDiagram
  *
@@ -29,16 +30,16 @@ export function StreamingMicroBatchDiagram() {
         {/* Unbounded Input Table */}
         <FlowNode variant="queue" size="lg">
           <FlowColumn gap={4} align="center">
-            <span className="font-semibold">Unbounded Input Table</span>
+            <span class="font-semibold">Unbounded Input Table</span>
             <FlowRow gap={8} wrap>
               {batches.map((b, i) => (
                 <span
-                  key={i}
-                  className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-400/20 text-xs text-amber-700"
+
+                  class="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-400/20 text-xs text-amber-700"
                 >
                   {b.label}
                   <br />
-                  <span className="text-[10px] opacity-70">{b.detail}</span>
+                  <span class="text-[10px] opacity-70">{b.detail}</span>
                 </span>
               ))}
             </FlowRow>
@@ -51,8 +52,8 @@ export function StreamingMicroBatchDiagram() {
         <FlowNode variant="compute" size="md">
           <FlowColumn gap={2} align="center">
             <span>DataFrame API</span>
-            <span className="text-xs opacity-70">filter / join / agg</span>
-            <span className="text-xs opacity-70">Catalyst Optimizer</span>
+            <span class="text-xs opacity-70">filter / join / agg</span>
+            <span class="text-xs opacity-70">Catalyst Optimizer</span>
           </FlowColumn>
         </FlowNode>
 
@@ -62,7 +63,7 @@ export function StreamingMicroBatchDiagram() {
         <FlowNode variant="storage" size="md">
           <FlowColumn gap={2} align="center">
             <span>Result Table</span>
-            <span className="text-xs opacity-70">(sink output)</span>
+            <span class="text-xs opacity-70">(sink output)</span>
           </FlowColumn>
         </FlowNode>
       </FlowColumn>

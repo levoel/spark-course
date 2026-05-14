@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * SpotOnDemandDiagram
  *
@@ -45,15 +46,15 @@ export function SpotOnDemandDiagram() {
       <FlowColumn gap={0} align="stretch">
         {layers.map((layer, i) => (
           <div
-            key={i}
-            className={`p-4 border ${layer.borderColor} ${layer.bgColor} ${
+
+            class={`p-4 border ${layer.borderColor} ${layer.bgColor} ${
               i === 0 ? 'rounded-t-xl' : ''
             } ${i === layers.length - 1 ? 'rounded-b-xl' : ''} ${
               i > 0 ? 'border-t-0' : ''
             }`}
           >
-            <div className={`text-sm font-medium ${layer.color}`}>{layer.label}</div>
-            <div className="text-xs text-[var(--ink-muted)] mt-0.5">({layer.detail})</div>
+            <div class={`text-sm font-medium ${layer.color}`}>{layer.label}</div>
+            <div class="text-xs text-[var(--ink-muted)] mt-0.5">({layer.detail})</div>
           </div>
         ))}
       </FlowColumn>

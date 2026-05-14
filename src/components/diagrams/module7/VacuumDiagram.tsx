@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * VacuumDiagram
  *
@@ -64,26 +65,26 @@ export function VacuumDiagram() {
           const st = statusStyles[f.status];
           return (
             <div
-              key={i}
-              className={`
+
+              class={`
                 w-full flex items-center gap-3 px-3 py-2 rounded-lg border text-xs font-mono
                 ${st.bg} ${st.border} ${st.text}
               `}
             >
-              <span className="text-[var(--ink-subtle)]">
+              <span class="text-[var(--ink-subtle)]">
                 {i < files.length - 1 ? '├──' : '└──'}
               </span>
-              <span className="flex-1">{f.name}</span>
-              {f.size && <span className="text-[var(--ink-subtle)]">{f.size}</span>}
-              {f.age && <span className="text-[var(--ink-subtle)]">({f.age})</span>}
-              <span className={`px-2 py-0.5 rounded text-[10px] font-semibold ${st.badgeColor}`}>
+              <span class="flex-1">{f.name}</span>
+              {f.size && <span class="text-[var(--ink-subtle)]">{f.size}</span>}
+              {f.age && <span class="text-[var(--ink-subtle)]">({f.age})</span>}
+              <span class={`px-2 py-0.5 rounded text-[10px] font-semibold ${st.badgeColor}`}>
                 {st.badge}
               </span>
             </div>
           );
         })}
       </FlowColumn>
-      <p className="text-xs text-[var(--ink-subtle)] mt-3 text-center">
+      <p class="text-xs text-[var(--ink-subtle)] mt-3 text-center">
         3 файла удалены — старше 7 дней retention period
       </p>
     </DiagramContainer>

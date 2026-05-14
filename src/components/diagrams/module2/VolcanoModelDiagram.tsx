@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * VolcanoModelDiagram
  *
@@ -22,7 +23,7 @@ export function VolcanoModelDiagram() {
     <DiagramContainer title="Volcano Iterator Model" color="rose">
       <FlowColumn gap={4}>
         {operators.map((op, i) => (
-          <div key={i} className="flex flex-col items-center">
+          <div class="flex flex-col items-center">
             <FlowNode variant="connector" size="sm">
               {op}
             </FlowNode>

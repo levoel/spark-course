@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * ClusterModeDiagram
  *
@@ -13,14 +14,14 @@ export function ClusterModeDiagram() {
   return (
     <DiagramContainer title="Cluster Mode" color="green">
       <FlowColumn gap={4}>
-        <p className="text-xs text-[var(--ink-muted)] font-semibold text-center">
+        <p class="text-xs text-[var(--ink-muted)] font-semibold text-center">
           Кластер
         </p>
-        <div className="flex flex-col gap-1.5">
+        <div class="flex flex-col gap-1.5">
           <FlowNode variant="app" size="md">
             Driver
             <br />
-            <span className="text-xs opacity-75">(на кластере)</span>
+            <span class="text-xs opacity-75">(на кластере)</span>
           </FlowNode>
           <FlowNode variant="compute" size="sm">Executor 1</FlowNode>
           <FlowNode variant="compute" size="sm">Executor 2</FlowNode>

@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * RowVsColumnarDiagram
  *
@@ -33,47 +34,47 @@ export function RowVsColumnarDiagram() {
       <FlowRow gap={24} wrap align="start">
         {/* Row-oriented */}
         <FlowColumn gap={4} align="start" className="flex-1 min-w-[220px]">
-          <div className="text-xs font-semibold text-rose-700">
+          <div class="text-xs font-semibold text-rose-700">
             Row-oriented (строчное хранение)
           </div>
-          <div className="rounded-lg border border-rose-400/20 bg-rose-500/5 p-2 w-full">
+          <div class="rounded-lg border border-rose-400/20 bg-rose-500/5 p-2 w-full">
             {rows.map((row, i) => (
-              <div key={i} className="text-xs font-mono text-[var(--ink-default)] py-0.5 flex gap-1 flex-wrap">
-                <span className="text-rose-700/40">id={row.id}</span>
-                <span className="text-rose-700/40">name="{row.name}"</span>
-                <span className="text-rose-700/40">age={row.age}</span>
-                <span className="text-rose-700/40">dept="{row.dept}"</span>
-                <span className="text-emerald-700">salary={row.salary}</span>
+              <div class="text-xs font-mono text-[var(--ink-default)] py-0.5 flex gap-1 flex-wrap">
+                <span class="text-rose-700/40">id={row.id}</span>
+                <span class="text-rose-700/40">name="{row.name}"</span>
+                <span class="text-rose-700/40">age={row.age}</span>
+                <span class="text-rose-700/40">dept="{row.dept}"</span>
+                <span class="text-emerald-700">salary={row.salary}</span>
               </div>
             ))}
           </div>
-          <div className="text-[10px] text-rose-700/70">
+          <div class="text-[10px] text-rose-700/70">
             ← читаем ВСЁ, 83% данных выбрасываются
           </div>
         </FlowColumn>
 
         {/* Columnar */}
         <FlowColumn gap={4} align="start" className="flex-1 min-w-[200px]">
-          <div className="text-xs font-semibold text-emerald-700">
+          <div class="text-xs font-semibold text-emerald-700">
             Columnar (колоночное хранение)
           </div>
-          <div className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 p-2 w-full">
+          <div class="rounded-lg border border-emerald-400/20 bg-emerald-500/5 p-2 w-full">
             {columns.map((col, i) => (
               <div
-                key={i}
-                className={`text-xs font-mono py-0.5 flex items-center gap-2 ${
+
+                class={`text-xs font-mono py-0.5 flex items-center gap-2 ${
                   col.skip ? 'text-[var(--ink-subtle)]' : 'text-emerald-700'
                 }`}
               >
-                <span className="w-14 shrink-0">{col.name}:</span>
+                <span class="w-14 shrink-0">{col.name}:</span>
                 <span>{col.values}</span>
-                <span className="text-[10px]">
+                <span class="text-[10px]">
                   {col.skip ? '← пропускаем' : '← читаем ТОЛЬКО это!'}
                 </span>
               </div>
             ))}
           </div>
-          <div className="text-[10px] text-emerald-700/70">
+          <div class="text-[10px] text-emerald-700/70">
             ← читаем только salary
           </div>
         </FlowColumn>

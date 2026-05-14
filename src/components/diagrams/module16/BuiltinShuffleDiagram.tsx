@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * BuiltinShuffleDiagram
  *
@@ -19,25 +20,25 @@ export function BuiltinShuffleDiagram() {
       color="red"
     >
       <FlowRow gap={10} wrap align="center">
-        <div className="rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
-          <div className="text-xs text-blue-700/70 mb-2">Executor 1 (Map)</div>
+        <div class="rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
+          <div class="text-xs text-blue-700/70 mb-2">Executor 1 (Map)</div>
           <FlowNode variant="compute" size="sm">
             <FlowColumn gap={1} align="center">
               <span>Map Task</span>
-              <span className="text-[10px] opacity-70">↓ Local Disk</span>
-              <span className="text-[10px] opacity-70">shuffle files</span>
+              <span class="text-[10px] opacity-70">↓ Local Disk</span>
+              <span class="text-[10px] opacity-70">shuffle files</span>
             </FlowColumn>
           </FlowNode>
         </div>
 
         <Arrow direction="right" label="pull" />
 
-        <div className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-4">
-          <div className="text-xs text-amber-700/70 mb-2">Executor 3 (Reduce)</div>
+        <div class="rounded-xl border border-amber-400/20 bg-amber-500/5 p-4">
+          <div class="text-xs text-amber-700/70 mb-2">Executor 3 (Reduce)</div>
           <FlowNode variant="compute" size="sm">
             <FlowColumn gap={1} align="center">
               <span>Reduce Task</span>
-              <span className="text-[10px] opacity-70">↑ Fetch</span>
+              <span class="text-[10px] opacity-70">↑ Fetch</span>
             </FlowColumn>
           </FlowNode>
         </div>

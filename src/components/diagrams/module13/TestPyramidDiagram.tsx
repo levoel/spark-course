@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * TestPyramidDiagram
  *
@@ -53,18 +54,18 @@ export function TestPyramidDiagram() {
       <FlowColumn gap={0} align="center">
         {layers.map((layer, i) => (
           <div
-            key={i}
-            className={`w-full ${layer.width} mx-auto p-3 border ${layer.borderColor} ${layer.bgColor} ${
+
+            class={`w-full ${layer.width} mx-auto p-3 border ${layer.borderColor} ${layer.bgColor} ${
               i === 0 ? 'rounded-t-xl' : ''
             } ${i === layers.length - 1 ? 'rounded-b-xl' : ''} ${
               i > 0 ? 'border-t-0' : ''
             }`}
           >
-            <div className={`text-sm font-medium ${layer.color} text-center`}>
+            <div class={`text-sm font-medium ${layer.color} text-center`}>
               {layer.label}
             </div>
-            <div className="text-xs text-[var(--ink-muted)] text-center mt-0.5">{layer.detail}</div>
-            <div className="text-[10px] text-[var(--ink-subtle)] text-center mt-0.5">{layer.trigger}</div>
+            <div class="text-xs text-[var(--ink-muted)] text-center mt-0.5">{layer.detail}</div>
+            <div class="text-[10px] text-[var(--ink-subtle)] text-center mt-0.5">{layer.trigger}</div>
           </div>
         ))}
       </FlowColumn>

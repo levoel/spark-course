@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * CelebornClusterDiagram
  *
@@ -16,7 +17,7 @@ export function CelebornClusterDiagram() {
     <DiagramContainer title="Celeborn Cluster" color="blue">
       <FlowColumn gap={10} align="center">
         {/* Celeborn Cluster box */}
-        <div className="w-full rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
+        <div class="w-full rounded-xl border border-blue-400/20 bg-blue-500/5 p-4">
           <FlowColumn gap={8} align="center">
             {/* Masters */}
             <FlowRow gap={4} wrap align="center">
@@ -27,32 +28,32 @@ export function CelebornClusterDiagram() {
               </FlowNode>
               <FlowNode variant="cluster" size="sm">
                 <FlowColumn gap={0} align="center">
-                  <span className="opacity-60">Master (standby)</span>
+                  <span class="opacity-60">Master (standby)</span>
                 </FlowColumn>
               </FlowNode>
               <FlowNode variant="cluster" size="sm">
                 <FlowColumn gap={0} align="center">
-                  <span className="opacity-60">Master (standby)</span>
+                  <span class="opacity-60">Master (standby)</span>
                 </FlowColumn>
               </FlowNode>
-              <span className="text-[10px] text-blue-700">Raft HA</span>
+              <span class="text-[10px] text-blue-700">Raft HA</span>
             </FlowRow>
 
             <Arrow direction="down" label="slot allocation" />
 
             {/* Workers */}
-            <div className="w-full rounded-lg border border-blue-400/15 bg-blue-500/5 p-3">
-              <div className="text-xs text-blue-700/70 mb-2">Workers</div>
+            <div class="w-full rounded-lg border border-blue-400/15 bg-blue-500/5 p-3">
+              <div class="text-xs text-blue-700/70 mb-2">Workers</div>
               <FlowRow gap={4} wrap align="center">
                 {[1, 2].map((i) => (
-                  <FlowNode key={i} variant="storage" size="sm">
+                  <FlowNode variant="storage" size="sm">
                     <FlowColumn gap={0} align="center">
                       <span>Worker {i}</span>
-                      <span className="text-[9px] opacity-70">SSD/HDD + HDFS</span>
+                      <span class="text-[9px] opacity-70">SSD/HDD + HDFS</span>
                     </FlowColumn>
                   </FlowNode>
                 ))}
-                <span className="text-xs text-[var(--ink-subtle)]">...</span>
+                <span class="text-xs text-[var(--ink-subtle)]">...</span>
               </FlowRow>
             </div>
           </FlowColumn>
@@ -65,7 +66,7 @@ export function CelebornClusterDiagram() {
             <FlowNode variant="compute" size="sm">
               <FlowColumn gap={0} align="center">
                 <span>Spark Executor</span>
-                <span className="text-[9px] opacity-70">ShuffleClient (Map)</span>
+                <span class="text-[9px] opacity-70">ShuffleClient (Map)</span>
               </FlowColumn>
             </FlowNode>
           </FlowColumn>
@@ -75,7 +76,7 @@ export function CelebornClusterDiagram() {
             <FlowNode variant="compute" size="sm">
               <FlowColumn gap={0} align="center">
                 <span>Spark Executor</span>
-                <span className="text-[9px] opacity-70">ShuffleClient (Reduce)</span>
+                <span class="text-[9px] opacity-70">ShuffleClient (Reduce)</span>
               </FlowColumn>
             </FlowNode>
           </FlowColumn>
@@ -85,7 +86,7 @@ export function CelebornClusterDiagram() {
             <FlowNode variant="app" size="sm">
               <FlowColumn gap={0} align="center">
                 <span>Spark Driver</span>
-                <span className="text-[9px] opacity-70">LifecycleManager</span>
+                <span class="text-[9px] opacity-70">LifecycleManager</span>
               </FlowColumn>
             </FlowNode>
           </FlowColumn>

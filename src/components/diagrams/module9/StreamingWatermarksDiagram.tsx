@@ -1,3 +1,5 @@
+/** @jsxImportSource solid-js */
+import { createMemo, createSignal } from 'solid-js';
 /**
  * StreamingWatermarksDiagram (DIAG-13)
  *
@@ -7,7 +9,6 @@
  * as the watermark delay changes.
  */
 
-import { useState, useMemo } from 'react';
 import { DiagramContainer } from '@primitives/DiagramContainer';
 import { DiagramTooltip } from '@primitives/Tooltip';
 import { DataBox } from '@primitives/DataBox';
@@ -49,9 +50,9 @@ function formatLateness(eventTime: number, processTime: number): string {
 }
 
 export function StreamingWatermarksDiagram() {
-  const [watermarkDelay, setWatermarkDelay] = useState(10);
+  const [watermarkDelay, setWatermarkDelay] = createSignal(10);
 
-  const { eventStates, accepted, dropped, maxEventTime, watermarkLine } = useMemo(() => {
+  const derived = createMemo(() => {
     // Sort events by processing time to simulate arrival order
     const sorted = [...EVENTS].sort((a, b) => a.processTime - b.processTime);
 
@@ -61,7 +62,7 @@ export function StreamingWatermarksDiagram() {
     for (const event of sorted) {
       // Update max event time seen so far
       maxET = Math.max(maxET, event.eventTime);
-      const currentWatermark = maxET - watermarkDelay;
+      const currentWatermark = maxET - watermarkDelay();
 
       // Event is accepted if its event_time >= current watermark
       const isAccepted = event.eventTime >= currentWatermark;
@@ -81,23 +82,23 @@ export function StreamingWatermarksDiagram() {
       accepted: acceptedCount,
       dropped: droppedCount,
       maxEventTime: maxET,
-      watermarkLine: maxET - watermarkDelay,
+      watermarkLine: maxET - watermarkDelay(),
     };
-  }, [watermarkDelay]);
+  });
 
   const maxTime = 100; // max x-axis range in seconds
 
   return (
     <DiagramContainer title="Streaming Watermarks: обработка опоздавших данных" color="cyan">
-      <div className="flex flex-col gap-5">
+      <div class="flex flex-col gap-5">
         {/* Watermark delay slider */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between">
-            <label className="text-sm text-[var(--ink-default)]">
+        <div class="flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <label class="text-sm text-[var(--ink-default)]">
               Watermark delay
             </label>
-            <span className="text-sm font-mono text-[var(--ink-strong)] font-semibold">
-              {formatDelay(watermarkDelay)}
+            <span class="text-sm font-mono text-[var(--ink-strong)] font-semibold">
+              {formatDelay(watermarkDelay())}
             </span>
           </div>
           <input
@@ -105,11 +106,11 @@ export function StreamingWatermarksDiagram() {
             min={0}
             max={60}
             step={5}
-            value={watermarkDelay}
+            value={watermarkDelay()}
             onChange={(e) => setWatermarkDelay(Number(e.target.value))}
-            className="w-full accent-cyan-400 cursor-pointer"
+            class="w-full accent-cyan-400 cursor-pointer"
           />
-          <div className="flex justify-between text-[10px] text-[var(--ink-subtle)]">
+          <div class="flex justify-between text-[10px] text-[var(--ink-subtle)]">
             <span>0s (drop all late)</span>
             <span>30s</span>
             <span>60s (accept all)</span>
@@ -117,14 +118,14 @@ export function StreamingWatermarksDiagram() {
         </div>
 
         {/* Timeline visualization */}
-        <div className="flex flex-col gap-2">
-          <p className="text-xs text-[var(--ink-muted)]">
+        <div class="flex flex-col gap-2">
+          <p class="text-xs text-[var(--ink-muted)]">
             Event time timeline (x-axis) -- зелёные = принятые, красные = отброшенные:
           </p>
 
-          <div className="relative bg-[var(--bg-sunken)] rounded-lg border border-[var(--line-thin)] p-4 overflow-hidden">
+          <div class="relative bg-[var(--bg-sunken)] rounded-lg border border-[var(--line-thin)] p-4 overflow-hidden">
             {/* X-axis time markers */}
-            <div className="flex justify-between text-[9px] text-[var(--ink-subtle)] mb-2 px-1">
+            <div class="flex justify-between text-[9px] text-[var(--ink-subtle)] mb-2 px-1">
               <span>10:00</span>
               <span>10:00:20</span>
               <span>10:00:40</span>
@@ -133,18 +134,18 @@ export function StreamingWatermarksDiagram() {
             </div>
 
             {/* Event dots */}
-            <div className="relative h-16">
-              {eventStates.map(({ event, accepted: isAccepted }) => {
+            <div class="relative h-16">
+              {derived().eventStates.map(({ event, accepted: isAccepted }) => {
                 const leftPercent = (event.eventTime / maxTime) * 100;
                 const lateness = event.processTime - event.eventTime;
 
                 return (
                   <DiagramTooltip
-                    key={event.id}
+
                     content={`Event #${event.id}: event_time=${event.label}, lateness=${lateness}s, ${isAccepted ? 'ACCEPTED' : 'DROPPED'}`}
                   >
                     <div
-                      className={`absolute w-5 h-5 rounded-full border-2 cursor-help transition-all duration-500 flex items-center justify-center ${
+                      class={`absolute w-5 h-5 rounded-full border-2 cursor-help transition-all duration-500 flex items-center justify-center ${
                         isAccepted
                           ? 'bg-emerald-500/40 border-emerald-400/70'
                           : 'bg-red-500/40 border-red-400/70'
@@ -155,7 +156,7 @@ export function StreamingWatermarksDiagram() {
                         transform: 'translate(-50%, -50%)',
                       }}
                     >
-                      <span className="text-[8px] font-mono text-[var(--ink-strong)]">
+                      <span class="text-[8px] font-mono text-[var(--ink-strong)]">
                         {event.id}
                       </span>
                     </div>
@@ -164,12 +165,12 @@ export function StreamingWatermarksDiagram() {
               })}
 
               {/* Watermark line */}
-              {watermarkLine >= 0 && watermarkLine <= maxTime && (
+              {derived().watermarkLine >= 0 && derived().watermarkLine <= maxTime && (
                 <div
-                  className="absolute top-0 bottom-0 w-0.5 bg-cyan-400/60 transition-all duration-500"
-                  style={{ left: `${(watermarkLine / maxTime) * 100}%` }}
+                  class="absolute top-0 bottom-0 w-0.5 bg-cyan-400/60 transition-all duration-500"
+                  style={{ left: `${(derived().watermarkLine / maxTime) * 100}%` }}
                 >
-                  <div className="absolute -top-5 left-1 text-[9px] text-cyan-400 whitespace-nowrap font-mono">
+                  <div class="absolute -top-5 left-1 text-[9px] text-cyan-400 whitespace-nowrap font-mono">
                     WM
                   </div>
                 </div>
@@ -177,57 +178,57 @@ export function StreamingWatermarksDiagram() {
             </div>
 
             {/* Y-axis label */}
-            <div className="text-[9px] text-[var(--ink-subtle)] mt-1">
+            <div class="text-[9px] text-[var(--ink-subtle)] mt-1">
               y-axis: lateness (processing_time - event_time)
             </div>
           </div>
         </div>
 
         {/* Stats panel */}
-        <div className="flex flex-wrap gap-3 justify-center">
+        <div class="flex flex-wrap gap-3 justify-center">
           <DataBox
             label="Accepted"
-            value={`${accepted}/${EVENTS.length}`}
-            variant={accepted === EVENTS.length ? 'highlight' : undefined}
+            value={`${derived().accepted}/${EVENTS.length}`}
+            variant={derived().accepted === EVENTS.length ? 'highlight' : undefined}
           />
           <DataBox
             label="Dropped"
-            value={`${dropped}/${EVENTS.length}`}
-            variant={dropped > 0 ? 'highlight' : undefined}
+            value={`${derived().dropped}/${EVENTS.length}`}
+            variant={derived().dropped > 0 ? 'highlight' : undefined}
           />
           <DataBox
             label="Watermark"
-            value={watermarkLine >= 0 ? `${watermarkLine}s` : 'N/A'}
+            value={derived().watermarkLine >= 0 ? `${derived().watermarkLine}s` : 'N/A'}
           />
           <DataBox
             label="Max event time"
-            value={`${maxEventTime}s`}
+            value={`${derived().maxEventTime}s`}
           />
         </div>
 
         {/* Watermark formula */}
-        <div className="bg-[var(--bg-sunken)] rounded-lg p-3 border border-[var(--line-thin)]">
-          <p className="text-xs text-[var(--ink-muted)] text-center font-mono">
-            watermark = max(event_time) - delay = {maxEventTime}s - {watermarkDelay}s ={' '}
-            <span className="text-cyan-400 font-semibold">{watermarkLine}s</span>
+        <div class="bg-[var(--bg-sunken)] rounded-lg p-3 border border-[var(--line-thin)]">
+          <p class="text-xs text-[var(--ink-muted)] text-center font-mono">
+            watermark = max(event_time) - delay = {derived().maxEventTime}s - {watermarkDelay()}s ={' '}
+            <span class="text-cyan-400 font-semibold">{derived().watermarkLine}s</span>
           </p>
-          <p className="text-[10px] text-[var(--ink-subtle)] text-center mt-1">
-            События с event_time {'<'} {watermarkLine}s отбрасываются как опоздавшие
+          <p class="text-[10px] text-[var(--ink-subtle)] text-center mt-1">
+            События с event_time {'<'} {derived().watermarkLine}s отбрасываются как опоздавшие
           </p>
         </div>
 
         {/* Legend */}
-        <div className="flex items-center justify-center gap-4 text-xs text-[var(--ink-muted)]">
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-full bg-emerald-500/40 border border-emerald-400/70" />
+        <div class="flex items-center justify-center gap-4 text-xs text-[var(--ink-muted)]">
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-3 h-3 rounded-full bg-emerald-500/40 border border-emerald-400/70" />
             Accepted
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-3 h-3 rounded-full bg-red-500/40 border border-red-400/70" />
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-3 h-3 rounded-full bg-red-500/40 border border-red-400/70" />
             Dropped
           </span>
-          <span className="flex items-center gap-1.5">
-            <span className="inline-block w-1 h-3 bg-cyan-400/60" />
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-1 h-3 bg-cyan-400/60" />
             Watermark line
           </span>
         </div>

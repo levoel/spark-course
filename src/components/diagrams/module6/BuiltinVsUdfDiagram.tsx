@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * BuiltinVsUdfDiagram
  *
@@ -14,18 +15,18 @@ import { Arrow } from '@primitives/Arrow';
 export function BuiltinVsUdfDiagram() {
   return (
     <DiagramContainer title="Встроенная функция vs Python UDF" color="amber">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Built-in side */}
-        <div className="flex flex-col gap-3">
-          <div className="text-center text-sm font-semibold text-emerald-700 mb-1">
+        <div class="flex flex-col gap-3">
+          <div class="text-center text-sm font-semibold text-emerald-700 mb-1">
             Встроенная функция upper()
           </div>
           <FlowColumn gap={6}>
             <FlowNode variant="compute" size="md">
               JVM Executor
             </FlowNode>
-            <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
-              <pre className="text-[11px] text-emerald-700 font-mono leading-relaxed">
+            <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3">
+              <pre class="text-[11px] text-emerald-700 font-mono leading-relaxed">
 {`Tungsten CodeGen:
 for (row in partition) {
   result = row.getString(0)
@@ -34,8 +35,8 @@ for (row in partition) {
 }`}
               </pre>
             </div>
-            <div className="text-center">
-              <span className="text-xs font-mono text-emerald-400 bg-emerald-500/15 px-2 py-1 rounded">
+            <div class="text-center">
+              <span class="text-xs font-mono text-emerald-400 bg-emerald-500/15 px-2 py-1 rounded">
                 ~5ns per row (нативный JVM код)
               </span>
             </div>
@@ -43,8 +44,8 @@ for (row in partition) {
         </div>
 
         {/* UDF side */}
-        <div className="flex flex-col gap-3">
-          <div className="text-center text-sm font-semibold text-rose-700 mb-1">
+        <div class="flex flex-col gap-3">
+          <div class="text-center text-sm font-semibold text-rose-700 mb-1">
             Python UDF upper()
           </div>
           <FlowColumn gap={4}>
@@ -57,7 +58,7 @@ for (row in partition) {
               </FlowNode>
             </FlowRow>
 
-            <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3 space-y-1">
+            <div class="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3 space-y-1">
               {[
                 { label: 'serialize(row)', time: '~1μs', side: 'JVM' },
                 { label: '→ socket transfer →', time: '', side: '' },
@@ -67,18 +68,18 @@ for (row in partition) {
                 { label: '← socket transfer ←', time: '', side: '' },
                 { label: 'deserialize(bytes)', time: '~1μs', side: 'JVM' },
               ].map((step, i) => (
-                <div key={i} className="flex items-center gap-2 text-[11px] font-mono text-rose-700/80">
+                <div class="flex items-center gap-2 text-[11px] font-mono text-rose-700/80">
                   {step.side && (
-                    <span className="text-[9px] opacity-50 w-6">{step.side}</span>
+                    <span class="text-[9px] opacity-50 w-6">{step.side}</span>
                   )}
-                  <span className={step.side ? '' : 'text-[var(--ink-subtle)] text-center w-full'}>{step.label}</span>
-                  {step.time && <span className="ml-auto opacity-60">{step.time}</span>}
+                  <span class={step.side ? '' : 'text-[var(--ink-subtle)] text-center w-full'}>{step.label}</span>
+                  {step.time && <span class="ml-auto opacity-60">{step.time}</span>}
                 </div>
               ))}
             </div>
 
-            <div className="text-center">
-              <span className="text-xs font-mono text-rose-400 bg-rose-500/15 px-2 py-1 rounded">
+            <div class="text-center">
+              <span class="text-xs font-mono text-rose-400 bg-rose-500/15 px-2 py-1 rounded">
                 ~5μs per row (1000x медленнее!)
               </span>
             </div>

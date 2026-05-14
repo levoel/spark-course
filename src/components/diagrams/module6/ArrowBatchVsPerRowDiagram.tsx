@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * ArrowBatchVsPerRowDiagram
  *
@@ -14,66 +15,66 @@ import { Arrow } from '@primitives/Arrow';
 export function ArrowBatchVsPerRowDiagram() {
   return (
     <DiagramContainer title="Per-Row (Python UDF) vs Per-Batch (Pandas UDF, Arrow)" color="blue">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Per-row side */}
-        <div className="flex flex-col gap-3">
-          <div className="text-center text-sm font-semibold text-rose-700 mb-1">
+        <div class="flex flex-col gap-3">
+          <div class="text-center text-sm font-semibold text-rose-700 mb-1">
             Python UDF (per-row)
           </div>
-          <div className="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3 space-y-1">
+          <div class="bg-rose-500/10 border border-rose-500/20 rounded-lg p-3 space-y-1">
             {[1, 2, 3].map((n) => (
-              <div key={n} className="flex items-center gap-2 text-[11px] font-mono text-rose-700">
+              <div class="flex items-center gap-2 text-[11px] font-mono text-rose-700">
                 <FlowNode variant="compute" size="sm" className="!py-0.5 !px-2 !text-[10px]">
                   JVM
                 </FlowNode>
-                <span className="text-[var(--ink-subtle)]">──[row {n}]──→</span>
+                <span class="text-[var(--ink-subtle)]">──[row {n}]──→</span>
                 <FlowNode variant="app" size="sm" className="!py-0.5 !px-2 !text-[10px]">
                   Python
                 </FlowNode>
-                <span className="text-[var(--ink-subtle)]">──[result {n}]──→</span>
+                <span class="text-[var(--ink-subtle)]">──[result {n}]──→</span>
                 <FlowNode variant="compute" size="sm" className="!py-0.5 !px-2 !text-[10px]">
                   JVM
                 </FlowNode>
               </div>
             ))}
-            <div className="text-center text-[10px] text-[var(--ink-subtle)] pt-1">
+            <div class="text-center text-[10px] text-[var(--ink-subtle)] pt-1">
               ... (1 миллиард socket-вызовов)
             </div>
           </div>
         </div>
 
         {/* Per-batch side */}
-        <div className="flex flex-col gap-3">
-          <div className="text-center text-sm font-semibold text-emerald-700 mb-1">
+        <div class="flex flex-col gap-3">
+          <div class="text-center text-sm font-semibold text-emerald-700 mb-1">
             Pandas UDF (per-batch, Arrow)
           </div>
-          <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 space-y-2">
-            <div className="flex items-center gap-2 text-[11px] font-mono text-emerald-700">
+          <div class="bg-emerald-500/10 border border-emerald-500/20 rounded-lg p-3 space-y-2">
+            <div class="flex items-center gap-2 text-[11px] font-mono text-emerald-700">
               <FlowNode variant="compute" size="sm" className="!py-0.5 !px-2 !text-[10px]">
                 JVM
               </FlowNode>
-              <span className="text-[var(--ink-muted)] text-center flex-1">
+              <span class="text-[var(--ink-muted)] text-center flex-1">
                 ──[batch 10,000 rows, Arrow]──→
               </span>
               <FlowNode variant="app" size="sm" className="!py-0.5 !px-2 !text-[10px]">
                 Python
               </FlowNode>
             </div>
-            <div className="text-center text-[10px] text-emerald-400/60">
+            <div class="text-center text-[10px] text-emerald-400/60">
               (1 socket-вызов, columnar, zero-copy)
             </div>
-            <div className="flex items-center gap-2 text-[11px] font-mono text-emerald-700">
+            <div class="flex items-center gap-2 text-[11px] font-mono text-emerald-700">
               <FlowNode variant="app" size="sm" className="!py-0.5 !px-2 !text-[10px]">
                 Python
               </FlowNode>
-              <span className="text-[var(--ink-muted)] text-center flex-1">
+              <span class="text-[var(--ink-muted)] text-center flex-1">
                 ──[batch 10,000 results, Arrow]──→
               </span>
               <FlowNode variant="compute" size="sm" className="!py-0.5 !px-2 !text-[10px]">
                 JVM
               </FlowNode>
             </div>
-            <div className="text-center text-[10px] text-emerald-400/60">
+            <div class="text-center text-[10px] text-emerald-400/60">
               ... (100,000 socket-вызовов вместо 1 миллиарда)
             </div>
           </div>

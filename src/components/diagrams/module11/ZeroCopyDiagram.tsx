@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * ZeroCopyDiagram
  *
@@ -23,30 +24,30 @@ export function ZeroCopyDiagram() {
           <FlowNode variant="compute" size="md">
             <FlowColumn gap={2} align="center">
               <span>Процесс A</span>
-              <span className="text-xs opacity-70">Pointer ─────┐</span>
+              <span class="text-xs opacity-70">Pointer ─────┐</span>
             </FlowColumn>
           </FlowNode>
 
           <FlowNode variant="compute" size="md">
             <FlowColumn gap={2} align="center">
               <span>Процесс B</span>
-              <span className="text-xs opacity-70">┌───── Pointer</span>
+              <span class="text-xs opacity-70">┌───── Pointer</span>
             </FlowColumn>
           </FlowNode>
         </FlowRow>
 
         {/* Shared memory */}
-        <div className="w-full max-w-md">
+        <div class="w-full max-w-md">
           <FlowNode variant="storage" size="lg" className="w-full">
             <FlowColumn gap={2} align="center">
-              <span className="font-semibold">Shared Memory (1 GB)</span>
-              <span className="text-xs opacity-70">Arrow Buffer</span>
-              <span className="text-xs opacity-70">(одна копия данных)</span>
+              <span class="font-semibold">Shared Memory (1 GB)</span>
+              <span class="text-xs opacity-70">Arrow Buffer</span>
+              <span class="text-xs opacity-70">(одна копия данных)</span>
             </FlowColumn>
           </FlowNode>
         </div>
 
-        <div className="text-center text-xs text-[var(--ink-muted)]">
+        <div class="text-center text-xs text-[var(--ink-muted)]">
           Итого: ~0 сек, 1× memory usage
         </div>
       </FlowColumn>

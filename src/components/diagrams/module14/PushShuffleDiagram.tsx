@@ -1,3 +1,4 @@
+/** @jsxImportSource solid-js */
 /**
  * PushShuffleDiagram
  *
@@ -16,12 +17,12 @@ export function PushShuffleDiagram() {
       <FlowColumn gap={10} align="stretch">
         {/* Traditional - pull-based */}
         <div>
-          <div className="text-xs text-[var(--ink-muted)] mb-2">Traditional shuffle (pull-based):</div>
+          <div class="text-xs text-[var(--ink-muted)] mb-2">Traditional shuffle (pull-based):</div>
           <FlowRow gap={6} wrap align="center">
             <FlowColumn gap={2} align="center">
               {[1, 2, 3].map((i) => (
-                <FlowNode key={i} variant="compute" size="sm">
-                  <span className="text-[11px]">Mapper {i}</span>
+                <FlowNode variant="compute" size="sm">
+                  <span class="text-[11px]">Mapper {i}</span>
                 </FlowNode>
               ))}
             </FlowColumn>
@@ -29,8 +30,8 @@ export function PushShuffleDiagram() {
             <FlowNode variant="compute" size="md">
               <FlowColumn gap={1} align="center">
                 <span>Reducer</span>
-                <span className="text-[9px] opacity-70">PULLS from ALL mappers</span>
-                <span className="text-[9px] opacity-70">(N×M connections)</span>
+                <span class="text-[9px] opacity-70">PULLS from ALL mappers</span>
+                <span class="text-[9px] opacity-70">(N×M connections)</span>
               </FlowColumn>
             </FlowNode>
           </FlowRow>
@@ -38,12 +39,12 @@ export function PushShuffleDiagram() {
 
         {/* Push-based */}
         <div>
-          <div className="text-xs text-emerald-700 mb-2">Push-based shuffle:</div>
+          <div class="text-xs text-emerald-700 mb-2">Push-based shuffle:</div>
           <FlowRow gap={6} wrap align="center">
             <FlowColumn gap={2} align="center">
               {[1, 2, 3].map((i) => (
-                <FlowNode key={i} variant="compute" size="sm">
-                  <span className="text-[11px]">Mapper {i}</span>
+                <FlowNode variant="compute" size="sm">
+                  <span class="text-[11px]">Mapper {i}</span>
                 </FlowNode>
               ))}
             </FlowColumn>
@@ -51,14 +52,14 @@ export function PushShuffleDiagram() {
             <FlowNode variant="service" size="md">
               <FlowColumn gap={1} align="center">
                 <span>Merge Service</span>
-                <span className="text-[9px] opacity-70">locally merged file</span>
+                <span class="text-[9px] opacity-70">locally merged file</span>
               </FlowColumn>
             </FlowNode>
             <Arrow direction="right" />
             <FlowNode variant="compute" size="md">
               <FlowColumn gap={1} align="center">
                 <span>Reducer</span>
-                <span className="text-[9px] opacity-70">reads merged</span>
+                <span class="text-[9px] opacity-70">reads merged</span>
               </FlowColumn>
             </FlowNode>
           </FlowRow>
